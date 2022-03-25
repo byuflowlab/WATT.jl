@@ -1,6 +1,8 @@
-using DifferentialEquations, StaticArrays, FLOWMath, CCBlade, Plots
+using Revise, DifferentialEquations, StaticArrays, FLOWMath, CCBlade, Plots
 
-include("bem.jl")
+include("../src/blades.jl")
+include("../src/environments.jl")
+include("../src/bem.jl")
 
 
 ### Define simplified NREL 5MW Turbine constants and other info. 
@@ -56,24 +58,27 @@ af_idx = [3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 airfoils = aftypes[af_idx]
 
 n = length(rvec)
-models = Array{ccblade}(undef, n)
+afs = Array{Airfoil}(undef, n)
 p_a = zeros(7*n)
 
 for i = 0:n-1
 
-    clfit = Akima(airfoils[i+1].alpha, airfoils[i+1].cl)
-    cdfit = Akima(airfoils[i+1].alpha, airfoils[i+1].cd)
-
-
-    models[i+1] = ccblade(rho, mu, shearexp, a, true, true, [clfit, cdfit])
+    localpolar = hcat(airfoils[i+1].alpha, airfoils[i+1].cl, airfoils[i+1].cd)
+    afs[i+1] = simpleairfoil(localpolar)
 
     p_ccblade = [rvec[i+1], chordvec[i+1], twistvec[i+1], pitch, rhub, rtip, hubht]
 
     p_a[1+(7*i):7+(7*i)] = p_ccblade
 end
 
-bfun = create_bemfun(models, vinf, omega)
-bdiffvars = differentialvars(models, n)
+blade = Blade(afs)
+
+model = bem(;shearexp=shearexp)
+
+env = Environment(rho, mu, a, vinf, omega)
+
+bfun = create_bemfun(model, blade, env)
+bdiffvars = differentialvars(model, n)
 
 x0 = twistvec
 dx0 = zeros(n)
@@ -86,7 +91,7 @@ sol = DifferentialEquations.solve(probdae)
 # residsplt = plot(sol) #States are steady, as expected. 
 # display(residsplt)
 
-phi, N, T, Thrust, Torque = parsesolution(models, p_a, vinf, omega, sol)
+phi, N, T, Thrust, Torque = parsesolution(model, blade, env, p_a, sol)
 
 #### Compare to CCBlade
 B = 1
@@ -104,11 +109,11 @@ out = CCBlade.solve.(Ref(rotor), sections, op)
 Nplt = plot(xaxis="Blade radius", yaxis="Normal Force (N)", legend=:bottomright)
 plot!(rvec, N, lab="DAE solve")
 plot!(rvec, out.Np, lab="CCBlade")
-# display(Nplt) #They match
+display(Nplt) #They match
 
 Tplt = plot(xaxis="Blade radius", yaxis="Tangential Force (N)", legend=:bottomright)
 plot!(rvec, T, lab="DAE solve")
 plot!(rvec, out.Tp, lab="CCBlade")
-# display(Tplt) #They match
+display(Tplt) #They match
 
 nothing
