@@ -19,7 +19,7 @@ chordvec = [4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764
 twistvec = pi/180*[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
 B = 3.0
 pitch = 0.0
-precone = 2.5*pi/180 #Todo: !!!! I need to work in a way to include precone
+precone = 2.5*pi/180 
 yaw = 0.0*pi/180
 tilt = 0.0 #5.0*pi/180
 azimuth = 0.0
@@ -80,7 +80,7 @@ blade = Blade(afs)
 
 model = Riso()
 
-env = Environment(rho, mu, a, vinf, omega)
+env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
 
 rfun = create_risofun(twistvec, blade, env, frequency, amplitude)
 rdiffvars = differentialvars(model, n)
@@ -93,7 +93,7 @@ probdae = DifferentialEquations.DAEProblem(rfun, dx0, x0, tspan, p_a, differenti
 
 sol = DifferentialEquations.solve(probdae)
 
-t, Cl, Cd = parsesolution(model, blade, env, p_a, sol, twistvec)
+t, Cl, Cd = parsesolution(model, blade, env, p_a, sol, twistvec, frequency, amplitude)
 
 rcl = [blade.airfoils[1].cl(twistvec[1])]
 tcl = [blade.airfoils[end].cl(twistvec[end])]
@@ -103,7 +103,7 @@ rode = create_risoODE(twistvec, blade, env, frequency, amplitude)
 probode = DifferentialEquations.ODEProblem(rode, x0, tspan, p_a)
 solode = DifferentialEquations.solve(probode)
 
-tode, Clode, Cdode = parsesolution(model, blade, env, p_a, solode, twistvec)
+tode, Clode, Cdode = parsesolution(model, blade, env, p_a, solode, twistvec, frequency, amplitude)
 
 pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/figures/riso/"
 

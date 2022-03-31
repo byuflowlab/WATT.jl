@@ -75,7 +75,7 @@ blade = Blade(afs)
 
 model = bem(;shearexp=shearexp)
 
-env = Environment(rho, mu, a, vinf, omega)
+env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
 
 bfun = create_bemfun(model, blade, env)
 bdiffvars = differentialvars(model, n)

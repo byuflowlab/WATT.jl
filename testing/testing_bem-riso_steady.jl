@@ -2,13 +2,19 @@ using Revise, DifferentialEquations, StaticArrays, FLOWMath, CCBlade, Plots, Cur
 
 include("../src/blades.jl")
 include("../src/environments.jl")
+include("../src/bem.jl")
 include("../src/riso.jl")
+include("../src/bem-riso.jl")
 
 function nearestto(xvec, x)
     mins = abs.(xvec.-x)
     minval, minidx = findmin(mins)
     minval = xvec[minidx]
     return minval, minidx
+end
+
+function getfieldnames(obj)
+    return fieldnames(typeof(obj))
 end
 
 ### Define simplified NREL 5MW Turbine constants and other info. 
@@ -19,7 +25,7 @@ chordvec = [4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764
 twistvec = pi/180*[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
 B = 3.0
 pitch = 0.0
-precone = 2.5*pi/180 #Todo: !!!! I need to work in a way to include precone
+precone = 0.0 #2.5*pi/180 #Todo: !!!! I need to work in a way to include precone
 yaw = 0.0*pi/180
 tilt = 0.0 #5.0*pi/180
 azimuth = 0.0
@@ -43,7 +49,7 @@ Tp = 1.7
 Tf = 3.0
 
 frequency = 1.0
-amplitude = 5.0*pi/180 #Five degree oscilation (2.5 above and 2.5 below)
+amplitude = 0.0
 
 ### Prep the ASD rotor and operating conditions 
 aftypes = Array{AlphaAF}(undef, 8)
@@ -64,7 +70,7 @@ airfoils = aftypes[af_idx]
 
 n = length(rvec)
 afs = Array{Airfoil}(undef, n)
-p_a = zeros(n)
+p_a = zeros(7*n)
 
 for i = 0:n-1
 
@@ -72,71 +78,78 @@ for i = 0:n-1
 
     afs[i+1] = complexairfoil(localpolar)
 
-    p_a[i+1] = chordvec[i+1]
+    p_ccblade = [rvec[i+1], chordvec[i+1], twistvec[i+1], pitch, rhub, rtip, hubht]
+
+    p_a[1+(7*i):7+(7*i)] = p_ccblade
 
 end
 
 blade = Blade(afs)
 
-model = Riso()
+dsmodel = Riso()
+bemmodel = bem(;shearexp=shearexp)
 
 env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
 
-rfun = create_risofun(twistvec, blade, env, frequency, amplitude)
-rdiffvars = differentialvars(model, n)
+fun = create_bemrisofun(dsmodel, bemmodel, blade, env)
+rdiffvars = differentialvars(bemmodel, dsmodel, n)
 
-x0 = zeros(4*n)
-dx0 = zeros(4*n)
+x0 = zeros(5*n)
+dx0 = zeros(5*n)
 tspan = (0.0, 20.0)
 
-probdae = DifferentialEquations.DAEProblem(rfun, dx0, x0, tspan, p_a, differential_vars=rdiffvars)
+x0[end-13:end] = twistvec
+
+probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p_a, differential_vars=rdiffvars)
 
 sol = DifferentialEquations.solve(probdae)
 
-t, Cl, Cd = parsesolution(model, blade, env, p_a, sol, twistvec, frequency, amplitude)
+t, ubem, uds, N, T, thrustdae, torquedae = parsesolution(bemmodel, dsmodel, blade, env, p_a, sol)
 
-#Middle cl value
-rcl = [blade.airfoils[1].cl(twistvec[1])]
-tcl = [blade.airfoils[end].cl(twistvec[end])]
+#### Compare to CCBlade
+B = 1
+rotor = Rotor(rhub, rtip, B, precone=precone, turbine=true)
 
-#Max cl value
-rclmax = [blade.airfoils[1].cl(twistvec[1]+amplitude/2)]
-tclmax = [blade.airfoils[end].cl(twistvec[end]+amplitude/2)]
+sections = Section.(rvec, chordvec, twistvec, airfoils)
 
-#Min cl value
-rclmin = [blade.airfoils[1].cl(twistvec[1]-amplitude/2)]
-tclmin = [blade.airfoils[end].cl(twistvec[end]-amplitude/2)]
+op = windturbine_op.(vinf, omega, pitch, rvec, precone, yaw, tilt, 0.0, hubht, shearexp, rho)
 
+out = CCBlade.solve.(Ref(rotor), sections, op)
 
-
-
-pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/figures/riso/"
-
-clplt = plot(xaxis="time (s)", yaxis="Coefficient of Lift", legend=:bottomright, title="Root Analysis") 
-plot!(t, Cl[:,1], lab="DAE solution")
-hline!(rcl, lab="Middle steady value")
-hline!(rclmax, lab="Max steady value")
-hline!(rclmin, lab="Min steady value")
-display(clplt)
-# savefig(pathname*"rootcl_unsteady_33022.png")
-
-cltipplt = plot(xaxis="time (s)", yaxis="Coefficient of Lift", legend=:bottomright, title="Tip Analysis") 
-plot!(t, Cl[:,end], lab="DAE solution")
-hline!(tcl, lab="Mid steady value")
-hline!(tclmax, lab="Max steady value")
-hline!(tclmin, lab="Min steady value")
-display(cltipplt)
-# savefig(pathname*"tipcl_unsteady33022.png")
+sthrust, storque = thrusttorque(rotor, sections, out)
 
 
 
+pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/figures/bem-riso/"
+
+Nplt = plot(xaxis="Blade radius", yaxis="Normal Force (N)", legend=:bottomright, title="Steady")
+plot!(rvec, N[end,:], lab="DAE solve")
+plot!(rvec, out.Np, lab="CCBlade")
+display(Nplt) #They match
+# savefig(pathname*"steadynormalforce_33122.png")
+
+Tplt = plot(xaxis="Blade radius", yaxis="Tangential Force (N)", legend=:bottomright, title="Steady")
+plot!(rvec, T[end,:], lab="DAE solve")
+plot!(rvec, out.Tp, lab="CCBlade")
+display(Tplt) #They match
+# savefig(pathname*"steadytangentforce_33122.png")
+
+Torqueplt = plot(xaxis="Time (s)", yaxis="Torque (N⋅m)", legend=:bottomright) 
+plot!(t, torquedae[:], lab="DAE solve")
+hline!([storque], lab="Steady value", linestyle=:dash)
+display(Torqueplt)
+# savefig(pathname*"convergingtorque_33122.png")
 
 
-# pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/figures/riso/"
+thrustplt = plot(xaxis="Time (s)", yaxis="Thrust (N)", legend=:bottomright) 
+plot!(t, thrustdae[:], lab="DAE solve")
+hline!([sthrust], lab="Steady value", linestyle=:dash)
+display(thrustplt)
+# savefig(pathname*"convergingthrust_33122.png")
+
 # anim = @animate for i = 1:length(t)
 #     ti = t[i]
 #     plot(rvec, Cl[i,:], xaxis="Radial Location", yaxis="Coefficient of Lift", lab="t=$ti", ylims=(0.0, 0.9))
 # end
 # gif(anim, pathname*"anim_fps15.gif", fps = 5)
-
 nothing

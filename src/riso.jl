@@ -96,6 +96,8 @@ function riso_residual(dx, x, y, p, t, airfoil)
     ### Extract inputs
     u, udot, v, vdot, theta, thetadot = y 
 
+    # println(y)
+
     ### Extract parameters
     c = p 
 
@@ -127,15 +129,14 @@ end
 
 function get_riso_y(twist, env, frequency, amplitude, t) 
 
-    u = env.Uinf
-    udot = 0.0
+    u = env.U(t)
+    udot = env.Udot(t)
 
     v = 0.0
     vdot = 0.0
 
     theta = twist + amplitude*cos(frequency*t)
-    thetadot = 0.0
-
+    thetadot = -amplitude*frequency*sin(frequency*t)
 
     return [u, udot, v, vdot, theta, thetadot]
 end
@@ -179,7 +180,7 @@ function create_risoODE(twistvec, blade::Blade, env::Environment, frequency, amp
     return risofun
 end
 
-function parsesolution(model::Riso, blade::Blade, env::Environment, p, sol, twistvec)
+function parsesolution(model::Riso, blade::Blade, env::Environment, p, sol, twistvec, frequency, amplitude)
     u = Array(sol)'
     t = sol.t
     m = length(t)
@@ -193,7 +194,7 @@ function parsesolution(model::Riso, blade::Blade, env::Environment, p, sol, twis
             idx = 4*(i-1)
             xs = ut[1+idx:idx+4]
             ps = p[i]
-            ys = get_riso_y(twistvec[i], env)
+            ys = get_riso_y(twistvec[i], env, frequency, amplitude, t[i]) 
     
             Cl[j, i], Cd[j, i] = riso_coefs(xs, ys, ps, blade.airfoils[i])
         end

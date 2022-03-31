@@ -1,7 +1,21 @@
-struct Environment{TF, Tf}
+struct Environment{TF}
     rho::TF #Fluid Density (kg/m^3)
     mu::TF #Fluid dynamic viscosity
     a::TF #Fluid Speed of Sound (m/s)
-    Uinf::Tf #Freestream Velocity (m/s)
-    Omega::Tf #Rotation rate of Turbine (rads/s)
+    U #Freestream Velocity (m/s) #Todo: How to type this when I expect functions to be passed in here? 
+    # vinf #Updraft velocity (m/s) 
+    Omega #Rotation rate of Turbine (rads/s) #TODO: Will this need to come out? Is Omega design variable? -> If so, it might be worthwhile to actually turn this into a model instead of an exterior structure... Although, if I recall, we usually run the turbine for a set of TSRs which is essentially the same as a set of Omega. 
+    Udot #Derivative of the freestream velocity w.r.t. time
+    Omegadot # Derivative of the rotation rate of the turbine w.r.t. time
+end
+
+
+#then Todo: update Riso to use function velocities. 
+
+function environment(rho, mu, a, U::Float64, Omega::Float64, Udot::Float64, Omegadot::Float64) #Todo: I'm not sure that declaring these Floats is the best way to change from single values (like a float) to a function. 
+    ufun(t) = U
+    omegafun(t) = Omega
+    udotfun(t) = 0.0
+    omegadotfun(t) = 0.0
+    return Environment(rho, mu, a, ufun, omegafun, udotfun, omegadotfun)
 end

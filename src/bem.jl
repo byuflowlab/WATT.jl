@@ -78,8 +78,8 @@ function get_bem_y(dx, x, p, t, model::BEM, airfoil::Airfoil, env::Environment)
     Cl = airfoil.cl(alpha)
     Cd = airfoil.cd(alpha)
 
-    Vy = env.Omega*radius
-    Vx = env.Uinf
+    Vy = env.Omega(t)*radius
+    Vx = env.U(t)
     return [Cl, Cd, Vx, Vy]
 end
 
@@ -150,8 +150,8 @@ function parsesolution(model::BEM, blade::Blade, env::Environment, p, sol)
             rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine, tip=nothing)
         end
 
-        Vx = env.Uinf
-        Vy = env.Omega*radius
+        Vx = env.U(0.0)
+        Vy = env.Omega(0.0)*radius
 
         U = sqrt(Vx^2 + Vy^2)
         Mach = typeof(cl)(U/env.a)
@@ -162,9 +162,9 @@ function parsesolution(model::BEM, blade::Blade, env::Environment, p, sol)
 
         section = CCBlade.Section(promote(radius, chord, twist)..., airfoil)
 
-        operatingpoint = CCBlade.windturbine_op(promote(env.Uinf, env.Omega, pitch, radius, precone, yaw, tilt, azimuth, hubHt, model.shearexp, env.rho, env.mu, env.a)...)
+        operatingpoint = CCBlade.windturbine_op(promote(env.U(0.0), env.Omega(0.0), pitch, radius, precone, yaw, tilt, azimuth, hubHt, model.shearexp, env.rho, env.mu, env.a)...)
 
-        r_, outs = CCBlade.residual(phi[i], rotor, section, operatingpoint)
+        _, outs = CCBlade.residual(phi[i], rotor, section, operatingpoint)
     
         N[i] = outs.Np
         T[i] = outs.Tp
