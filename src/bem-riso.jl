@@ -41,7 +41,7 @@ function get_bemriso_y(x_bem, x_riso, p, t, airfoil::Airfoil, env::Environment)
     return ybem, yriso
 end
 
-function create_bemrisofun(riso::Riso, bem::BEM, blade::Blade, env::Environment)
+function create_bemrisofun_wstates(riso::Riso, bem::BEM, blade::Blade, env::Environment)
     function bemrisofun(outs, dx, x, p, t)
         n = length(blade.airfoils)
         for i=1:n
@@ -60,15 +60,19 @@ function create_bemrisofun(riso::Riso, bem::BEM, blade::Blade, env::Environment)
 
             outs[1+riso_idx:riso_idx+4] = riso_residual(dxs_riso, xs_riso, ys_riso, ps_riso, t, blade.airfoils[i])
 
-            outs[bem_idx] = get_bem_residual(dxs_bem, xs_bem, ys_bem, ps, t, bem, env)[1]
+            outs[bem_idx] = get_bem_residual(xs_bem, ys_bem, ps, t, bem, env)[1]
 
         end
     end
     return bemrisofun
 end
 
-function differentialvars(bemmodel::BEM, risomodel::Riso, n)
-    return vcat(differentialvars(risomodel, n), differentialvars(bemmodel,n))
+function differentialvars(bemmodel::BEM, risomodel::Riso, n;withstates=false)
+    if withstates
+        return vcat(differentialvars(risomodel, n), differentialvars(bemmodel,n))
+    else
+        return differentialvars(risomodel, n)
+    end
 end
 
 function parsesolution(bem::BEM, riso::Riso, blade::Blade, env::Environment, p, sol)
@@ -162,4 +166,133 @@ function parsesolution(bem::BEM, riso::Riso, blade::Blade, env::Environment, p, 
         Torque[k] = B * FLOWMath.trapz(rfull, torquei)
     end
     return t, ubem, uds, N, T, Thrust, Torque
+end
+
+function get_bemriso_residual(phi, xs_riso, ps, t, bem::BEM, airfoil::Airfoil, env::Environment)
+
+    ys_bem, _ = get_bemriso_y([phi], xs_riso, ps, t, airfoil, env)
+
+    return get_bem_residual([phi], ys_bem, ps, t, bem, env)[1]
+end
+
+
+function converge_bemriso_residual(xs_riso, ps, t, bem::BEM, airfoil::Airfoil, env::Environment)
+
+    radius, chord, twist, pitch, rhub, rtip, hubHt = ps
+
+    # quadrants
+    epsilon = 1e-6
+    q1 = [epsilon, pi/2]
+    q2 = [-pi/2, -epsilon]
+    q3 = [pi/2, pi-epsilon]
+    q4 = [-pi+epsilon, -pi/2]
+
+    startfrom90 = true
+    npts = 20
+
+    Vx = env.U(t)
+    Vy = env.Omega(t)*radius
+
+    if Vx > 0 && Vy > 0
+        # println("option 1")
+        order = (q1, q2, q3, q4)
+    elseif Vx < 0 && Vy > 0
+        # println("option 2")
+        order = (q2, q1, q4, q3)
+    elseif Vx > 0 && Vy < 0
+        # println("option 3")
+        order = (q3, q4, q1, q2)
+    else  # Vx[i] < 0 && Vy[i] < 0
+        # println("Option 4")
+        order = (q4, q3, q2, q1)
+    end
+
+    R(phistar) = get_bemriso_residual(phistar, xs_riso, ps, t, bem, airfoil, env)
+
+    success = false
+    for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
+        phimin, phimax = order[j]
+
+        # check to see if it would be faster to reverse the bracket search direction
+        backwardsearch = false
+        if !startfrom90
+            if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
+                backwardsearch = true
+            end
+        else
+            if phimax == pi/2  # q1
+                backwardsearch = true
+            end
+        end
+        
+        # force to dual numbers if necessary
+        phimin = phimin*one(chord)
+        phimax = phimax*one(chord)
+
+        # find bracket
+        success, phiL, phiU = CCBlade.firstbracket(R, phimin, phimax, npts, backwardsearch)
+
+        # once bracket is found, solve root finding problem and compute loads
+        if success
+            # println("Quadrant $j") #It looks like near the root of the blade we're getting quadrant 1, and near the tip we're getting quadrant 2. 
+            phistar, _ = FLOWMath.brent(R, phiL, phiU)
+            return phistar #, j
+        end    
+    end
+    @warn "Invalid data likely for this section. Radius=$radius"
+end
+
+
+function create_bemrisofun(riso::Riso, bem::BEM, blade::Blade, env::Environment) 
+    function aerofun(outs, dx, x, p, t)
+        n = length(blade.airfoils)
+        for i=1:n
+            ps = p[1+7*(i-1):7+7*(i-1)]
+
+            riso_idx = 4*(i-1)
+            dxs_riso = dx[1+riso_idx:riso_idx+4]
+            xs_riso = x[1+riso_idx:riso_idx+4]
+            ps_riso = ps[2]
+
+            phi = converge_bemriso_residual(xs_riso, ps, t, bem, blade.airfoils[i], env)
+            
+            _, ys_riso = get_bemriso_y([phi], xs_riso, ps, t, blade.airfoils[i], env)
+
+            outs[1+riso_idx:riso_idx+4] = riso_residual(dxs_riso, xs_riso, ys_riso, ps_riso, t, blade.airfoils[i])
+            # if i==n
+            #     println(t)
+            # end
+        end
+    end
+    return aerofun
+end
+
+function create_bemrisoODE(riso::Riso, bem::BEM, blade::Blade, env::Environment)
+    function aerofun(x, p, t)
+        n = length(blade.airfoils)
+        dx = zeros(4*n)
+        # println("")
+        # println("t = ", t)
+        for i=1:n
+            
+            ps = p[1+7*(i-1):7+7*(i-1)]
+
+            riso_idx = 4*(i-1)
+            xs_riso = x[1+riso_idx:riso_idx+4]
+            ps_riso = ps[2]
+            # println("x$i: ", xs_riso)
+
+            phi = converge_bemriso_residual(xs_riso, ps, t, bem, blade.airfoils[i], env)
+            
+            _, ys_riso = get_bemriso_y([phi], xs_riso, ps, t, blade.airfoils[i], env)
+            u, udot, v, vdot, theta, thetadot = ys_riso
+
+            dx[1+riso_idx:4+riso_idx] = riso_states(xs_riso, u, udot, v, vdot, theta, thetadot, ps_riso, blade.airfoils[i])
+            # if i==n
+            #     println(j, "    ", phi) #Phi is flying all over the place. ALL over the place. 
+            # end
+        end
+        return dx
+    end
+    return aerofun
 end

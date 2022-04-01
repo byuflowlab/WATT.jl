@@ -235,6 +235,9 @@ function riso_coefs(X, y, c, airfoil)
     Cl = dcldalpha*(ae-alpha0)*X[4] + clfs*(1-X[4]) + pi*Tu*alphadot
 
     fae = fst(ae, liftfit, dcldalpha, alpha0) 
+    # if (fae<0)|(X[4]<0) # The whole state vector has gone negative. 
+    #     @infiltrate
+    # end
     fterm = (sqrt(fae)-sqrt(X[4]))/2 - (fae-X[4])/4 
     Cd = dragfit(ae) + (alpha-ae)*Cl + (dragfit(ae)-dragfit(alpha0))*fterm
     return SVector(Cl, Cd)

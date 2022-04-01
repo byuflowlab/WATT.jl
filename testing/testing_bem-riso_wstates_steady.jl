@@ -91,44 +91,19 @@ bemmodel = bem(;shearexp=shearexp)
 
 env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
 
-fun = create_bemrisofun(dsmodel, bemmodel, blade, env)
-rdiffvars = differentialvars(bemmodel, dsmodel, n)
-ode = create_bemrisoODE(dsmodel, bemmodel, blade, env)
+fun = create_bemrisofun_wstates(dsmodel, bemmodel, blade, env)
+rdiffvars = differentialvars(bemmodel, dsmodel, n; withstates=true)
 
-x0 = ones(4*n)*.1 #I changed the initial states... because I wonder if they'd diverge. 
-dx0 = zeros(4*n)
-tspan = (0.0, 20) #It's taking longer for half the amount of time. 
+x0 = zeros(5*n)
+dx0 = zeros(5*n)
+tspan = (0.0, 20.0)
 
-# probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p_a, differential_vars=rdiffvars)
-# sol = DifferentialEquations.solve(probdae)
+x0[end-13:end] = twistvec
 
-probode = DifferentialEquations.ODEProblem(ode, x0, tspan, p_a)
-solode = DifferentialEquations.solve(probode)
+probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p_a, differential_vars=rdiffvars)
 
-# uode = Array(solode)'
-# t = solode.t
+@btime sol = DifferentialEquations.solve(probdae)
 
-# plt = plot(t, uode[:,1:4])
-# # display(plt)
-
-# xriso = uode[end,1:4]
-# ps = p_a[1:7]
-
-# R(phistar) = get_bemriso_residual(phistar, xriso, ps, t[end], bemmodel, afs[1], env)
-
-# phivec = 0.001:0.001:pi/2-0.001
-
-# Rvec = R.(phivec)
-
-# npts = 10
-# div = pi/(2*npts)
-# divs = 0:div:pi/2
-
-# rplt = plot(phivec, Rvec, leg=:topleft, lab="Residual")
-# vline!(divs, lab="divisions")
-# display(rplt)
-
-#Todo: Update parsesolution to work for either with bem states or without. 
 # t, ubem, uds, N, T, thrustdae, torquedae = parsesolution(bemmodel, dsmodel, blade, env, p_a, sol)
 
 # #### Compare to CCBlade

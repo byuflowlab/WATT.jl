@@ -9,7 +9,7 @@ function bem(;shearexp=0.0, turbine=true, tipcorrection=true)
 end
 
 
-function get_bem_residual(dx, x, y, p, t, model::BEM, env::Environment) #TODO: Get rid of inputs that aren't used.... I'm not sure that my formulation needs them. 
+function get_bem_residual(x, y, p, t, model::BEM, env::Environment) #TODO: Get rid of inputs that aren't used.... I'm not sure that my formulation needs them. 
     ### Extract statess
     phi = x[1] 
     # println("phi: ", phi)
@@ -68,7 +68,7 @@ function get_bem_residual(dx, x, y, p, t, model::BEM, env::Environment) #TODO: G
     return SVector(r)
 end
 
-function get_bem_y(dx, x, p, t, model::BEM, airfoil::Airfoil, env::Environment)
+function get_bem_y(x, p, t, model::BEM, airfoil::Airfoil, env::Environment)
     phi = x[1]
 
     radius, chord, twist, pitch, rhub, rtip, hubHt = p 
@@ -92,10 +92,10 @@ function create_bemfun(model::BEM, blade::Blade, env::Environment)
             dxs = [dx[i]]
             xs = [x[i]]
             ps = p[1+7*(i-1):7+7*(i-1)]
-            ys = get_bem_y(dxs, xs, ps, t, model, blade.airfoils[i], env)
+            ys = get_bem_y(xs, ps, t, model, blade.airfoils[i], env)
 
             #Get the residual for the local section
-            outs[i] = get_bem_residual(dxs, xs, ys, ps, t, model, env)[1]
+            outs[i] = get_bem_residual(xs, ys, ps, t, model, env)[1]
         end
     end
     return bemfun
@@ -187,3 +187,54 @@ function parsesolution(model::BEM, blade::Blade, env::Environment, p, sol)
 
     return phi, N, T, Thrust, Torque
 end
+
+function converge_bem_states(y, p, model::BEM, env::Environment)
+
+    ### Extract Inputs
+    Cl = y[1] 
+    Cd = y[2]
+    Vx = y[3]
+    Vy = y[4]
+
+    ### Extract Parameters
+    radius, chord, twist, pitch, rhub, rtip, hubHt = p
+    
+    ### Parameters that won't change
+    B = 1 # B - number of blades
+    azimuth = 0.0
+    yaw = 0.0
+    tilt = 0.0
+    precone = 0.0
+
+    Cl, radius = promote(Cl, radius)
+
+    omega = Vy/radius
+
+    ### Create Rotor
+    if model.tipcorrection
+        rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine)
+    else
+        rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine, tip=nothing)
+    end
+
+    U = sqrt(Vx^2 + Vy^2)
+    Mach = typeof(Cl)(U/env.a)
+    Re = typeof(Cl)(env.rho*U*chord/env.mu)
+
+    alphavec = collect(-pi:0.1:pi)
+    airfoil = CCBlade.AlphaAF(promote(alphavec, Cl.*ones(length(alphavec)), Cd.*ones(length(alphavec)))..., "", Re, Mach)  
+
+    ### Create section object
+    section = CCBlade.Section(promote(radius, chord, twist)..., airfoil)
+
+    ### Create OperatingPoint 
+    operatingpoint = CCBlade.windturbine_op(promote(Vx, omega, pitch, radius, precone, yaw, tilt, azimuth, hubHt, model.shearexp, env.rho, env.mu, env.a)...)
+
+    ### Converge residual 
+    out = solve.(rotor, section, op)
+
+    
+    return SVector(r)
+end
+
+#Todo: Write a convenience function to go from our data structure to CCBlade structs and solve. 
