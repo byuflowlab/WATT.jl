@@ -1,4 +1,4 @@
-using Revise, DifferentialEquations, StaticArrays, FLOWMath, CCBlade, Plots, CurveFit
+using Revise, DifferentialEquations, StaticArrays, FLOWMath, CCBlade, Plots, CurveFit, BenchmarkTools
 
 include("../src/blades.jl")
 include("../src/environments.jl")
@@ -82,11 +82,13 @@ bdiffvars = differentialvars(model, n)
 
 x0 = twistvec
 dx0 = zeros(n)
-tspan = (0.0, 2.0)
+tspan = (0.0, 0.001) #Going to smaller times won't shrink the number of points it calculates at. 
 
 probdae = DifferentialEquations.DAEProblem(bfun, dx0, x0, tspan, p_a, differential_vars=bdiffvars)
 
 sol = DifferentialEquations.solve(probdae)
+
+@btime DifferentialEquations.solve(probdae)
 
 # residsplt = plot(sol) #States are steady, as expected. 
 # display(residsplt)
@@ -103,6 +105,7 @@ op = windturbine_op.(vinf, omega, pitch, rvec, precone, yaw, tilt, 0.0, hubht, s
 
 out = CCBlade.solve.(Ref(rotor), sections, op)
 
+@btime CCBlade.solve.(Ref(rotor), sections, op) #The differences in computation time is expected because the rotor, section, and operating point objects are recreated every time step. So the differential equations solution creates all the CCBlade objects 12 times (at least on my computer), but it hits steady state after one time step. So... in reality, I think the actual speed out be 1/12th what benchmark tools reports.... so something on the order of 1.63 ms. Which is still ten times slower, but kind of expected (Since it also includes creating the objects, not just solving them.) -> Although, since I know that this formulation is steady... I could pull the airfoil, section, rotor, and operating point creation out of the function.... but I don't think the point is to try and be comparable to CCBlade and limit further capability that will be put in with other models. 
 
 pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/figures/bem/"
 
@@ -111,12 +114,12 @@ Nplt = plot(xaxis="Blade radius", yaxis="Normal Force (N)", legend=:bottomright)
 plot!(rvec, N, lab="DAE solve")
 plot!(rvec, out.Np, lab="CCBlade")
 display(Nplt) #They match
-# savefig(pathname*"normalforce_33022.png")
+# savefig(pathname*"normalforce_04042022.png")
 
 Tplt = plot(xaxis="Blade radius", yaxis="Tangential Force (N)", legend=:bottomright)
 plot!(rvec, T, lab="DAE solve")
 plot!(rvec, out.Tp, lab="CCBlade")
 display(Tplt) #They match
-# savefig(pathname*"tangentforce_33022.png")
+# savefig(pathname*"tangentforce_04042022.png")
 
 nothing

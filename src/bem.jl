@@ -9,93 +9,76 @@ function bem(;shearexp=0.0, turbine=true, tipcorrection=true)
 end
 
 
-function get_bem_residual(x, y, p, t, model::BEM, env::Environment) #TODO: Get rid of inputs that aren't used.... I'm not sure that my formulation needs them. 
-    ### Extract statess
-    phi = x[1] 
-    # println("phi: ", phi)
-
-    ### Extract Inputs
-    Cl = y[1] 
-    Cd = y[2]
-    Vx = y[3]
-    Vy = y[4]
-
-    # println("phi: ", phi)
-    # println("ccblade y: ", y)
-
-    ### Extract Parameters
-    radius, chord, twist, pitch, rhub, rtip, hubHt = p #Todo: I'm not sure that radius should be a differentiable variable... Like I don't think we ever really use that as a design variable... do we? 
-
-    ### Parameters that won't change
-    B = 1 # B - number of blades
-    azimuth = 0.0
-    yaw = 0.0
-    tilt = 0.0
-    precone = 0.0
-
-    Cl, radius, phi = promote(Cl, radius, phi)
-
-    omega = Vy/radius
-
-    if model.tipcorrection
-        rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine)
-    else
-        rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine, tip=nothing)
-    end
-
-    U = sqrt(Vx^2 + Vy^2)
-    Mach = typeof(Cl)(U/env.a)
-    Re = typeof(Cl)(env.rho*U*chord/env.mu)
-    # println(typeof(Cl))
-
-    alphavec = collect(-pi:0.1:pi)
-    airfoil = CCBlade.AlphaAF(promote(alphavec, Cl.*ones(length(alphavec)), Cd.*ones(length(alphavec)))..., "", Re, Mach)  
-
-    ### Create section object
-    section = CCBlade.Section(promote(radius, chord, twist)..., airfoil)
-
-    ### Create OperatingPoint #TODO: Make general so it can take propeller configurations. 
-    # println(Vx, omega, pitch, radius, precone, yaw, tilt, azimuth, hubHt, model.shearExp, model.rho, model.mu, model.a) #I'm getting Cl and Cd as nan
-    operatingpoint = CCBlade.windturbine_op(promote(Vx, omega, pitch, radius, precone, yaw, tilt, azimuth, hubHt, model.shearexp, env.rho, env.mu, env.a)...)
+function get_bem_residual(phi, rotor, section, operatingpoint) 
 
     ### Obtain residual 
-    r, outsvec = CCBlade.residual(phi, rotor, section, operatingpoint) #TODO: This function is not compatible with dual numbers. - I did a thing in CCBlade that might mean I won't need to do promote so many times here... I don't know if it's the best... Maybe I can define a second method that won't be as fast, but won't modify the original.  - Did that, I wonder what Dr. Ning's response to that will be. -> His response was... why would you ever need to change that? I still have typing that needs to be updated in CCBlade.
+    r, _ = CCBlade.residual(phi, rotor, section, operatingpoint) 
 
     if isnan(r)
         println("ccblade residual: ", r)
     end
     
-    return SVector(r)
+    return r
 end
 
-function get_bem_y(x, p, t, model::BEM, airfoil::Airfoil, env::Environment)
-    phi = x[1]
+function get_bem_residual!(outs, i, x, rotor, section, operatingpoint)
+    outs[i], _ = CCBlade.residual(x[1], rotor, section, operatingpoint)
+    if isnan(outs[i])
+        println("ccblade residual: ", outs[i])
+    end
+end
 
-    radius, chord, twist, pitch, rhub, rtip, hubHt = p 
+function get_bem_y(phi, p, t, model::BEM, airfoil::Airfoil, env::Environment)
+    # phi = x[1]
+    # radius, chord, twist, pitch, rhub, rtip, hubHt = p 
 
-    alpha = -((twist + pitch) - phi) 
+    alpha = -((p[3] + p[4]) - phi) 
 
     Cl = airfoil.cl(alpha)
     Cd = airfoil.cd(alpha)
 
-    Vy = env.Omega(t)*radius
+    Vy = env.Omega(t)*p[1]
     Vx = env.U(t)
     return [Cl, Cd, Vx, Vy]
 end
 
 function create_bemfun(model::BEM, blade::Blade, env::Environment) 
-    function bemfun(outs, dx, x, p, t)
-        n = length(blade.airfoils)
+    n = length(blade.airfoils)
 
-        for i = 1:n
+    function bemfun(outs, dx, x, p, t)
+    
+        # radius, chord, twist, pitch, rhub, rtip, hubHt = ps #Todo: I'm not sure that radius should be a differentiable variable... Like I don't think we ever really use that as a design variable... do we? 
+        # Note: pitch, rhub, rtip, hubht don't change radially. 
+        # Note: I'm not sure that we need rtip as a design variable.
+
+        ### Create Rotor
+        if model.tipcorrection
+            rotor = CCBlade.Rotor(p[5], p[6], 1.0, precone=0.0, turbine=model.turbine)
+        else
+            rotor = CCBlade.Rotor(p[5], p[6], 1.0, precone=0.0, turbine=model.turbine, tip=nothing)
+        end
+
+        for i = 1:n #Iterate through the radius. 
             #Get state rates, states, and parameters for local section.
-            dxs = [dx[i]]
-            xs = [x[i]]
-            ps = p[1+7*(i-1):7+7*(i-1)]
-            ys = get_bem_y(xs, ps, t, model, blade.airfoils[i], env)
+            phi = x[i]
+            ps = view(p, 1+7*(i-1):7+7*(i-1)) 
+
+            # ys = get_bem_y(xs, ps, t, model, blade.airfoils[i], env)
+            Vx = env.U(0.0)
+            Vy = env.Omega(0.0)*ps[1]
+
+            U = sqrt(Vx^2 + Vy^2)
+
+            airfoil = CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3], "", env.rho*U*ps[2]/env.mu, U/env.a)  
+
+            ### Create section object
+            section = CCBlade.Section(ps[1], ps[2], ps[3], airfoil)
+
+            ### Create OperatingPoint #TODO: Make general so it can take propeller configurations. 
+            operatingpoint = CCBlade.windturbine_op(Vx, Vy/ps[1], pitch, ps[1], 0.0, 0.0, 0.0, 0.0, ps[7], model.shearexp, env.rho, env.mu, env.a)
 
             #Get the residual for the local section
-            outs[i] = get_bem_residual(xs, ys, ps, t, model, env)[1]
+            get_bem_residual!(outs, i, phi, rotor, section, operatingpoint)
         end
     end
     return bemfun
@@ -122,11 +105,11 @@ function parsesolution(model::BEM, blade::Blade, env::Environment, p, sol)
     Rtip = 0.0
 
     #Constant vars
-    B = 1
-    azimuth = 0.0
-    yaw = 0.0
-    tilt = 0.0
-    precone = 0.0 #I recognize that precone shouldn't be set to zero, but when I do the coupled solve, it should already be a part... like built into the structures... Plus... if I'm doing a steady aero, then I'd just use CCBlade. -> Althought... what happens if I want to do unsteady aero... then I'd potentially need precone.  #Todo: I should work in precone. 
+    # B = 1
+    # azimuth = 0.0
+    # yaw = 0.0
+    # tilt = 0.0
+    # precone = 0.0 #I recognize that precone shouldn't be set to zero, but when I do the coupled solve, it should already be a part... like built into the structures... Plus... if I'm doing a steady aero, then I'd just use CCBlade. -> Althought... what happens if I want to do unsteady aero... then I'd potentially need precone.  #Todo: I should work in precone. 
 
 
     for i=1:n
@@ -145,24 +128,22 @@ function parsesolution(model::BEM, blade::Blade, env::Environment, p, sol)
         cd = airfoil.cd(alpha)
 
         if model.tipcorrection
-            rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine)
+            rotor = CCBlade.Rotor(rhub, rtip, 1, precone=0.0, turbine=model.turbine)
         else
-            rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine, tip=nothing)
+            rotor = CCBlade.Rotor(rhub, rtip, 1, precone=0.0, turbine=model.turbine, tip=nothing)
         end
 
         Vx = env.U(0.0)
         Vy = env.Omega(0.0)*radius
 
-        U = sqrt(Vx^2 + Vy^2)
-        Mach = typeof(cl)(U/env.a)
-        Re = typeof(cl)(env.rho*U*chord/env.mu)
+        U = sqrt(Vx^2 + Vy^2) 
 
         alphavec = collect(-pi:0.1:pi)
-        airfoil = CCBlade.AlphaAF(promote(alphavec, cl.*ones(length(alphavec)),     cd.*ones(length(alphavec)))..., "", Re, Mach) 
+        airfoil = CCBlade.AlphaAF(promote(alphavec, cl.*ones(length(alphavec)),     cd.*ones(length(alphavec)))..., "", env.rho*U*chord/env.mu, U/env.a) 
 
         section = CCBlade.Section(promote(radius, chord, twist)..., airfoil)
 
-        operatingpoint = CCBlade.windturbine_op(promote(env.U(0.0), env.Omega(0.0), pitch, radius, precone, yaw, tilt, azimuth, hubHt, model.shearexp, env.rho, env.mu, env.a)...)
+        operatingpoint = CCBlade.windturbine_op(promote(env.U(0.0), env.Omega(0.0), pitch, radius, 0.0, 0.0, 0.0, 0.0, hubHt, model.shearexp, env.rho, env.mu, env.a)...)
 
         _, outs = CCBlade.residual(phi[i], rotor, section, operatingpoint)
     
@@ -188,7 +169,7 @@ function parsesolution(model::BEM, blade::Blade, env::Environment, p, sol)
     return phi, N, T, Thrust, Torque
 end
 
-function converge_bem_states(y, p, model::BEM, env::Environment)
+function converge_bem_states(y, p, rotor, model::BEM, env::Environment)
 
     ### Extract Inputs
     Cl = y[1] 
@@ -209,13 +190,6 @@ function converge_bem_states(y, p, model::BEM, env::Environment)
     Cl, radius = promote(Cl, radius)
 
     omega = Vy/radius
-
-    ### Create Rotor
-    if model.tipcorrection
-        rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine)
-    else
-        rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=model.turbine, tip=nothing)
-    end
 
     U = sqrt(Vx^2 + Vy^2)
     Mach = typeof(Cl)(U/env.a)

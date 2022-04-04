@@ -99,11 +99,13 @@ x0 = ones(4*n)*.1 #I changed the initial states... because I wonder if they'd di
 dx0 = zeros(4*n)
 tspan = (0.0, 20) #It's taking longer for half the amount of time. 
 
-# probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p_a, differential_vars=rdiffvars)
-# sol = DifferentialEquations.solve(probdae)
+probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p_a, differential_vars=rdiffvars)
+sol = DifferentialEquations.solve(probdae)
 
-probode = DifferentialEquations.ODEProblem(ode, x0, tspan, p_a)
-solode = DifferentialEquations.solve(probode)
+# @btime DifferentialEquations.solve(probdae)
+
+# probode = DifferentialEquations.ODEProblem(ode, x0, tspan, p_a)
+# solode = DifferentialEquations.solve(probode)
 
 # uode = Array(solode)'
 # t = solode.t

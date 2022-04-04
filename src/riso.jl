@@ -75,6 +75,7 @@ function riso_states(X, u, udot, v, vdot, theta, thetadot, c, airfoil)
     
     ### Calculate constants
     Tu = c/(2*U) #This will go to NaN if U=0
+    # println(typeof(X[1]))
     
     ### Calculate the state rates
     dx1 = (b1*A1*alpha/Tu) - X[1]*(b1+ (c*Udot/(2*(U)^2)))/Tu 
@@ -94,7 +95,7 @@ end
 function riso_residual(dx, x, y, p, t, airfoil)  
 
     ### Extract inputs
-    u, udot, v, vdot, theta, thetadot = y 
+    u, udot, v, vdot, theta, thetadot = y
 
     # println(y)
 
@@ -243,3 +244,36 @@ function riso_coefs(X, y, c, airfoil)
     return SVector(Cl, Cd)
 end
 
+function riso_coefs_funs(X, U, c, alphadot, airfoil)
+    dcldalpha = airfoil.dcldalpha 
+    alpha0 = airfoil.alpha0
+    liftfit = airfoil.cl
+    dragfit = airfoil.cd
+    A1 = airfoil.A[1]
+    A2 = airfoil.A[2]
+    
+
+    Tu = c/(2*U)
+
+    function clfun(alpha)
+        ae = alpha*(1-A1-A2) + X[1] + X[2]
+
+        clfs = Clfs(ae, liftfit, dcldalpha, alpha0)
+
+        return dcldalpha*(ae-alpha0)*X[4] + clfs*(1-X[4]) + pi*Tu*alphadot
+    end
+
+    function cdfun(alpha)
+        ae = alpha*(1-A1-A2) + X[1] + X[2]
+
+        clfs = Clfs(ae, liftfit, dcldalpha, alpha0)
+
+        Cl = dcldalpha*(ae-alpha0)*X[4] + clfs*(1-X[4]) + pi*Tu*alphadot
+
+        fae = fst(ae, liftfit, dcldalpha, alpha0) 
+        
+        fterm = (sqrt(fae)-sqrt(X[4]))/2 - (fae-X[4])/4 
+        return dragfit(ae) + (alpha-ae)*Cl + (dragfit(ae)-dragfit(alpha0))*fterm
+    end
+    return clfun, cdfun
+end

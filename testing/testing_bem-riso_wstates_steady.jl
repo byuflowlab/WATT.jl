@@ -102,50 +102,50 @@ x0[end-13:end] = twistvec
 
 probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p_a, differential_vars=rdiffvars)
 
-@btime sol = DifferentialEquations.solve(probdae)
+sol = DifferentialEquations.solve(probdae)
 
-# t, ubem, uds, N, T, thrustdae, torquedae = parsesolution(bemmodel, dsmodel, blade, env, p_a, sol)
+@btime DifferentialEquations.solve(probdae) #I did have a combination that was in the 200 ms runtime range. I forgot what it was though :|
 
-# #### Compare to CCBlade
-# B = 1
-# rotor = Rotor(rhub, rtip, B, precone=precone, turbine=true)
+t, ubem, uds, N, T, thrustdae, torquedae = parsesolution(bemmodel, dsmodel, blade, env, p_a, sol)
 
-# sections = Section.(rvec, chordvec, twistvec, airfoils)
+#### Compare to CCBlade
+B = 1
+rotor = Rotor(rhub, rtip, B, precone=precone, turbine=true)
 
-# op = windturbine_op.(vinf, omega, pitch, rvec, precone, yaw, tilt, 0.0, hubht, shearexp, rho)
+sections = Section.(rvec, chordvec, twistvec, airfoils)
 
-# out = CCBlade.solve.(Ref(rotor), sections, op)
+op = windturbine_op.(vinf, omega, pitch, rvec, precone, yaw, tilt, 0.0, hubht, shearexp, rho)
 
-# sthrust, storque = thrusttorque(rotor, sections, out)
+out = CCBlade.solve.(Ref(rotor), sections, op)
+
+sthrust, storque = thrusttorque(rotor, sections, out)
+
+pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/figures/bem-riso/"
+
+Nplt = plot(xaxis="Blade radius", yaxis="Normal Force (N)", legend=:bottomright, title="Steady")
+plot!(rvec, N[end,:], lab="DAE solve")
+plot!(rvec, out.Np, lab="CCBlade")
+display(Nplt) #They match
+# savefig(pathname*"steadynormalforce_04042022.png")
+
+Tplt = plot(xaxis="Blade radius", yaxis="Tangential Force (N)", legend=:bottomright, title="Steady")
+plot!(rvec, T[end,:], lab="DAE solve")
+plot!(rvec, out.Tp, lab="CCBlade")
+display(Tplt) #They match
+# savefig(pathname*"steadytangentforce_04042022.png")
+
+Torqueplt = plot(xaxis="Time (s)", yaxis="Torque (N⋅m)", legend=:bottomright) 
+plot!(t, torquedae[:], lab="DAE solve")
+hline!([storque], lab="Steady value", linestyle=:dash)
+display(Torqueplt)
+# savefig(pathname*"convergingtorque_04042022.png")
 
 
-
-# pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/figures/bem-riso/"
-
-# Nplt = plot(xaxis="Blade radius", yaxis="Normal Force (N)", legend=:bottomright, title="Steady")
-# plot!(rvec, N[end,:], lab="DAE solve")
-# plot!(rvec, out.Np, lab="CCBlade")
-# display(Nplt) #They match
-# # savefig(pathname*"steadynormalforce_33122.png")
-
-# Tplt = plot(xaxis="Blade radius", yaxis="Tangential Force (N)", legend=:bottomright, title="Steady")
-# plot!(rvec, T[end,:], lab="DAE solve")
-# plot!(rvec, out.Tp, lab="CCBlade")
-# display(Tplt) #They match
-# # savefig(pathname*"steadytangentforce_33122.png")
-
-# Torqueplt = plot(xaxis="Time (s)", yaxis="Torque (N⋅m)", legend=:bottomright) 
-# plot!(t, torquedae[:], lab="DAE solve")
-# hline!([storque], lab="Steady value", linestyle=:dash)
-# display(Torqueplt)
-# # savefig(pathname*"convergingtorque_33122.png")
-
-
-# thrustplt = plot(xaxis="Time (s)", yaxis="Thrust (N)", legend=:bottomright) 
-# plot!(t, thrustdae[:], lab="DAE solve")
-# hline!([sthrust], lab="Steady value", linestyle=:dash)
-# display(thrustplt)
-# savefig(pathname*"convergingthrust_33122.png")
+thrustplt = plot(xaxis="Time (s)", yaxis="Thrust (N)", legend=:bottomright) 
+plot!(t, thrustdae[:], lab="DAE solve")
+hline!([sthrust], lab="Steady value", linestyle=:dash)
+display(thrustplt)
+# savefig(pathname*"convergingthrust_04042022.png")
 
 # anim = @animate for i = 1:length(t)
 #     ti = t[i]
