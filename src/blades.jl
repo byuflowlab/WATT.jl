@@ -22,7 +22,7 @@ function simpleairfoil(polar)
     return Airfoil(polar, cl, cd, cm, dcldalpha, alpha0, A, b, T)
 end
 
-function nearestto(xvec, x) #Todo: Move to a utilities file. 
+function nearestto(xvec, x) #TODO: Move to a utilities file. 
     mins = abs.(xvec.-x)
     minval, minidx = findmin(mins)
     minval = xvec[minidx]
@@ -40,10 +40,10 @@ function complexairfoil(polar; A = [0.3, 0.7], b = [0.14, 0.53], T = [1.7, 3.0])
     _, cl0idx = nearestto(middlepolar[:,2], 0.0)
     alpha50 = middlepolar[end,1]*0.25
     _, alf50idx = nearestto(middlepolar[:,1], alpha50)
-    _, dcldalpha = linear_fit(middlepolar[cl0idx:alf50idx,1], middlepolar[cl0idx:alf50idx,2]) #Todo: Create my own linear fit function so I don't have to pull in a package. 
+    _, dcldalpha = linear_fit(middlepolar[cl0idx:alf50idx,1], middlepolar[cl0idx:alf50idx,2]) #TODO: Create my own linear fit function so I don't have to pull in a package. 
     return Airfoil(polar, cl, cd, cm, dcldalpha, alpha0, A, b, T)
 end
 
-struct Blade
+struct Blade #TODO: Do I want structural information in this? Or a different struct? or any struct at all. 
     airfoils
 end
