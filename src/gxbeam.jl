@@ -114,9 +114,7 @@ create_gxbeam_point(p) = SVector(p[1], p[2], p[3])
 
 function create_gxbeam_element(p, points, start, stop)
     # separate element parameters
-    e1x, e1y, e1z, e2x, e2y, e2z, e3x, e3y, e3z, C11, C12, C13, C14, C15, C16,
-        C22, C23, C24, C25, C26, C33, C34, C35, C36, C44, C45, C46, C55, C56,
-        C66, mu, xm2, xm3, i22, i33, i23 = p  
+    e1x, e1y, e1z, e2x, e2y, e2z, e3x, e3y, e3z, C11, C12, C13, C14, C15, C16, C22, C23, C24, C25, C26, C33, C34, C35, C36, C44, C45, C46, C55, C56, C66, mu, xm2, xm3, i22, i33, i23 = p  
         # e - reference frame orientation vector (1,2,3 correspond to x,y,z respectively)
     
     # element length
@@ -344,12 +342,26 @@ function create_simplebeam(radii, chords, twists, rhub, rtip, thicknesses; densi
 
         G = E/(2*(1+nu))
 
-        pe[idx + 10] = 1/(E*A) #c11
-        pe[idx + 16] = 1/(G*Ay) #c22
-        pe[idx + 21] = 1/(G*Az) #c33
-        pe[idx + 25] = 1/(G*Jx) #c44
-        pe[idx + 28] = 1/(E*Iyy) #c55
-        pe[idx + 30] = 1/(E*Izz) #c66
+        # pe[idx + 10] = 1/(E*A) #c11 #From one of Taylor's examples. 
+        # pe[idx + 16] = 1/(G*Ay) #c22
+        # pe[idx + 21] = 1/(G*Az) #c33
+        # pe[idx + 25] = 1/(G*Jx) #c44
+        # pe[idx + 28] = 1/(E*Iyy) #c55
+        # pe[idx + 30] = 1/(E*Izz) #c66
+
+        #Isotropic compliance matrix
+        pe[idx + 10] = 1/E #c11 
+        pe[idx + 11] = -nu/E #c12
+        pe[idx + 12] = -nu/E #c13
+        pe[idx + 16] = 1/E #c22
+        pe[idx + 17] = -nu/E #c23
+        pe[idx + 21] = 1/E #c33
+        pe[idx + 25] = (1+nu)/E #c44
+        pe[idx + 28] = (1+nu)/E #c55
+        pe[idx + 30] = (1+nu)/E #c66
+
+        #Todo. What about the other terms. I did just the main diagonal here. That's fairly problematic. -> Added entries for an isotripic material. 
+        # The isotropic compliance matrix looks like the orthotropic compliance matrix. But simpler. 
 
         ## Create mass matrix elements
         pe[idx + 31] = density*A # mu (distributed weight)

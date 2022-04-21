@@ -1,4 +1,4 @@
-using Revise, DifferentialEquations, StaticArrays, FLOWMath, GXBeam, Plots, CurveFit, BenchmarkTools, LinearAlgebra
+using Revise, DifferentialEquations, StaticArrays, FLOWMath, GXBeam, Plots, CurveFit, BenchmarkTools, LinearAlgebra, DelimitedFiles
 
 include("../src/blades.jl")
 include("../src/environments.jl")
@@ -50,6 +50,7 @@ tspan = (0.0, 10.0) #It's taking longer for half the amount of time.
 
 
 n = length(rvec)
+# twistvec = zeros(n) #See if getting rid of the twist will get rid of the twisting in the modell. -> It did, led me to find that my compliance matrix sucked. 
 
 ### Create models
 n, p = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
@@ -59,7 +60,7 @@ gxmodel = gxbeam(n)
 env = environment(rho, mu, a, vinf, 0.0, 0.0, 0.0)
 
 ### Create distributed load
-function dsl(t)
+function dsl(t) 
     # f = zeros(3)
     f1 = 44.8*10 # approximately 10 pounds of thrust distributed
     return SVector(f1, 0.0, 0.0)
@@ -79,18 +80,18 @@ dx0 = zeros(length(x0))
 
 probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
 
-sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01)
+# sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01)
 
-t = sol.t
+# t = sol.t
 
-x = Array(sol)'
+# x = Array(sol)'
 
-endofpoints = 6*(n+1)
+# endofpoints = 6*(n+1)
 
-uxtip = x[:,endofpoints-5]
+# uxtip = x[:,endofpoints-5]
 
-uxplt = plot(t, uxtip, xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=:bottomright, lab="dt=0.01")
-display(uxplt)
+# uxplt = plot(t, uxtip, xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=:bottomright, lab="dt=0.01")
+# display(uxplt)
 
 
 
@@ -108,10 +109,14 @@ f1 = f2 = @SVector zeros(3)
 m1 = m2 = @SVector zeros(3) 
 m = @SVector zeros(3)
 
-distributed_loads = Dict()
+distributed_loads = Dict() #Todo: Distributed loads are defined in the local reference frame, so if I want to apply forces in the overall reference frame, then I need to rotate back. 
 for ielem in 1:gxmodel.n
-    f1_follower = f2_follower = elements[ielem].L*f/2
-    m1_follower = m2_follower = elements[ielem].L*m/2
+    f1_f = f2_f = rotate_z(-twistvec[ielem])*elements[ielem].L*f/2
+    m1_f = m2_f = rotate_z(-twistvec[ielem])*elements[ielem].L*m/2
+
+    f1_follower = f2_follower = SVector(f1_f[1], f1_f[2], f1_f[3])
+    m1_follower = m2_follower = SVector(m1_f[1], m1_f[2], m1_f[3])
+
     distributed_loads[ielem] = GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)
 end
 
@@ -125,29 +130,29 @@ system, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescr
 prob = GXBeam.DAEProblem(system, assembly, tspan; prescribed_conditions, distributed_loads) #, angular_velocity
 
 #### solve DAEProblem
-sol = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.01) 
+# sol = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.01) 
 # sol = DifferentialEquations.solve(prob, alg_hints=[:stiff], force_dtmin=true) #Stalls out after 9.1e-5 seconds (IDAS error)
 
 #This is taking a long time, I think because I used dead loads. Actually, it's probably from oscillations... which could come from the fact that I used a dead load and it's rotating.  -> Or from the fact that the beam is stiff and there isn't any damping. 
 
-sol2 = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.005) #Can artifically filter out oscillations by arbitrarilly increasing the time step. The larger the time step, the quicker it filters out. Converged to the same value. Did not converge to the same value that steady state solver did. 
+# sol2 = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.005) #Can artifically filter out oscillations by arbitrarilly increasing the time step. The larger the time step, the quicker it filters out. Converged to the same value. Did not converge to the same value that steady state solver did. 
 
 
 
-t = sol.t
+# t = sol.t
 ## t2 = sol2.t
 
-x = Array(sol)'
+# x = Array(sol)'
 ## x2 = Array(sol2)'
 
-endofpoints = 6*(n+1)
+# endofpoints = 6*(n+1)
 
-uxtip = x[:,endofpoints-5]
-## uxtip2 = x2[:,endofpoints-5]
+# uxtip = x[:,endofpoints-5]
+# ## uxtip2 = x2[:,endofpoints-5]
 
-uxplt = plot(t, uxtip, xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=:bottomright, lab="dt=0.01")
-## plot!(t2, uxtip2, lab="dt=0.005")
-display(uxplt)
+# uxplt = plot(t, uxtip, xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=:bottomright, lab="dt=0.01")
+# ## plot!(t2, uxtip2, lab="dt=0.005")
+# display(uxplt)
 
 
 ############ Try solving the problem with just GXBeam.  
@@ -163,7 +168,7 @@ display(uxplt)
 # for i = 2:n+1
 #     local idx = 6*(i-1)
 
-#     deltax[i] = xsteady[idx+1]
+#     deltax[i] = xsteady[idx+1] #Some angular displacement in z (on points)
 # end
 
 # pointz = zeros(n+1)
@@ -180,7 +185,7 @@ display(uxplt)
 
 #### Time simulation - GXBEAM SOLVED
 
-# t = range(0, 0.04, length=1001)
+# t = range(0, 10.0, length=1001)
 
 # system, history, converged = time_domain_analysis(assembly, t; prescribed_conditions=prescribed_conditions, distributed_loads = distributed_loads) #This appears to be diverging in the history? 
 # idxvec = zeros(1)
@@ -191,15 +196,51 @@ display(uxplt)
 #         idxvec[1] = i-1
 #         break
 #     end
+#     idxvec[1] = i
 # end
 
 # idx = Int(idxvec[1])
 # newh = history[1:idx]
 # newt = t[1:idx] #The time domain analysis is diverging after 18 steps. I need to see how to get this not to diverge. 
 
+# cyl = readdlm("../data/airfoils/circle35.cor")
+# af = readdlm("../data/airfoils/naca2412.cor")
+
+# sections = zeros(3, size(af,1), n+1)
+# for ip = 1:n+1
+#     if ip<=2
+#         airfoil = cyl
+#     else
+#         airfoil = af
+#     end
+#     if ip==1
+#         chord = chordvec[1]
+#     else
+#         chord = chordvec[ip-1]
+#     end
+
+#     sections[1, :, ip] .= chord .* (airfoil[:,1] .- 0.5)
+#     sections[2, :, ip] .= chord .* airfoil[:,2]
+#     sections[3, :, ip] .= 0.0
+# end
+
+### Twist the sections - It looks a little janky, but it's in there. 
+# for i = 1:n+1
+#     for j = 1:n+1
+#         if j==1
+#             twist = twistvec[j]
+#         else
+#             twist = twistvec[j-1]
+#         end
+
+#         sections[:,i,j] = rotate_z(-twist)*sections[:,i,j]
+#     end
+# end
+
+
 # pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/vtk/"
 
-## write_vtk(pathname*"time", assembly, newh, newt)
+# write_vtk(pathname*"shape_time_twist", assembly, newh, newt; sections=sections)
 
 # x = convert_history(newh)
 
