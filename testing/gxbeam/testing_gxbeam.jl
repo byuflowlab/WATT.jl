@@ -1,8 +1,15 @@
 using Revise, DifferentialEquations, StaticArrays, FLOWMath, GXBeam, Plots, CurveFit, BenchmarkTools, LinearAlgebra, DelimitedFiles
 
-include("../src/blades.jl")
-include("../src/environments.jl")
-include("../src/gxbeam.jl")
+#=
+Test everything that my method can do.
+- An unsteady, spatially dependent distributed load
+- unsteady angular velocity
+- gravity through time
+=#
+
+include("../../src/blades.jl")
+include("../../src/environments.jl")
+include("../../src/gxbeam.jl")
 
 function nearestto(xvec, x)
     mins = abs.(xvec.-x)
@@ -109,7 +116,7 @@ f1 = f2 = @SVector zeros(3)
 m1 = m2 = @SVector zeros(3) 
 m = @SVector zeros(3)
 
-distributed_loads = Dict() #Todo: Distributed loads are defined in the local reference frame, so if I want to apply forces in the overall reference frame, then I need to rotate back. 
+distributed_loads = Dict() #Todo. Distributed loads are defined in the local reference frame, so if I want to apply forces in the overall reference frame, then I need to rotate back. 
 for ielem in 1:gxmodel.n
     f1_f = f2_f = rotate_z(-twistvec[ielem])*elements[ielem].L*f/2
     m1_f = m2_f = rotate_z(-twistvec[ielem])*elements[ielem].L*m/2
@@ -130,7 +137,8 @@ system, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescr
 prob = GXBeam.DAEProblem(system, assembly, tspan; prescribed_conditions, distributed_loads) #, angular_velocity
 
 #### solve DAEProblem
-# sol = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.01) 
+# sol = DifferentialEquations.solve(prob) #IDAS Error
+sol = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.0001) #No change from 0.0001 to 0.00001
 # sol = DifferentialEquations.solve(prob, alg_hints=[:stiff], force_dtmin=true) #Stalls out after 9.1e-5 seconds (IDAS error)
 
 #This is taking a long time, I think because I used dead loads. Actually, it's probably from oscillations... which could come from the fact that I used a dead load and it's rotating.  -> Or from the fact that the beam is stiff and there isn't any damping. 
@@ -139,20 +147,20 @@ prob = GXBeam.DAEProblem(system, assembly, tspan; prescribed_conditions, distrib
 
 
 
-# t = sol.t
-## t2 = sol2.t
+t = sol.t
+# t2 = sol2.t
 
-# x = Array(sol)'
-## x2 = Array(sol2)'
+x = Array(sol)'
+# x2 = Array(sol2)'
 
-# endofpoints = 6*(n+1)
+endofpoints = 6*(n+1)
 
-# uxtip = x[:,endofpoints-5]
-# ## uxtip2 = x2[:,endofpoints-5]
+uxtip = x[:,endofpoints-5]
+## uxtip2 = x2[:,endofpoints-5]
 
-# uxplt = plot(t, uxtip, xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=:bottomright, lab="dt=0.01")
-# ## plot!(t2, uxtip2, lab="dt=0.005")
-# display(uxplt)
+uxplt = plot(t, uxtip, xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=:bottomright, lab="dt=0.01")
+## plot!(t2, uxtip2, lab="dt=0.005")
+display(uxplt)
 
 
 ############ Try solving the problem with just GXBeam.  
@@ -187,7 +195,8 @@ prob = GXBeam.DAEProblem(system, assembly, tspan; prescribed_conditions, distrib
 
 # t = range(0, 10.0, length=1001)
 
-# system, history, converged = time_domain_analysis(assembly, t; prescribed_conditions=prescribed_conditions, distributed_loads = distributed_loads) #This appears to be diverging in the history? 
+# system, history, converged = time_domain_analysis(assembly, t; prescribed_conditions=prescribed_conditions, distributed_loads = distributed_loads) 
+
 # idxvec = zeros(1)
 # for i=1:length(history)
 #     try
@@ -203,8 +212,8 @@ prob = GXBeam.DAEProblem(system, assembly, tspan; prescribed_conditions, distrib
 # newh = history[1:idx]
 # newt = t[1:idx] #The time domain analysis is diverging after 18 steps. I need to see how to get this not to diverge. 
 
-# cyl = readdlm("../data/airfoils/circle35.cor")
-# af = readdlm("../data/airfoils/naca2412.cor")
+# cyl = readdlm("../../data/airfoils/circle35.cor")
+# af = readdlm("../../data/airfoils/naca2412.cor")
 
 # sections = zeros(3, size(af,1), n+1)
 # for ip = 1:n+1
