@@ -241,9 +241,9 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
 
         ### System velocities and accelerations
         v0 = @SVector zeros(3) #System linear velocity #0.000000 seconds
-        omega0 = SVector(env.Omega(t), 0.0, 0.0) #System angular velocity #0.000000 seconds
+        omega0 = SVector(0.0, 0.0, env.Omega(t)) #System angular velocity #0.000000 seconds
         a0 = @SVector zeros(3) #System linear acceleration #0.000000 seconds
-        alpha0 = SVector(env.Omegadot(t), 0.0, 0.0) #System angular acceleration #0.000000 seconds
+        alpha0 = SVector(0.0, 0.0, env.Omegadot(t)) #System angular acceleration #0.000000 seconds
 
         ### Create gravity vector #TODO: Convert this from steady to dependent on actual position? 
         alpha = pi/2 - env.Omega(t)*t #Assuming the blade starts horizontal. # 0.000004 seconds (5 allocations: 80 bytes) #Todo. Why are there allocations here? This is scalar math.... evaluating env.Omega is two allocations. 0.000000 seconds The Environment object wasn't type stable.  
