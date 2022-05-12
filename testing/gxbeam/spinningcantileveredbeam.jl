@@ -8,12 +8,16 @@ function getfieldnames(x)
     return fieldnames(typeof(x))
 end
 
-#= Test whether or not my wrapper can create a beam and solve a simple beam case, with twist 
+#= Test whether or not my wrapper can create a beam and solve a simple spinning beam case, with twist.
 
-Cantilevered beam with a constant distributed load, a constant cross sectional distribution, and a constant twist.
-
-Note that this should be just another case of the simple beam, but now we have a new Izz and Iyy. 
+Cantilevered beam with a constant distributed load, a constant cross sectional distribution, and a constant twist.... the only difference from the last test is that this includes an angular velocity. 
 =#
+
+
+## Base inputs
+nelem = 10 
+rhub = 0
+rtip = 60
 
 L = 60 #Length of beam
 load = 100*4.48 # Newtons 
@@ -22,19 +26,21 @@ h = 0.25 # Thickness (meters)
 w = 3.4 # Width (meters)
 twist = pi/8
 
-Iz = w*(h^3)/12 #Second moment of area
-Iy = h*(w^3)/12
+precone = 0.0
+tsr = 7.55
+vinf = 10.0
+rotorR = rtip*cos(precone)
+omega = vinf*tsr/rotorR
+
 
 ### Create GXBeam Inputs to create function for DifferentialEquations
-## Base inputs
-nelem = 10 
-rhub = 0
-rtip = L
+
 
 ## DifferentialEquations inputs
-tspan = (0.0, 0.5) #Note: I feel like this is much slower. Like I know it is slower, and I don't have a solid number to give. But without twist it could solve the steady state, both time simulations in just a matter of moments, for 10 seconds. For this one, it didn't solve 10 seconds in quite a few minutes. Like.... Yeah... It doesn't seem to be oscillating a lot. 
+tspan = (0.0, 0.5)
 
-#Also... the deflection isn't as much as theory... but it does oscillate about the steady state GXBeam solution. I wonder why it is taking so much longer. #Todo: I wonder if I personally rotate the compliance matrix, then compare... if I get what theory predicts.... another way to ask the question, is when you rotate the beam in GXBeam, how does it change the properties? 
+
+
 
 ## Calculated inputs
 r = range(0, L, length=nelem+2)
@@ -48,11 +54,11 @@ n, p = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
 ## Create models
 gxmodel = gxbeam(n)
-env = environment(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) #I'm not using any of these inputs in this test. 
+env = environment(0.0, 0.0, 0.0, 0.0, omega, 0.0, 0.0) #I'm not using any of these inputs in this test. 
 
 ## Create distributed load
 function dsl(t) 
-    # f = rotate_x(pi/2 - twist)'*[0.0, -load, 0.0]
+    # f = rotate_x(pi/2-twist)'*[0.0, -load, 0.0]
     f = [0.0, -load, 0.0]
     return SVector(f[1], f[2], f[3])
 end
@@ -90,8 +96,9 @@ fload = dsl(0)
 distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> fload[2], fz= (s) -> fload[3]) for ielem in 1:nelem)
 
 # distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> -load) for ielem in 1:nelem) #The previous line acheives the same output. 
+Omega = SVector(0.0, 0.0, omega)
 
-system, converged = static_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false)
+system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega)
 
 state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
@@ -108,10 +115,10 @@ deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 ### Test GXBeam DAE formulation
 ## run initial condition analysis to get consistent set of initial conditions
-system2, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescribed_conditions, distributed_loads)
+system2, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescribed_conditions, distributed_loads, angular_velocity = Omega)
 
 ## construct a DAEProblem
-prob = GXBeam.DAEProblem(system2, assembly, tspan; prescribed_conditions, distributed_loads) 
+prob = GXBeam.DAEProblem(system2, assembly, tspan; prescribed_conditions, distributed_loads, angular_velocity= Omega) 
 
 ## solve DAEProblem
 sol_gxbeam = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.01) #Currently taking 0.08 seconds for a 0.5 second simulation.... so I have some speeding up to do on my implementation. -> Although... I think it might just be slower. Because we're putting information for the assembly in P... so it might inherently be slower. I need to talk to Dr. Ning about this. 
@@ -121,7 +128,7 @@ sol_gxbeam = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin
 history = [AssemblyState(system2, assembly, sol_gxbeam[it]; prescribed_conditions) for it in eachindex(sol_gxbeam)]
 
 nt = length(sol_gxbeam.t)
-tidx = nt-15
+tidx = nt-20
 
 xd = [assembly.points[ipoint][1] + history[tidx].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
@@ -144,7 +151,7 @@ display(tplt)
 history_me = [AssemblyState(system2, assembly, sol[it]; prescribed_conditions) for it in eachindex(sol)]
 
 nt_me = length(sol.t)
-tidx_me = nt_me-15
+tidx_me = nt_me-20
 
 x_me = [assembly.points[ipoint][1] + history[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
@@ -173,6 +180,9 @@ points[4,:] = rotate_z(pi/2 - twistvec[4])*points[4,:]
 
 # Aplt = plot(points[:,1], points[:,2], aspectratio=:equal)
 # display(Aplt)
+
+Iz = w*(h^3)/12 #Second moment of area
+Iy = h*(w^3)/12
 
 Iz1, Iy1, Izy = secondmomentofarea(points[:,1], points[:,2])
 

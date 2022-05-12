@@ -33,9 +33,9 @@ tspan = (0.0, 10.0)
 ## Calculated inputs
 r = range(0, L, length=nelem+2)
 rvec = r[2:end-1] 
-chordvec = ones(length(rvec)).*h
+chordvec = ones(length(rvec)).*w
 twistvec = zeros(length(rvec))
-thickvec = w.*ones(length(rvec))
+thickvec = ones(length(rvec)).*h
 
 ## Create parameters
 n, p = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
@@ -153,7 +153,9 @@ deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(asse
 
 
 ### Analytical Solution
-yfun(x) = load*x^2*(4*L*x -x^2 -6*L^2)/(24*E*Iz) #Shigley's
+Izz, Iy, Izy = rotate_smoa(Iz, Iy, 0.0, pi/2 - twist)
+
+yfun(x) = load*x^2*(4*L*x -x^2 -6*L^2)/(24*E*Izz) #Shigley's
 # Using Iz because the force in the -Y causes a negative moment about the Z axis. 
 
 xvec = range(0, L, length=nelem+1)
