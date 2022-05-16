@@ -12,7 +12,9 @@ x_p has two options, depending if we are constraining displacement or not. Regar
         x_p = [F_x, F_y, F_z, M_x, M_y, M_z]. 
     These are the forces and moments required to keep the point stationary. 
 
-    If we're not constraining displacement (it has that degree of freedom), then the vector of states is x_p = [delta_x, delta_y, delta_z, theta_x, theta_y, theta_z], where delta and theta are linear and angular displacements respectively. 
+    If we're not constraining displacement (it has that degree of freedom), then the vector of states is 
+    x_p = [delta_x, delta_y, delta_z, theta_x, theta_y, theta_z], 
+    where delta and theta are linear and angular displacements respectively. 
 
 
 x_e has only one option with 18 elements that are the same regardless of displacement constraints. These states are: 
@@ -176,9 +178,17 @@ function create_gxbeam_assembly(gxmodel::gxbeam, p) #For ease of use outside of 
 end
 
 
-function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Function; g = 9.817)
 
-    ### Todo: I might accidently be "globalizing" these variables. Allocating them outside of the function might actually be worse. 
+function get_element_velocity(states, ielem; allstates=false) #TODO: Apply multiple dispatch
+    idx = 12 + 18*(ielem-1)
+    if allstates
+    end
+    return states[idx+13:idx+15]
+end
+
+function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Function; g = 9.817, damping=true, b=0.01)
+
+    ### Todo. I might accidently be "globalizing" these variables. Allocating them outside of the function might actually be worse. -> I don't think that I am, because I tried to declare force_scaling a constant, and it balked saying that it is a local variable. 
     ### Create prescribed conditions
     prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed #0.000019 seconds 0.000003 seconds (4 allocations: 2.156 KiB)
 
@@ -187,26 +197,19 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
     # create dictionary of point masses
     point_masses = Dict(1 => PointMass(0.0, SVector(0.0, 0.0, 0.0), @SMatrix zeros(3,3)))
 
-    force_scaling = 1.0 #"unsupported 'const' declaration on local variable". I guess this is a local variable. 
+    # force_scaling = 1.0 #"unsupported 'const' declaration on local variable". I guess this is a local variable.
 
     ### Create GXBeam pass ins.
     start = 1:gxmodel.n
     stop = 2:gxmodel.n+1
-    N, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem =
-    GXBeam.system_indices(start, stop, false; prescribed_points=1:1) #The third argument is whether or not the system is static. 
-    # @show N, irow_point, irow_elem, icol_point, icol_elem
-
-    ### create the origin
-    x0 = @SVector zeros(3)
-
-    ### follower distributed loads
-    f1_follower = f2_follower = @SVector zeros(3) 
-    m1_follower = m2_follower = @SVector zeros(3)
-
-    # f1 = f2 = @SVector zeros(3) 
-    # m1 = m2 = @SVector zeros(3)
-
-    m = @SVector zeros(3)
+    N, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem = GXBeam.system_indices(start, stop, false; prescribed_points=1:1) #The third argument is whether or not the system is static. #prescribed_points=[1, gxmodel.n+1]
+    # @show N
+    # @show irow_point
+    # @show irow_elem
+    # @show icol_point
+    # @show icol_elem
+    # @show irow_elem1 
+    # @show irow_elem2
 
     gxbeamfun! = function(outs, dx, x, p, t) #Todo: I'm not sure that this is type stable. Adding types to the inputs didn't decrease the number of allocations. 
         ### Create assembly
@@ -216,17 +219,45 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
         elements = view(assembly.elements, :) #0.000000 seconds 
 
         f = distributedload(t) #0.000007 seconds (7 allocations: 240 bytes) ... 0.000005 seconds (3 allocations: 80 bytes)
-
+        m = @SVector zeros(3)
         # distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem;fx = (s) -> f[1], fy = (s) -> f[2], fz = (s) -> f[3]) for ielem in 1:nelem)
+
+        ### follower distributed loads
+        f1_follower = f2_follower = @SVector zeros(3) 
+        m1_follower = m2_follower = @SVector zeros(3)
         
         f1 = f2 = elements[1].L*f/2 #0.000002 seconds (3 allocations: 80 bytes)
         m1 = m2 = elements[1].L*m/2
+        if damping
+            ## Write a function that gets the element velocities. 
+            ue = get_element_velocity(x, 1)
+
+            ## Calculate the damping force
+            Fd = -b.*ue
+
+            ## Apply the damping force
+            f1_follower += Fd./elements[1].L
+            f2_follower += Fd./elements[1].L
+        end
         distributed_loads = Dict(1 => GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)) #0.000007 seconds (6 allocations: 3.922 KiB)
         # distributed_loads = Dict() #0.000002 seconds (4 allocations: 608 bytes)
 
         for ielem in 2:gxmodel.n #0.000007 seconds (50 allocations: 4.844 KiB)... 0.000004 seconds (36 allocations: 2.531 KiB)
-            f1 = f2 = elements[ielem].L*f/2
+            f1 = f2 = elements[ielem].L*f/2 #TODO: Why am I multiplying by the length of the element? Isn't the force integrated? 
             m1 = m2 = elements[ielem].L*m/2
+            if damping
+                ## Write a function that gets the element velocities. 
+                ue = get_element_velocity(x, ielem)
+
+                ## Calculate the damping force
+                Fd = -b.*ue
+
+                ## Apply the damping force
+                f1_follower += Fd./elements[ielem].L
+                f2_follower += Fd./elements[ielem].L
+
+                # @show typeof(f1_follower)
+            end
             distributed_loads[ielem] = GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)
         end
 
@@ -240,6 +271,8 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
 
 
         ### System velocities and accelerations
+            ### create the origin
+        x0 = @SVector zeros(3)
         v0 = @SVector zeros(3) #System linear velocity #0.000000 seconds
         omega0 = SVector(0.0, 0.0, env.Omega(t)) #System angular velocity #0.000000 seconds
         a0 = @SVector zeros(3) #System linear acceleration #0.000000 seconds
@@ -251,6 +284,8 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
         gy = -g*sin(alpha)
         gz = 0.0
         gvec = SVector(gx, gy, gz) #[gx gy gz]
+
+        force_scaling = GXBeam.default_force_scaling(assembly) #"unsupported 'const' declaration on local variable". I guess this is a local variable.
 
         # if any(isnan, dx)
         #     println("dx: ", dx)
@@ -275,15 +310,25 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
         # println(typeof(distributed_loads))
         # println(typeof(point_masses))
 
+        # @show distributed_loads
+
         GXBeam.dynamic_system_residual!(outs, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec, force_scaling, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem, x0, v0, omega0, a0, alpha0) #-> There is another function dynamic_element_residual. 
         # I think that this function is actually updating the outs, like I think they are changing, I see a couple instances of the residuals changing when I call it between prints. #0.000052 seconds (1.10 k allocations: 60.578 KiB) #Taylor said I'm passing something in that isn't a static vector.  0.000020 seconds (17 allocations: 5.266 KiB)
 
-        # println(outs[end-18:end])
+        # println(outs[end-18:end])   
 
         # if any(isnan, outs)
         #     println("t: ", t)
         #     println("outs: ", outs)
         # end
+
+        #=
+            Todo: "I am missing something that makes it so that this function does not return something that is an actual solution." The trivial solution should be a solution of the residual... I think. I need to compare against Taylor's function (I need to figure out how to pass dx, x, p, t, and outs to Taylor's DAE funcrtion.)
+
+            - Try looking at a smaller number of elements, that might make it easier to compare. 
+
+            - Look into if there is a way to limit how many iterations are taken to converge the residuals. 
+        =#
         return outs
     end
     return SciMLBase.DAEFunction{true, true}(gxbeamfun!) #Todo: Was returning this as a DAEFunction the best thing? I'm not sure. Probably. 
@@ -404,7 +449,7 @@ function differentialvars(gxmodel; include_extra_states=false) #Todo. Make sure 
         differential_vars = fill(false, 12 + 18*ne)
 
         for i in 1:ne
-            idx = 12 + 18*(i-1)
+            idx = 6 + 18*(i-1) #Skip past the points states. There are 6 at the beginning and 6 at the end. 
             differential_vars[idx+1:idx+3] .= true # u (for the beam element)
             differential_vars[idx+4:idx+6] .= true # θ (for the beam element)
             differential_vars[idx+13:idx+15] .= true # V (for the beam element)
@@ -665,7 +710,7 @@ function initialize_gxbeam(gxmodel, p, distributedload)
     return convert_assemblystate(state)
 end
 
-function initialize_gxbeam2(gxmodel, p, distributedload)
+function initialize_gxbeam2(gxmodel, p, distributedload) #Todo: Need to add kwargs that go to GXBeam's initalize function so that I can have the same initial conditions. 
 
     start = 1:gxmodel.n
     stop = 2:gxmodel.n+1
@@ -796,41 +841,41 @@ function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
 
 end
 
-function parsesolution(sol, gxmodel::gxbeam) #Todo: This isn't complete/working
-    t = sol.t
-    x = Array(sol)'
-    n = length(t)
+# function parsesolution(sol, gxmodel::gxbeam) #Todo: This isn't complete/working
+#     t = sol.t
+#     x = Array(sol)'
+#     n = length(t)
 
-    # diffvars = differentialvars(gxmodel)
+#     # diffvars = differentialvars(gxmodel)
 
-    points = Array{Vector}(undef, n)
-    elements = Array{Vector}(undef, n)
+#     points = Array{Vector}(undef, n)
+#     elements = Array{Vector}(undef, n)
 
-    pnts = Array{Vector}(undef, gxmodel.n+1)
-    els = Array{Vector}(undef, gxmodel.n)
+#     pnts = Array{Vector}(undef, gxmodel.n+1)
+#     els = Array{Vector}(undef, gxmodel.n)
 
     
-    for i = 1:n
+#     for i = 1:n
 
-        xl = x[i,:]
+#         xl = x[i,:]
 
-        #Extract point states
-        for j = 1:gxmodel.n+1
-            pidx = 6*(j-1)
-            pnts[j] = xl[pidx+1:pidx+6]
+#         #Extract point states
+#         for j = 1:gxmodel.n+1
+#             pidx = 6*(j-1)
+#             pnts[j] = xl[pidx+1:pidx+6]
             
-        end
+#         end
 
-        #Extract Element states
-        for j = 1:gxmodel.n
-            elidx = 18*(j-1) + 6*(gxmodel.n+1)
-            els[j] = xl[elidx+1:elidx+18]
-        end
-        points[i] = pnts
-        elements[i] = els
-    end
-    return t, x, points, elements
-end
+#         #Extract Element states
+#         for j = 1:gxmodel.n
+#             elidx = 18*(j-1) + 6*(gxmodel.n+1)
+#             els[j] = xl[elidx+1:elidx+18]
+#         end
+#         points[i] = pnts
+#         elements[i] = els
+#     end
+#     return t, x, points, elements
+# end
 
 
 function secondmomentofarea(x, y)
@@ -893,4 +938,86 @@ function rotate_smoa(Ix, Iy, Ixy, phi)
     Iuv = n*sin(2*phi) + Ixy*cos(2*phi)
 
     return Iu, Iv, Iuv
+end
+
+struct assemblystate{Tp, Te} #Stand in struct for GXBeam.AssemblyState because it doesn't have the constructor I want. 
+    points::Tp
+    elements::Te
+end
+
+function parsesolution(sol, gxmodel, p) #Todo: Broken. 
+
+    start = 1:gxmodel.n
+    stop = 2:gxmodel.n+1
+    N, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem = GXBeam.system_indices(start, stop, false; prescribed_points=1:1)
+
+    # @show icol_elem
+
+    assembly = create_gxbeam_assembly(gxmodel, p, start, stop)
+
+    ### Unpack
+    states = Array(sol)'
+    elements = assembly.elements
+
+    ### Find the number of time steps, states, elements, and points
+    nt, ns = size(states)
+    ne = Int((ns-12)/18)
+    np = ne + 1
+
+    history = Vector{assemblystate}(undef, nt)
+    
+    for i = 1:nt
+        pointstates = Vector{GXBeam.PointState}(undef, np)
+        elementstates = Vector{GXBeam.ElementState}(undef, ne)
+
+        ### Save the initial point and element states #Checked, I'm arriving at the correct states. At least the correct index. 
+        idx1 = 6 
+        ue1 = SVector(states[idx1+1:idx1+3]...)
+        te1 = SVector(states[idx1+4:idx1+6]...)
+        fe1 = SVector(states[idx1+7:idx1+9]...)
+        me1 = SVector(states[idx1+10:idx1+12]...)
+        ve1 = SVector(states[idx1+13:idx1+15]...)
+        oe1 = SVector(states[idx1+16:idx1+18]...)
+        elementstates[1] = GXBeam.ElementState(ue1, te1, fe1, me1, ve1, oe1)
+        fp1 = SVector(states[1:3]...)
+        mp1 = SVector(states[4:6]...)
+        pointstates[1] = GXBeam.PointState(@SVector(zeros(3)), @SVector(zeros(3)), fp1, mp1)
+
+        ### Save the internal point and element states
+        for j = 2:ne
+            idx = 6 + 18*(j-1)
+            # if i==3
+            #     @show idx
+            # end
+            ue = SVector(states[idx+1:idx+3]...)
+            te = SVector(states[idx+4:idx+6]...)
+            fe = SVector(states[idx+7:idx+9]...)
+            me = SVector(states[idx+10:idx+12]...)
+            ve = SVector(states[idx+13:idx+15]...)
+            oe = SVector(states[idx+16:idx+18]...)
+            elementstates[j] = GXBeam.ElementState(ue, te, fe, me, ve, oe)
+
+            L1 = elements[j-1].L/2
+            L2 = elements[j].L/2
+            L = L1+L2
+            
+            u = (elementstates[j-1].u).*(L2/L) + (elementstates[j].u).*(L1/L)
+            theta = (elementstates[j-1].theta).*(L2/L) + (elementstates[j].theta).*(L1/L)
+
+            # if j==5
+            #     @show ue
+            #     @show te
+            # end
+
+            pointstates[j] = GXBeam.PointState(SVector(u...), SVector(theta...), @SVector(zeros(3)), @SVector(zeros(3)))
+        end
+
+        ### Save final point to points vector
+        pointstates[end] = GXBeam.PointState(SVector(states[end-5:end-3]...), SVector(states[end-2:end]...), @SVector(zeros(3)), @SVector(zeros(3)))
+
+
+        ### Save the AssemblyState for this time step
+        history[i] = assemblystate(pointstates, elementstates)
+    end
+    return history
 end

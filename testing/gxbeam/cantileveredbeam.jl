@@ -1,7 +1,7 @@
 using Revise, DifferentialEquations, StaticArrays, FLOWMath, GXBeam, Plots, CurveFit, BenchmarkTools, LinearAlgebra, DelimitedFiles, Statistics
 
 #=
-Test that my coupling can handle a simple cantilevered beam with a constant distributed load. (That means no angular velocity, no gravity, and nothing is really changing with time (well the simulation will be through time, but my inputs will not change)).
+Test that my coupling can handle a simple cantilevered beam with a constant distributed load. (That means no angular velocity, no gravity, and nothing is really changing with time (well the simulation will be through time, but my inputs will not change)). #Todo: This needs to be tested. 
 =#
 
 include("../../src/blades.jl")

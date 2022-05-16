@@ -63,20 +63,7 @@ function dsl(t)
     return SVector(f[1], f[2], f[3])
 end
 
-## Create gxbeam function. 
-fun = create_gxbeamfun(gxmodel, env, dsl, g=9.817)
-diffvars = differentialvars(gxmodel)
 
-
-## Initialize
-x0 = initialize_gxbeam2(gxmodel, p, dsl)
-dx0 = zeros(length(x0))
-
-probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
-
-
-## Solve
-sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01) #Currently taking 4.6-4.8 seconds for 0.5 time domain simulation. 
 
 
 
@@ -152,6 +139,22 @@ display(tplt)
 
 
 ### Post Process my data
+## Create gxbeam function. 
+fun = create_gxbeamfun(gxmodel, env, dsl, g=9.817)
+diffvars = differentialvars(gxmodel)
+
+
+## Initialize
+# x0 = initialize_gxbeam2(gxmodel, p, dsl)
+dx0 = zeros(length(x0))
+x0 = sol_gxbeam[1]
+
+probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
+
+
+## Solve
+sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01) #Currently taking 4.6-4.8 seconds for 0.5 time domain simulation. 
+
 history_me = [AssemblyState(system2, assembly, sol[it]; prescribed_conditions) for it in eachindex(sol)]
 
 nt_me = length(sol.t)

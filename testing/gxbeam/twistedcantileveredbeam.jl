@@ -58,7 +58,7 @@ function dsl(t)
 end
 
 ## Create gxbeam function. 
-fun = create_gxbeamfun(gxmodel, env, dsl, g=0.0)
+fun = create_gxbeamfun(gxmodel, env, dsl, g=0.0, damping=false)
 diffvars = differentialvars(gxmodel)
 
 
@@ -146,9 +146,9 @@ history_me = [AssemblyState(system2, assembly, sol[it]; prescribed_conditions) f
 nt_me = length(sol.t)
 tidx_me = nt_me-15
 
-x_me = [assembly.points[ipoint][1] + history[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+x_me = [assembly.points[ipoint][1] + history_me[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
-deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+deflection_me = [history_me[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 
 

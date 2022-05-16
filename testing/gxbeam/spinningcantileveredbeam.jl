@@ -63,20 +63,7 @@ function dsl(t)
     return SVector(f[1], f[2], f[3])
 end
 
-## Create gxbeam function. 
-fun = create_gxbeamfun(gxmodel, env, dsl, g=0.0)
-diffvars = differentialvars(gxmodel)
 
-
-## Initialize
-x0 = initialize_gxbeam2(gxmodel, p, dsl)
-dx0 = zeros(length(x0))
-
-probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
-
-
-## Solve
-sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01) #Currently taking 4.6-4.8 seconds for 0.5 time domain simulation. 
 
 
 
@@ -139,12 +126,28 @@ t = sol_gxbeam.t
 def_tip = [history[it].points[end].u[2] for it = 1:nt]
 
 tplt = plot(t, def_tip, xaxis="Time (s)", yaxis="Tip Deflection (m)")
-display(tplt)
+# display(tplt)
 
 
 
 
 
+
+## Create gxbeam function. 
+fun = create_gxbeamfun(gxmodel, env, dsl, g=0.0, damping=false)
+diffvars = differentialvars(gxmodel)
+
+
+## Initialize
+x0 = initialize_gxbeam2(gxmodel, p, dsl)
+dx0 = zeros(length(x0))
+x0 = sol_gxbeam[1]
+
+probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
+
+
+## Solve
+sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01) #Currently taking 4.6-4.8 seconds for 0.5 time domain simulation. 
 
 
 ### Post Process my data
@@ -153,12 +156,17 @@ history_me = [AssemblyState(system2, assembly, sol[it]; prescribed_conditions) f
 nt_me = length(sol.t)
 tidx_me = nt_me-20
 
-x_me = [assembly.points[ipoint][1] + history[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+x_me = [assembly.points[ipoint][1] + history_me[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
-deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+deflection_me = [history_me[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 
+t2 = sol.t
+nt = length(t2)
+def_tip2 = [history_me[it].points[end].u[2] for it = 1:nt]
 
+t2plt = plot(t2, def_tip2, xaxis="Time (s)", yaxis="Tip Deflection (m)")
+# display(t2plt)
 
 
 
@@ -191,7 +199,7 @@ Iz2, Iy2, Izy2 = rotate_smoa(Iz, Iy, 0.0, pi/2 - twist)
 EIz = assembly.elements[1].compliance[6,6]
 EIy = assembly.elements[1].compliance[5,5]
 
-Iz3 = 1/(EIz*E) #Todo: Correct values, but swapped with each other. 
+Iz3 = 1/(EIz*E) #Todo. Correct values, but swapped with each other. I had things swapped for what should be the chord and the thickness. 
 Iy3 = 1/(EIy*E)
 
 # println("Outside functions (script)")
@@ -211,6 +219,16 @@ yvec = yfun.(xvec)
 
 
 
+outs2 = zero(dx0)
+fun(outs2, dx0, x0, p, 0.0)
+@show outs2
+
+outs3 = zero(dx0)
+prob.f.f(outs3, dx0, x0, prob.p, 0.0)
+@show outs3
+
+
+
 ### Plot
 plt = plot(leg=:bottomleft, xaxis="Beam length (m)", yaxis="Beam Position (m)")
 plot!(xvec, yvec, lab="Theory", markershape=:cross)
@@ -218,3 +236,5 @@ scatter!(x, deflection, lab="GXBeam")
 scatter!(xd, deflectiond, lab="Differential Equations") # The Differential Equations solution passes through the steady state solution. Who knows if it converges to the steady state solution... cause... I don't want to look through to see if that works. At least, not right now. 
 scatter!(x_me, deflection_me, lab="Current", markershape=:x, markersize=8)
 display(plt)
+
+nothing

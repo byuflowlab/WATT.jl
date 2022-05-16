@@ -20,6 +20,7 @@ h = 0.25 # Thickness (meters)
 w = 3.4 # Width (meters)
 Iz = w*(h^3)/12 #Second moment of area
 Iy = h*(w^3)/12
+twist = 0.0
 
 ### Create GXBeam Inputs to create function for DifferentialEquations
 ## Base inputs
@@ -28,7 +29,7 @@ rhub = 0
 rtip = L
 
 ## DifferentialEquations inputs
-tspan = (0.0, 10.0)
+tspan = (0.0, 0.5)
 
 ## Calculated inputs
 r = range(0, L, length=nelem+2)
@@ -50,21 +51,28 @@ function dsl(t)
 end
 
 ## Create gxbeam function. 
-fun = create_gxbeamfun(gxmodel, env, dsl, g=0.0)
-diffvars = differentialvars(gxmodel)
+fun = create_gxbeamfun(gxmodel, env, dsl; g=0.0, damping=false)
+diffvars = differentialvars(gxmodel) #prob.differential_vars==diffvars (true)
 
 
 ## Initialize
-x0 = initialize_gxbeam2(gxmodel, p, dsl)
-dx0 = zeros(length(x0))
+x0 = initialize_gxbeam2(gxmodel, p, dsl) #TODO: Having the number of states somewhere would be nice. 
+ns = 18*gxmodel.n + 12
+x0 = zeros(ns) #It appears that gxbeam's DAE starts from zeros. 
+dx0 = zeros(ns) #Todo: There could a problem in the way that I'm passing the initial condition, or a flag somewhere. 
 
 probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
 
 
-## Solve
-sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01) 
-### #Instability detected... 
 
+
+
+
+
+## Solve
+sol_me = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01, reltol=1e-10) 
+
+#For some odd reason, even though I start both mine and GXBeam from x0 = 0; mine converges to something else the first time step. It's like it finds a consistent solution before time stepping but doesn't with Taylor's. Either way. I don't think that they are crazy different. 
 
 
 
@@ -115,7 +123,8 @@ Aight, so I asked Taylor, GXBeam drops points states if there are only two beams
 history = [AssemblyState(system2, assembly, sol_gxbeam[it]; prescribed_conditions) for it in eachindex(sol_gxbeam)]
 
 nt = length(sol_gxbeam.t)
-tidx = nt-556
+tback = 17
+tidx = nt - tback
 
 xd = [assembly.points[ipoint][1] + history[tidx].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
@@ -126,7 +135,7 @@ t = sol_gxbeam.t
 def_tip = [history[it].points[end].u[2] for it = 1:nt]
 
 tplt = plot(t, def_tip, xaxis="Time (s)", yaxis="Tip Deflection (m)")
-# display(tplt)
+display(tplt)
 
 
 
@@ -135,21 +144,35 @@ tplt = plot(t, def_tip, xaxis="Time (s)", yaxis="Tip Deflection (m)")
 
 
 ### Post Process my data
-history_me = [AssemblyState(system2, assembly, sol[it]; prescribed_conditions) for it in eachindex(sol)]
+history_me = [AssemblyState(system2, assembly, sol_me[it]; prescribed_conditions) for it in eachindex(sol_me)]
 
-nt_me = length(sol.t)
-tidx_me = nt_me-556
+nt_me = length(sol_me.t)
+tidx_me = nt_me - tback
 
-x_me = [assembly.points[ipoint][1] + history[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+x_me = [assembly.points[ipoint][1] + history_me[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
-deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
-
-
+deflection_me = [history_me[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 
+# history_me2 = parsesolution(sol, gxmodel, p)
+
+# x_me2 = [assembly.points[ipoint][1] + history_me2[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+
+# deflection_me2 = [history_me2[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+
+# xme = [assembly.elements[ipoint].x[1] + history_me2[tidx_me].elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
+# dme = [history_me2[tidx_me].elements[ipoint].u[2] for ipoint = 1:length(assembly.elements)]
 
 
 
+# history2 = parsesolution(sol_gxbeam, gxmodel, p)
+
+# x2 = [assembly.points[ipoint][1] + history2[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+
+# deflection2 = [history2[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+
+# xge = [assembly.elements[ipoint].x[1] + history2[tidx_me].elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
+# dge = [history2[tidx_me].elements[ipoint].u[2] for ipoint = 1:length(assembly.elements)]
 
 
 ### Analytical Solution
@@ -160,6 +183,30 @@ yfun(x) = load*x^2*(4*L*x -x^2 -6*L^2)/(24*E*Izz) #Shigley's
 
 xvec = range(0, L, length=nelem+1)
 yvec = yfun.(xvec)
+
+
+
+
+
+### Compare the function outputs of GXBeam and current
+# outs2 = zeros(ns)
+# fun(outs2, dx0, x0, p, 0.0)
+
+# outs3 = zeros(ns)
+# xf = Array(sol_me)'
+# xff = xf[end,:]
+# fun(outs3, dx0, x0, p, 0.0)
+# @show outs3
+
+
+# outs4 = zeros(ns)
+# xe = Array(sol_gxbeam)'
+# xee = xe[end,:]
+# prob.f.f(outs4, dx0, x0, prob.p, 0.0)
+# @show outs4
+
+
+
 
 
 
