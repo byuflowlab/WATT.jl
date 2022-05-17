@@ -104,7 +104,7 @@ end
     - a0 - body frame linear acceleration
     - alpha0 - body frame angular acceleration
 =#
-function gxbeam_residual(residuals, dx, x, assembly, prescribed_conditions) #Not going to use this function, going to use the GXBeam function. 
+function gxbeam_residual(residuals, dx, x, assembly, prescribed_conditions) #Not going to use this function, going to use the GXBeam function. #TODO: Clean this function away. 
 
 
     GXBeam.dynamic_system_residual!(residuals, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec,
