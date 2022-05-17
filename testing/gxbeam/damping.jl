@@ -26,10 +26,10 @@ Iy = h*(w^3)/12
 nelem = 10 
 rhub = 0
 rtip = L
-twist = 0.0
+twist = pi/2
 
 ## DifferentialEquations inputs
-tspan = (0.0, 0.5)
+tspan = (0.0, 30.0)
 # tspan = (0.0, 5.0)
 
 dt = 0.01
@@ -39,7 +39,7 @@ dt = 0.01
 r = range(0, L, length=nelem+2)
 rvec = r[2:end-1] 
 chordvec = ones(length(rvec)).*w
-twistvec = zeros(length(rvec))
+twistvec = ones(length(rvec)).*twist
 thickvec = ones(length(rvec)).*h
 
 ## Create parameters
@@ -55,30 +55,13 @@ function dsl(t)
 end
 
 ## Create gxbeam function. 
-fun = create_gxbeamfun(gxmodel, env, dsl, g=0.0)
+fun = create_gxbeamfun(gxmodel, env, dsl, g=0.0, b=5000.0) #Note: For b=5000.0, that takes an awfully long time to go to steady state. We're talking 25 ish seconds. I don't have enough experience to say whether or not that would be at steady state. And I feel like if the value is super huge, then it could cause some problems. 
 diffvars = differentialvars(gxmodel)
 
 
-## Initialize
-x0 = initialize_gxbeam2(gxmodel, p, dsl)
-dx0 = zeros(length(x0))
-
-probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
 
 
-outs = zeros(length(x0))
 
-# fun(outs, dx0, x0, p, 0.0)
-
-
-## Solve
-sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt) 
-### 
-
-states = Array(sol)'
-
-t1plt = plot(sol.t, states[:,8])
-display(t1plt)
 
 
 
@@ -105,10 +88,29 @@ deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 
 ### Post Process my data
+## Initialize
+x0 = initialize_gxbeam2(gxmodel, p, dsl)
+# x0 = sol_gxbeam[1]
+
+dx0 = zeros(length(x0))
+
+probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
+
+
+outs = zeros(length(x0))
+
+# fun(outs, dx0, x0, p, 0.0)
+# fun(outs, dx0, sol[end], p, 0.0)
+
+## Solve
+sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt) 
+
+
+
 ## run initial condition analysis to get consistent set of initial conditions
 system2, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescribed_conditions, distributed_loads)
 
-history_me = [AssemblyState(system2, assembly, sol[it]; prescribed_conditions) for it in eachindex(sol)] #Todo: I'm not sure that this is doing what I want it to. The solution for the tip is quite different from the states. (The solution across time.) I wonder if system2 screws with what I want. 
+history_me = [AssemblyState(system2, assembly, sol[it]; prescribed_conditions) for it in eachindex(sol)] 
 
 nt_me = length(sol.t)
 tidx_me = nt_me

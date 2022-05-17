@@ -180,9 +180,10 @@ end
 
 
 function get_element_velocity(states, ielem; allstates=false) #TODO: Apply multiple dispatch
-    idx = 12 + 18*(ielem-1)
+    idx = 6 + 18*(ielem-1)
     if allstates
     end
+    # @show idx
     return states[idx+13:idx+15]
 end
 
@@ -251,13 +252,17 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
 
                 ## Calculate the damping force
                 Fd = -b.*ue
+                # @show ue
 
                 ## Apply the damping force
                 f1_follower += Fd./elements[ielem].L
                 f2_follower += Fd./elements[ielem].L
-
+                # @show f1_follower
                 # @show typeof(f1_follower)
             end
+            # if maximum(f1_follower)>0.0 #It does eventually go positive. 
+            #     @show f1_follower
+            # end
             distributed_loads[ielem] = GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)
         end
 
