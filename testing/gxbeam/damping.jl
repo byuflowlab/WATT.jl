@@ -26,7 +26,7 @@ Iy = h*(w^3)/12
 nelem = 10 
 rhub = 0
 rtip = L
-twist = pi/2
+twist = 0.0
 
 ## DifferentialEquations inputs
 tspan = (0.0, 30.0)
@@ -121,7 +121,8 @@ deflection_me = [history_me[tidx_me].points[ipoint].u[2] for ipoint = 1:length(a
 
 ytip = [history_me[it].points[end].u[2] for it = 1:length(sol.t)]
 
-tplt = plot(sol.t, ytip, leg=false, xaxis="Time (s)", yaxis="Tip Deflection (m)")
+tplt = plot(sol.t, ytip, leg=:topright, xaxis="Time (s)", yaxis="Tip Deflection (m)", lab="Current")
+hline!([deflection[end]], lab="Static GXBeam")
 display(tplt)
 
 
