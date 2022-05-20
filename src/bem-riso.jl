@@ -51,7 +51,7 @@ function create_bemrisofun_wstates(riso::Riso, bem::BEM, blade::Blade, env::Envi
     
 
     function bemrisofun(outs, dx, x, p, t)
-        clvec = ones(eltype(outs), length(alphavec))
+        clvec = ones(eltype(outs), length(alphavec)) #Todo: I need to figure out how to get the cl as a function of total angle of attack, for any angle of attack, based on the states. 
         cdvec = ones(eltype(outs), length(alphavec))
 
         ### Create Rotor

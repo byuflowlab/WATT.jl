@@ -1,12 +1,14 @@
-using Plots, GXBeam, StaticArrays, LinearAlgebra, DifferentialEquations, CCBlade, FLOWMath, CurveFit
+using Plots, GXBeam, StaticArrays, LinearAlgebra, CCBlade, FLOWMath, CurveFit, BenchmarkTools
 
 include("../src/blades.jl")
 include("../src/environments.jl")
 include("../src/bem.jl")
-include("../src/riso.jl")
-include("../src/bem-riso.jl")
+# include("../src/riso.jl")
+# include("../src/bem-riso.jl")
 include("../src/gxbeam.jl")
-include("../src/aerostructural.jl")
+# include("../src/aerostructural.jl")
+include("../src/static.jl")
+
 
 
 function nearestto(xvec, x)
@@ -30,7 +32,7 @@ rvec = [11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 
 chordvec = [4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
 twistvec = pi/180*[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
 thickvec = chordvec.*0.08
-B = 3.0
+B = 1.0
 hubht = 90.0
 
 
@@ -99,50 +101,62 @@ end
 
 blade = Blade(afs)
 
-dsmodel = Riso()
 bemmodel = bem(;shearexp=shearexp)
-dva = differentialvars(bemmodel, dsmodel, n; withstates=true)
+
 
 env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
 gxmodel = gxbeam(n)
-dvs = differentialvars(gxmodel)
+
 
 _, p_s = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
 p = vcat(p_a, p_s)
 
-diffvars = vcat(dva, dvs)
-
-fun = create_aerostructuralfun(dsmodel, bemmodel, gxmodel, blade, env)
 
 
-#### Initialize states 
-x0_riso = zeros(4*n)
-x0_bem = twistvec
-x0_gxbeam = initializegravityloads(gxmodel, env, p_s)
 
-x0 = vcat(x0_riso, x0_bem, x0_gxbeam)
+outs, state, system, assembly, prescribed_conditions, converged, iters, resids = fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = 4, verbose = true, tolerance= 1e-12)
 
-dx0_riso = zero(x0_riso)
-dx0_bem = zero(x0_bem)
-dx0_gxbeam = zero(x0_gxbeam)
+# @btime fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = 4, verbose = false, tolerance= 1e-12) ### 12.281 ms (21900 allocations: 9.92 MiB)
+# state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
-dx0 = vcat(dx0_riso, dx0_bem, dx0_gxbeam)
+## Obtain the deflections
+def_x = [state.elements[ielem].u[1] for ielem = 1:n]
+def_y = [state.elements[ielem].u[2] for ielem = 1:n]
+def_z = [state.elements[ielem].u[3] for ielem = 1:n]
 
-fakeouts = zero(x0)
-
-# fun(fakeouts, dx0, x0, p, 0.0)
+x = [assembly.elements[ielem].x[1] + state.elements[ielem].u[1] for ielem = 1:n]
 
 
-probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
 
 
-## Solve
-# sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt)
 
-## Step through the simulation
-integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt)
+### Run CCBlade by itself
+rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=bemmodel.turbine)
 
-step!(integrator) #This stalls out even (waited for a half hour). So it can't even take a single time step. 
+sections = CCBlade.Section.(rvec, chordvec, twistvec, airfoils)
+
+### Create Operating Point
+operatingpoints = CCBlade.windturbine_op.(env.U(0.0), env.Omega(0.0), pitch, rvec, 0.0, 0.0, 0.0, 0.0, hubht, bemmodel.shearexp, env.rho)
+
+outs_ccblade = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 
 
+
+
+
+
+
+
+defplt = plot(xaxis="Radial Location (m)", yaxis="Element Deflection (m)", legend=:topleft)
+plot!(x, def_x, lab="X deflection")
+plot!(x, def_y, lab="Y deflection")
+plot!(x, def_z, lab="Z deflection")
+display(defplt)
+
+loadsplt = plot(xaxis = "Radial Location (m)", yaxis = "Element Load (N)", legend=:topleft)
+plot!(x, outs.Np, lab="Flapwise")
+plot!(x, outs.Tp, lab="Lead-Lag")
+display(loadsplt)
+
+nothing

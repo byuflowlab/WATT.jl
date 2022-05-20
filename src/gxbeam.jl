@@ -317,124 +317,13 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
 
         # @show distributed_loads
 
-        GXBeam.dynamic_system_residual!(outs, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec, force_scaling, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem, x0, v0, omega0, a0, alpha0) #-> There is another function dynamic_element_residual. 
-        # I think that this function is actually updating the outs, like I think they are changing, I see a couple instances of the residuals changing when I call it between prints. #0.000052 seconds (1.10 k allocations: 60.578 KiB) #Taylor said I'm passing something in that isn't a static vector.  0.000020 seconds (17 allocations: 5.266 KiB)
-
-        # println(outs[end-18:end])   
-
-        # if any(isnan, outs)
-        #     println("t: ", t)
-        #     println("outs: ", outs)
-        # end
-
-        #=
-            Todo: "I am missing something that makes it so that this function does not return something that is an actual solution." The trivial solution should be a solution of the residual... I think. I need to compare against Taylor's function (I need to figure out how to pass dx, x, p, t, and outs to Taylor's DAE funcrtion.)
-
-            - Try looking at a smaller number of elements, that might make it easier to compare. 
-
-            - Look into if there is a way to limit how many iterations are taken to converge the residuals. 
-        =#
-        return outs
-    end
-    return SciMLBase.DAEFunction{true, true}(gxbeamfun!) #Todo: Was returning this as a DAEFunction the best thing? I'm not sure. Probably. 
-end
-
-function create_gxbeamfun2(gxmodel::gxbeam, env::Environment, distributedload::Function; g = 9.817) #Note: Okay, this was worse, much much worse. 
-
-    gxbeamfun! = function(outs, dx, x, p, t) #Todo: I'm not sure that this is type stable. Adding types to the inputs didn't decrease the number of allocations. 
-       
-        ### Create GXBeam pass ins.
-        start = 1:gxmodel.n
-        stop = 2:gxmodel.n+1
-        N, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem =
-        GXBeam.system_indices(start, stop, false; prescribed_points=1:1) #The third argument is whether or not the system is static. 
-        # @show N, irow_point, irow_elem, icol_point, icol_elem
-
-        ### Create assembly
-        assembly = create_gxbeam_assembly(gxmodel, p, start, stop) #0.000004 seconds (2 allocations: 7.172 KiB)
-
-        ### Create distributed load 
-        elements = view(assembly.elements, :) #0.000000 seconds 
-
-        ### Create prescribed conditions
-        prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed #0.000019 seconds 0.000003 seconds (4 allocations: 2.156 KiB)
-
-        f = distributedload(t) #0.000007 seconds (7 allocations: 240 bytes) ... 0.000005 seconds (3 allocations: 80 bytes)
-        m = @SVector zeros(3)
-        # distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem;fx = (s) -> f[1], fy = (s) -> f[2], fz = (s) -> f[3]) for ielem in 1:nelem)
+        GXBeam.dynamic_system_residual!(outs, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec, force_scaling, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem, x0, v0, omega0, a0, alpha0) # 0.000020 seconds (17 allocations: 5.266 KiB)
         
-        f1 = f2 = elements[1].L*f/2 #0.000002 seconds (3 allocations: 80 bytes)
-        m1 = m2 = elements[1].L*m/2
-        ### follower distributed loads
-        f1_follower = f2_follower = @SVector zeros(3) 
-        m1_follower = m2_follower = @SVector zeros(3)
-        distributed_loads = Dict(1 => GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)) #0.000007 seconds (6 allocations: 3.922 KiB)
-        # distributed_loads = Dict() #0.000002 seconds (4 allocations: 608 bytes)
-
-        for ielem in 2:gxmodel.n #0.000007 seconds (50 allocations: 4.844 KiB)... 0.000004 seconds (36 allocations: 2.531 KiB)
-            f1 = f2 = elements[ielem].L*f/2
-            m1 = m2 = elements[ielem].L*m/2
-            distributed_loads[ielem] = GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)
-        end
-
-        ### Create point masses
-        point_masses = Dict(1 => PointMass(0.0, SVector(0.0, 0.0, 0.0), @SMatrix zeros(3,3)))
-
-
-        ### System velocities and accelerations
-        ### create the origin
-        x0 = @SVector zeros(3)
-        v0 = @SVector zeros(3) #System linear velocity #0.000000 seconds
-        omega0 = SVector(env.Omega(t), 0.0, 0.0) #System angular velocity #0.000000 seconds
-        a0 = @SVector zeros(3) #System linear acceleration #0.000000 seconds
-        alpha0 = SVector(env.Omegadot(t), 0.0, 0.0) #System angular acceleration #0.000000 seconds
-
-        ### Create gravity vector #TODO: Convert this from steady to dependent on actual position? 
-        # g = 9.817 #Moving this to the bigger function header so that I can set it to zero if need be. 
-        alpha = pi/2 - env.Omega(t)*t #Assuming the blade starts horizontal. # 0.000004 seconds (5 allocations: 80 bytes) #Todo. Why are there allocations here? This is scalar math.... evaluating env.Omega is two allocations. 0.000000 seconds The Environment object wasn't type stable.  
-        gx = -g*cos(alpha)
-        gy = -g*sin(alpha)
-        gz = 0.0
-        gvec = SVector(gx, gy, gz) #[gx gy gz]
-
-        force_scaling = 1.0
-
-        # if any(isnan, dx)
-        #     println("dx: ", dx)
-        # end
-
-        # if any(isnan, x)
-        #     println("x: ", x)
-        # end
-        # println("")
-        # println(outs[end-18:end])
-
-        #Todo. Are the states actually the way that I think that they are? Like... Is GXBeam expecting a different set of states? Now they are. I needed to cut the excess states (the zero states). 
-
-        # println(length(outs)) #This is the length that I expect it to be. 
-
-
-        # println(typeof(outs)) #Vector{Float64} I'm not sure that this can be a static vector. 
-        # println(typeof(dx)) #Depends on what is passed in. 
-        # println(typeof(irow_point)) #Vector{Int64}
-
-        # println(typeof(prescribed_conditions))
-        # println(typeof(distributed_loads))
-        # println(typeof(point_masses))
-
-        GXBeam.dynamic_system_residual!(outs, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec, force_scaling, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem, x0, v0, omega0, a0, alpha0) #-> There is another function dynamic_element_residual. 
-        # I think that this function is actually updating the outs, like I think they are changing, I see a couple instances of the residuals changing when I call it between prints. #0.000052 seconds (1.10 k allocations: 60.578 KiB) #Taylor said I'm passing something in that isn't a static vector.  0.000020 seconds (17 allocations: 5.266 KiB)
-
-        # println(outs[end-18:end])
-
-        # if any(isnan, outs)
-        #     println("t: ", t)
-        #     println("outs: ", outs)
-        # end
         return outs
     end
-    return SciMLBase.DAEFunction{true, true}(gxbeamfun!) #Todo: Was returning this as a DAEFunction the best thing? I'm not sure. Probably. 
+    return SciMLBase.DAEFunction{true, true}(gxbeamfun!)
 end
+
 
 function differentialvars(gxmodel; include_extra_states=false) #Todo. Make sure that these actually line up with the states that I think they do. It appears Taylor uses fewer states than what he said in AerostructuralDynamics. He is eliminating states of points that aren't needed. He keeps the states of any constrained point, and the last point. I'm going to assume that he'd also keep the states of the first point if it wasn't constrained.
     np = gxmodel.n + 1
@@ -546,7 +435,7 @@ function create_simplebeam(radii, chords, twists, rhub, rtip, thicknesses; densi
         #     @show Iz, Iy
         # end
 
-        Izz, Iyy, Izy = rotate_smoa(Iz, Iy, Izy, pi/2 - twists[i]) #Todo: Izy might be non-zero now.... I wonder if that'll play with the compliance matrix. 
+        Izz, Iyy, Izy = rotate_smoa(Iz, Iy, Izy, twists[i]) #Todo: Izy might be non-zero now.... I wonder if that'll play with the compliance matrix. 
 
         # Izz = Iz
         # Iyy = Iy
@@ -1025,4 +914,22 @@ function parsesolution(sol, gxmodel, p) #Todo: Broken.
         history[i] = assemblystate(pointstates, elementstates)
     end
     return history
+end
+
+function initializegravityloads(gxmodel, env, p; g=9.817)
+
+    ### Create GXBeam Assembly
+    assembly = create_gxbeam_assembly(gxmodel, p)
+
+    ### Create prescribed conditions
+    prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0))
+
+    omega = SVector(0.0, 0.0, -env.Omega(0.0))
+    gvec = SVector(0.0, -g, 0.0)
+
+    system, converged = GXBeam.initial_condition_analysis(assembly, 0.0; prescribed_conditions=prescribed_conditions, gravity = gvec, angular_velocity=omega)
+
+    state = GXBeam.AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
+
+    return convert_assemblystate(state)
 end

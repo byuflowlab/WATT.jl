@@ -146,8 +146,9 @@ diffvars = differentialvars(gxmodel)
 
 ## Initialize
 # x0 = initialize_gxbeam2(gxmodel, p, dsl)
-dx0 = zeros(length(x0))
 x0 = sol_gxbeam[1]
+dx0 = zeros(length(x0))
+
 
 probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
 
