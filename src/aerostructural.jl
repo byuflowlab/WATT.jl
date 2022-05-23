@@ -211,8 +211,8 @@ function create_aerostructuralfun(riso::Riso, bem::BEM, gxmodel::gxbeam, blade::
 
             ### Create loadings for structures
             qinf = 0.5*env.rho*(env.U(t)^2)*chord #TODO: Which velocity should I use, the displaced (Vx) or the freestream? 
-            f = SVector(0.0, Cl*cos(phi) + Cd*sin(phi), Cd*cos(phi) - Cl*sin(phi))
-            f = qinf*elements[i].L*f/2  #TODO: Why divided by 2? 
+            f = SVector(0.0, Cd*cos(phi) - Cl*sin(phi), -(Cl*cos(phi) + Cd*sin(phi))) #Todo. I'm not sure that this is correct. 
+            f = qinf*elements[i].L*f #qinf*elements[i].L*f/2  #TODO. Why divided by 2? -> Because the BEM gives the distributed loa..... wait.... the BEM gives the distributed load.... not the total load. It shouldn't be divided by 2.  
             m = qinf*elements[i].L*m/2
 
 
@@ -260,4 +260,7 @@ function create_aerostructuralfun(riso::Riso, bem::BEM, gxmodel::gxbeam, blade::
     end #End asfun!
 
     return SciMLBase.DAEFunction{true, true}(asfun!)
+end
+
+function initialize_aerostructural_states()
 end

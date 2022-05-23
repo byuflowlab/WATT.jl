@@ -131,7 +131,7 @@ dx0 = vcat(dx0_riso, dx0_bem, dx0_gxbeam)
 
 fakeouts = zero(x0)
 
-# fun(fakeouts, dx0, x0, p, 0.0)
+fun(fakeouts, dx0, x0, p, 0.0)
 
 
 probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
@@ -141,7 +141,7 @@ probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_
 # sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt)
 
 ## Step through the simulation
-integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt)
+integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt) #Well.... actually, we might be stalling out at this step. I'm not sure why though. The function goes pretty fast. 
 
 step!(integrator) #This stalls out even (waited for a half hour). So it can't even take a single time step. 
 
