@@ -48,7 +48,7 @@ function create_bemfun(model::BEM, blade::Blade, env::Environment)
     function bemfun(outs, dx, x, p, t)
     
         # radius, chord, twist, pitch, rhub, rtip, hubHt = ps #Todo: I'm not sure that radius should be a differentiable variable... Like I don't think we ever really use that as a design variable... do we? 
-        # Note: pitch, rhub, rtip, hubht don't change radially. 
+        #Todo: pitch, rhub, rtip, hubht don't change radially. 
         # Note: I'm not sure that we need rtip as a design variable.
 
         ### Create Rotor

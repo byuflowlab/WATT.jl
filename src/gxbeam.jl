@@ -435,7 +435,7 @@ function create_simplebeam(radii, chords, twists, rhub, rtip, thicknesses; densi
         #     @show Iz, Iy
         # end
 
-        Izz, Iyy, Izy = rotate_smoa(Iz, Iy, Izy, pi/2 - twists[i]) #Todo: Izy might be non-zero now.... I wonder if that'll play with the compliance matrix. 
+        Izz, Iyy, Izy = rotate_smoa(Iz, Iy, Izy, twists[i]) #Todo: Izy might be non-zero now.... I wonder if that'll play with the compliance matrix. 
 
         # Izz = Iz
         # Iyy = Iy
