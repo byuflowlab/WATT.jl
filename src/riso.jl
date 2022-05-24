@@ -76,6 +76,8 @@ function riso_states(X, u, udot, v, vdot, theta, thetadot, c, airfoil)
     ### Calculate constants
     Tu = c/(2*U) #This will go to NaN if U=0
     # println(typeof(X[1]))
+    # @show U, Tu, c
+    # @show X[1]
     
     ### Calculate the state rates
     dx1 = (b1*A1*alpha/Tu) - X[1]*(b1+ (c*Udot/(2*(U)^2)))/Tu 
@@ -239,6 +241,7 @@ function riso_coefs(X, y, c, airfoil)
     # if (fae<0)|(X[4]<0) # The whole state vector has gone negative. 
     #     @infiltrate
     # end
+    # @show X
     fterm = (sqrt(fae)-sqrt(X[4]))/2 - (fae-X[4])/4 
     Cd = dragfit(ae) + (alpha-ae)*Cl + (dragfit(ae)-dragfit(alpha0))*fterm
     return SVector(Cl, Cd)

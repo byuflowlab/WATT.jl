@@ -523,6 +523,7 @@ function convert_assemblystate(state;include_extra_states=false) #Convert a the 
             xe[idx+13:idx+15] = elements_states[i].V #Linear velocity states
             xe[idx+16:idx+18] = elements_states[i].Omega #Angular velocity States
         end
+        return vcat(xp, xe) #Todo: This needs to be updated. The states appear to iterate back and forth between points and element states. 
     else #Extract the used states. Since this is a cantilevered beam, GXBeam only uses the states of the first and last points. 
         ## Extract point states
         xp = zeros(12)
@@ -546,10 +547,9 @@ function convert_assemblystate(state;include_extra_states=false) #Convert a the 
             xe[idx+13:idx+15] = elements_states[i].V
             xe[idx+16:idx+18] = elements_states[i].Omega
         end
+        ## Combine the point and element states and return them.
+        return vcat(xp[1:6], xe, xp[end-5:end])
     end
-    
-    ## Combine the point and element states and return them.
-    return vcat(xp, xe)
 end
 
 function convert_history(history; include_extra_states=false)

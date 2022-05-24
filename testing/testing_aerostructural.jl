@@ -6,6 +6,7 @@ include("../src/bem.jl")
 include("../src/riso.jl")
 include("../src/bem-riso.jl")
 include("../src/gxbeam.jl")
+include("../src/static.jl")
 include("../src/aerostructural.jl")
 
 
@@ -117,17 +118,19 @@ fun = create_aerostructuralfun(dsmodel, bemmodel, gxmodel, blade, env)
 
 
 #### Initialize states 
-x0_riso = zeros(4*n)
-x0_bem = twistvec
-x0_gxbeam = initializegravityloads(gxmodel, env, p_s)
+# x0_riso = zeros(4*n)
+# x0_bem = twistvec
+# x0_gxbeam = initializegravityloads(gxmodel, env, p_s)
 
-x0 = vcat(x0_riso, x0_bem, x0_gxbeam)
+# x0 = vcat(x0_riso, x0_bem, x0_gxbeam)
 
-dx0_riso = zero(x0_riso)
-dx0_bem = zero(x0_bem)
-dx0_gxbeam = zero(x0_gxbeam)
+# dx0_riso = zero(x0_riso)
+# dx0_bem = zero(x0_bem)
+# dx0_gxbeam = zero(x0_gxbeam)
 
-dx0 = vcat(dx0_riso, dx0_bem, dx0_gxbeam)
+# dx0 = vcat(dx0_riso, dx0_bem, dx0_gxbeam)
+
+x0, dx0 = initialize_aerostructural_states(bemmodel, gxmodel, env, blade, p)
 
 fakeouts = zero(x0)
 
@@ -138,11 +141,15 @@ probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_
 
 
 ## Solve
-# sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt)
+
+# sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
 
 ## Step through the simulation
-integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt) #Well.... actually, we might be stalling out at this step. I'm not sure why though. The function goes pretty fast. 
+integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt) #Well.... actually, we might be stalling out at this step. I'm not sure why though. The function goes pretty fast.   
+# integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt, initializealg=NoInit()) #This didn't work either.
+# integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt, initializealg=ShampineCollocationInit()) #Changes both x0 and dx0 to find a consistent set of states. 
 
-step!(integrator) #This stalls out even (waited for a half hour). So it can't even take a single time step. 
+# step!(integrator) #This stalls out even (waited for a half hour). So it can't even take a single time step. 
 
 
+nothing

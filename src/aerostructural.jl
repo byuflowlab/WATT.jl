@@ -129,15 +129,15 @@ function create_aerostructuralfun(riso::Riso, bem::BEM, gxmodel::gxbeam, blade::
             delta_elem = SVector(xss[1], xss[2], xss[3])
 
             # angular displacement
-            theta_elem = SVector(xss[3], xss[4], xss[5]) 
+            theta_elem = SVector(xss[4], xss[5], xss[6]) 
             # dtheta_elem = SVector(dxss[3], dxss[4], dxss[5])
 
             # Linear velocity
-            V_elem = SVector(xss[12], xss[13], xss[14])
+            V_elem = SVector(xss[13], xss[14], xss[15])
             # dV_elem = SVector(dxss[12], dxss[13], dxss[14])
 
             # angular velocity
-            Omega_elem = SVector(xss[15], xss[16], xss[17])
+            Omega_elem = SVector(xss[16], xss[17], xss[18])
             # dOmega_elem = SVector(dus[15], dus[16], dus[17])
 
             # convert rotation parameter to Wiener-Milenkovic parameters
@@ -160,6 +160,10 @@ function create_aerostructuralfun(riso::Riso, bem::BEM, gxmodel::gxbeam, blade::
             displaced_omega = - Omega_elem[3]
             Vy = displaced_radius*displaced_omega - V_elem[2]
             #TODO: Double check these velocities with someone. (DG or Ning)
+
+            # @show displaced_omega #This is a positive value... which is what I wanted. 
+
+
             #=
             - Including the positive V_elem[3] in Vx should account for any preconing deflection. It is positive because if the beam moves in the positve Z direction (structural frame) that would mean that the airfoil is seeing the wind speed plus the speed of the moving beam. 
             - I've calculated the displaced radius. GXBeam will tell me how far my element has moving in the structural x direction, which elongates my beam. If I have a longer beam, then each section will see higher windspeeds. 
@@ -262,5 +266,60 @@ function create_aerostructuralfun(riso::Riso, bem::BEM, gxmodel::gxbeam, blade::
     return SciMLBase.DAEFunction{true, true}(asfun!)
 end
 
-function initialize_aerostructural_states()
+function initialize_riso_states(aoa, dsmodel, blade, env, p; tspan=(0,100.0))
+
+    ### Read in data
+    n = length(blade.airfoils)
+
+    ### Initialize states
+    x0 = zeros(4*n)
+    dx0 = zeros(4*n)
+
+    fun = create_risofun(aoa, blade, env, 0.0, 0.0) #The frequency and amplitude of oscillation is zero. 
+
+    diffvars = differentialvars(dsmodel, n)
+
+    prob = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars = diffvars)
+
+    sol = DifferentialEquations.solve(prob, DABDF2())
+
+    x = Array(sol)'
+    return x[end,:]
+end
+
+function initialize_aerostructural_states(bemmodel, gxmodel, env, blade, p; maxiter=100, verbose=false, tolerance=1e-6)
+
+    n = gxmodel.n
+
+    outs, state, system, assembly, prescribed_conditions, converged, iters, resids = fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = maxiter, verbose = verbose, tolerance= tolerance)
+
+    # x0_riso = zeros(4*n) #I bet there is a way that I could calculate these. 
+
+
+    x0_bem = outs.phi
+
+    pa = view(p, 1:7*n)
+    chordidx = 2:7:7*n
+    chord = view(pa, chordidx)
+    twistidx = 3:7:7*n
+    twist = view(pa, twistidx)
+    pitchidx = 4:7:7*n
+    pitch = view(pa, pitchidx)
+    aoa = -((twist .+ pitch) .- x0_bem)
+    # @show aoa
+    x0_riso = initialize_riso_states(aoa, Riso(), blade, env, chord) #Todo: Getting NaN in my states
+
+
+
+    x0_gxbeam = convert_assemblystate(state)
+
+    x0 = vcat(x0_riso, x0_bem, x0_gxbeam)
+
+    dx0_riso = zero(x0_riso)
+    dx0_bem = zero(x0_bem)
+    dx0_gxbeam = zero(x0_gxbeam)
+
+    dx0 = vcat(dx0_riso, dx0_bem, dx0_gxbeam)
+
+    return x0, dx0
 end
