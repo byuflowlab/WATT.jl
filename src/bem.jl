@@ -23,9 +23,11 @@ end
 
 function get_bem_residual!(outs, i, x, rotor, section, operatingpoint)
     outs[i], _ = CCBlade.residual(x[1], rotor, section, operatingpoint)
-    if isnan(outs[i])
-        println("ccblade residual: ", outs[i])
-    end
+    
+    # if isnan(outs[i])
+    #     @show section.r outs[i]
+    #     println("ccblade residual: ", outs[i])
+    # end
 end
 
 function get_bem_y(phi, p, t, model::BEM, airfoil::Airfoil, env::Environment)

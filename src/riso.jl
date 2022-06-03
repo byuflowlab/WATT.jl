@@ -25,6 +25,59 @@ function fst(alpha, liftfit, dcdalpha, alpha0)
     
 end
 
+function find_seperation_alpha(liftfit, dcldalpha, alpha0; n=10)
+
+    ### Create a residual function to solve. 
+    residual(alpha) = abs(dcldalpha*(alpha-alpha0)/4) - abs(liftfit(alpha))
+
+    ### Find a bracketing range for the positive fully stalled angle. 
+    aoa = range(0,pi/2; length = n)
+    rng = zeros(2)
+    for i = 1:n-1
+        if residual(aoa[i])*residual(aoa[i+1])<0
+            rng[:] = aoa[i:i+1]
+            break
+        end
+    end
+    
+    ### Find the positive fully stalled angle
+    alpha_positive = find_zero(residual, rng, Bisection())
+
+    ### Bracket the negative fully stalled. 
+    aoa = range(0,-pi/2; length = n)
+    for i = 1:n-1
+        if residual(aoa[i])*residual(aoa[i+1])<0
+            rng[:] = aoa[i:i+1]
+            break
+        end
+    end
+
+    ### Find the negative fully stalled angle
+    alpha_negative = find_zero(residual, rng, Bisection())
+    return alpha_positive, alpha_negative
+end
+
+function seperationpoint(alpha, afm, afp, clfit, dcldalpha, alpha0)
+
+    if !(afm < alpha < afp) #Check if alpha is in the bounds of the fully seperated angles of attack. 
+        return typeof(alpha)(0)
+    end
+    
+    cl_static = clfit(alpha)
+    cl_linear = dcldalpha*(alpha-alpha0)
+    f = (2*sqrt(abs(cl_static/cl_linear))-1)^2
+
+    if f>1 #Question: What if I don't return this? I might get Inf.... or possibly NaN... but I will less likely get 1.0... which is my problem child in the seperated coefficient of lift function. -> I fixed the fully seperated coefficient of lift function... I just plugged this function inside the other and simplified. 
+        return typeof(alpha)(1)
+    elseif isnan(f)
+        # println("f return NaN")
+        return typeof(alpha)(1)
+    end
+
+    #Todo. Hansen must have some sort of switch that stops this function from reattaching when the aoa gets really high. -> like the one where you automatically set f=0 when you're outside the bounds of afm, afp
+    return f
+end
+
 function Clfs(alpha, liftfit, dcldalpha, alpha0)
     f = fst(alpha, liftfit, dcldalpha, alpha0)
     Cl = 0.0
@@ -241,8 +294,14 @@ function riso_coefs(X, y, c, airfoil)
     # if (fae<0)|(X[4]<0) # The whole state vector has gone negative. 
     #     @infiltrate
     # end
-    # @show X
-    fterm = (sqrt(fae)-sqrt(X[4]))/2 - (fae-X[4])/4 
+    # if !all(i -> i>= 0.0, X)
+    #     @show X
+    # end
+    fpp = X[4]
+    if X[4] < 0
+        fpp = 0
+    end
+    fterm = (sqrt(fae)-sqrt(fpp))/2 - (fae-fpp)/4 #Todo: Is there a way to re-write this line so that it takes a negative argument and gives us what we want? 
     Cd = dragfit(ae) + (alpha-ae)*Cl + (dragfit(ae)-dragfit(alpha0))*fterm
     return SVector(Cl, Cd)
 end

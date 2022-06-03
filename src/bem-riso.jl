@@ -7,17 +7,17 @@ p = radius, chord, twist, pitch, rhub, rtip, hubHt #Same as BEM
 x_section = [risostates, bemcontraints]
 =#
 
-function get_bemriso_y(phi, x_riso, p, t, airfoil::Airfoil, env::Environment)
+function get_bemriso_y(phi, x_riso, p, t, airfoil::Airfoil, env::Environment; Vx=env.U(t), Vy=env.Omega(t)*p[1], Vxdot = env.Udot(t), Vydot = env.Omegadot(t)*p[1] )
 
     ### Extract inputs
     radius, chord, twist, pitch, _, _, _ = p
 
     ### Find velocities in BEM frame
-    Vx = env.U(t)  #Freestream velocity
-    Vy = env.Omega(t)*radius 
+    # Vx = env.U(t)  #Freestream velocity
+    # Vy = env.Omega(t)*radius 
 
-    Vxdot = env.Udot(t) 
-    Vydot = env.Omegadot(t)*radius 
+    # Vxdot = env.Udot(t) 
+    # Vydot = env.Omegadot(t)*radius 
 
     ### Find velocities in dynamic stall frame. (Not accounting for induced velocities in Dynamic stall model.)
     u = sqrt(Vy^2 + Vx^2)  

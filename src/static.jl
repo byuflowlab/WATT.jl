@@ -229,3 +229,16 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
     return outs, state, system, assembly, prescribed_conditions, converged, iter, resids[1:iter,:]
 end
+
+
+
+
+function static_solve(fun, x0, p, t, lowbounds, upbounds; iterations=1000, dx0=zero(x0))
+
+    solveme! = function(resids, x)
+        fun(resids, dx0, x, p, t)
+    end
+
+
+    mcpsolve(solveme!, lowbounds, upbounds, x0, autodiff = :forward; iterations=iterations)
+end

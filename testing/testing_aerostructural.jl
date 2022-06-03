@@ -1,4 +1,4 @@
-using Plots, GXBeam, StaticArrays, LinearAlgebra, DifferentialEquations, CCBlade, FLOWMath, CurveFit
+using Plots, GXBeam, StaticArrays, LinearAlgebra, DifferentialEquations, CCBlade, FLOWMath, CurveFit, NLsolve
 
 include("../src/blades.jl")
 include("../src/environments.jl")
@@ -134,7 +134,7 @@ x0, dx0 = initialize_aerostructural_states(bemmodel, gxmodel, env, blade, p)
 
 fakeouts = zero(x0)
 
-fun(fakeouts, dx0, x0, p, 0.0)
+fun(fakeouts, dx0, x0, p, 0.0) #Note: I did something that doubled the calculation time. I think it was something to do with the get_bem_riso_y function. 
 
 
 probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
@@ -142,14 +142,38 @@ probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_
 
 ## Solve
 
-# sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
+sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
 
 ## Step through the simulation
-integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt) #Well.... actually, we might be stalling out at this step. I'm not sure why though. The function goes pretty fast.   
+# integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt) #Well.... actually, we might be stalling out at this step. I'm not sure why though. The function goes pretty fast. -> Fixed the velocities and now this works.... but solve doesn't. It goes to a negative number. 
+
 # integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt, initializealg=NoInit()) #This didn't work either.
 # integrator = init(probdae, DABDF2(); force_dtmin=true, dtmin=dt, initializealg=ShampineCollocationInit()) #Changes both x0 and dx0 to find a consistent set of states. 
 
 # step!(integrator) #This stalls out even (waited for a half hour). So it can't even take a single time step. 
 
+# iterations_me = 1
+# while integrator.t<tspan[2]
+#     try
+#         step!(integrator)
+#     catch
+#         println("Failed after $iter iterations")
+#     end
+#     global iterations_me += 1
+# end
+
+# lb_riso = fill(0.01, 4*n) #zeros(4*n)
+# for i = 1:n
+#     idx = 4*(i-1)
+#     lb_riso[idx+1:idx+3] .= -Inf #I don't think states 1-3 of Riso matter if they go negative
+# end
+# lb_bem = zeros(n)
+# lb_struc = fill(-Inf, 12+(18*n))
+
+# lowbounds = vcat(lb_riso, lb_bem, lb_struc)
+# upbounds = fill(Inf, length(x0))
+
+# result = static_solve(fun, x0, p, 0.0, lowbounds, upbounds; iterations=10000) 
+#Todo: It runs but doesn't converge. I think that since I'm forcing dx to be equal to zero, It can't solve because some of the states would have to be changing... although... moving doesn't mean accelerating. But moving does mean position is changing... so if there is any sort of change of position... then we'd have a problem. Although, it might be moving but not deflecting. 
 
 nothing

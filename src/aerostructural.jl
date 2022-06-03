@@ -153,13 +153,18 @@ function create_aerostructuralfun(riso::Riso, bem::BEM, gxmodel::gxbeam, blade::
             radius, chord, twist, pitch, _, _, _ = pas
             phi = xbem[1]
             airfoil = blade.airfoils[i]
+            if isnan(phi)
+                @show t, radius
+            end
 
             # Find velocities in BEM frame
-            Vx = env.U(t) + V_elem[3] #Freestream velocity #TODO: I could include the system velocity in the structural frame, but.... I don't think it would accomplish what I want. 
-            displaced_radius = radius + delta_elem[3]
-            displaced_omega = - Omega_elem[3]
-            Vy = displaced_radius*displaced_omega - V_elem[2]
+            Vx = env.U(t) + V_elem[3] #Freestream velocity #TODO: I could include the system velocity in the structural frame, but.... I don't think it would accomplish what I want. #Todo: Come back and rework these velocities. 
+            # displaced_radius = radius + delta_elem[3]
+            # displaced_omega = - Omega_elem[3]
+            # Vy = displaced_radius*displaced_omega - V_elem[2]
+            Vy = - V_elem[2] #Includes the angular velocity*radius, and all the displacements. 
             #TODO: Double check these velocities with someone. (DG or Ning)
+            # @show Vy
 
             # @show displaced_omega #This is a positive value... which is what I wanted. 
 
@@ -172,25 +177,27 @@ function create_aerostructuralfun(riso::Riso, bem::BEM, gxmodel::gxbeam, blade::
             =#
 
 
-            Vxdot = env.Udot(t) #TODO: These need updating to include structural deflections, but I'm not sure how important it'd be. 
-            Vydot = env.Omegadot(t)*radius 
+            # Vxdot = env.Udot(t) #TODO: These need updating to include structural deflections, but I'm not sure how important it'd be. 
+            # Vydot = env.Omegadot(t)*radius 
 
-            # Find velocities in dynamic stall frame. (Not accounting for induced velocities in Dynamic stall model.)
-            u = sqrt(Vy^2 + Vx^2)  
-            v = 0 
+            # # Find velocities in dynamic stall frame. (Not accounting for induced velocities in Dynamic stall model.)
+            # u = sqrt(Vy^2 + Vx^2)  
+            # v = 0 
 
-            udot = sqrt(Vxdot^2 + Vydot^2)
-            vdot = 0.0
+            # udot = sqrt(Vxdot^2 + Vydot^2)
+            # vdot = 0.0
 
-            alpha = -((twist + pitch) - phi)
-            alphadot = 0.0 
+            # alpha = -((twist + pitch) - phi)
+            # alphadot = 0.0 
 
-            ys_riso = SVector(u, udot, v, vdot, alpha, alphadot)
+            # ys_riso = SVector(u, udot, v, vdot, alpha, alphadot)
 
-            # Find force coefficients
-            Cl, Cd = riso_coefs(xs_riso, ys_riso, chord, airfoil)
+            # # Find force coefficients
+            # Cl, Cd = riso_coefs(xs_riso, ys_riso, chord, airfoil)
 
-            ys_bem = SVector(Cl, Cd, Vx, Vy) #TODO: I don't think that I need to store these Y values in vectors. I should be able to just used them where I need them. 
+            # ys_bem = SVector(Cl, Cd, Vx, Vy) #TODO: I don't think that I need to store these Y values in vectors. I should be able to just used them where I need them. 
+
+            ys_bem, ys_riso = get_bemriso_y(phi, xs_riso, pas, t, airfoil, env; Vx=Vx, Vy=Vy) #Todo. I need the new Vx and Vy inside of the function. I suppose I could make those keyword arguments. #TODO: This won't account for angular deflection. -> Although, I think I could just augment phi as I'm passing it in. 
 
             outs_a[1+riso_idx:riso_idx+4] = riso_residual(dxs_riso, xs_riso, ys_riso, ps_riso, t, blade.airfoils[i])
 
@@ -214,6 +221,8 @@ function create_aerostructuralfun(riso::Riso, bem::BEM, gxmodel::gxbeam, blade::
 
 
             ### Create loadings for structures
+            Cl = ys_bem[1]
+            Cd = ys_bem[2]
             qinf = 0.5*env.rho*(env.U(t)^2)*chord #TODO: Which velocity should I use, the displaced (Vx) or the freestream? 
             f = SVector(0.0, Cd*cos(phi) - Cl*sin(phi), -(Cl*cos(phi) + Cd*sin(phi))) #Todo. I'm not sure that this is correct. 
             f = qinf*elements[i].L*f #qinf*elements[i].L*f/2  #TODO. Why divided by 2? -> Because the BEM gives the distributed loa..... wait.... the BEM gives the distributed load.... not the total load. It shouldn't be divided by 2.  
@@ -277,7 +286,7 @@ function initialize_riso_states(aoa, dsmodel, blade, env, p; tspan=(0,100.0))
 
     fun = create_risofun(aoa, blade, env, 0.0, 0.0) #The frequency and amplitude of oscillation is zero. 
 
-    diffvars = differentialvars(dsmodel, n)
+    diffvars = differentialvars(dsmodel, n) #TODO: Could probably use a ode formulation and do the steady state solve. 
 
     prob = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars = diffvars)
 
@@ -294,7 +303,7 @@ function initialize_aerostructural_states(bemmodel, gxmodel, env, blade, p; maxi
     outs, state, system, assembly, prescribed_conditions, converged, iters, resids = fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = maxiter, verbose = verbose, tolerance= tolerance)
 
     # x0_riso = zeros(4*n) #I bet there is a way that I could calculate these. 
-
+    # @show state.elements[end].V
 
     x0_bem = outs.phi
 
@@ -307,7 +316,7 @@ function initialize_aerostructural_states(bemmodel, gxmodel, env, blade, p; maxi
     pitch = view(pa, pitchidx)
     aoa = -((twist .+ pitch) .- x0_bem)
     # @show aoa
-    x0_riso = initialize_riso_states(aoa, Riso(), blade, env, chord) #Todo: Getting NaN in my states
+    x0_riso = initialize_riso_states(aoa, Riso(), blade, env, chord) #Todo. Getting NaN in my states -> was passing the wrong parameters to the riso states. 
 
 
 
@@ -323,3 +332,4 @@ function initialize_aerostructural_states(bemmodel, gxmodel, env, blade, p; maxi
 
     return x0, dx0
 end
+
