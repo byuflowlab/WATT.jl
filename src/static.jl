@@ -85,7 +85,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
     ##### Run initial solution
     ### Run CCBlade
-    outs = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #Todo: There are some solving as invalid data (likely) for this section. 
+    outs = CCBlade.solve.(Ref(rotor), sections, operatingpoints) 
 
     ### Extract CCBlade Loads
     Fz = -outs.Np
@@ -111,6 +111,8 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     def_y = [state.elements[ielem].u[2] for ielem = 1:n]
     def_z = [state.elements[ielem].u[3] for ielem = 1:n]
     def_thetax = [state.elements[ielem].theta[1] for ielem = 1:n]
+    Vx = [env.U(t) for ielem = 1:n]
+    Vy = [-state.elements[ielem].V[2] for ielem = 1:n]
 
 
     ### Store old solution 
@@ -138,15 +140,19 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
         ### Iterate through the aerodynamic stations and solve
         ## Create Section
-        r_displaced = rvec .+ def_x #Todo: Why is their deflection in the positive x? 
+        r_displaced = rvec .+ def_x #Todo: Why is there deflection in the positive x? 
         twist_displaced = twistvec .- def_thetax
-        sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils)
+        sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils) #Todo: Try adding the velocities. 
 
         ## Create Operating Point
-        ops = CCBlade.windturbine_op.(U, env.Omega(t), pitch, r_displaced, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
+        # ops = CCBlade.windturbine_op.(U, env.Omega(t), pitch, r_displaced, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
+        for i = 1:n #Iterate throught the nodes and update the operating points
+            operatingpoints[i] = CCBlade.OperatingPoint(Vx[i], Vy[i], env.rho, pitch, env.mu, env.a)
+        end
+        # @show operatingpoints[end].Vx operatingpoints[end].Vy
 
         ## Run CCBlade
-        outs = CCBlade.solve.(Ref(rotor), sects, ops)
+        outs = CCBlade.solve.(Ref(rotor), sects, operatingpoints)
 
         ## Extract CCBlade Loads
         Fz_new .= -outs.Np
@@ -171,6 +177,13 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         def_y .= [state.elements[ielem].u[2] for ielem = 1:n]
         def_z .= [state.elements[ielem].u[3] for ielem = 1:n]
         def_thetax .= [state.elements[ielem].theta[1] for ielem = 1:n]
+
+        ## Update the velocities
+        for i = 1:n
+            V_elem = state.elements[i].V # Element linear velocity
+            Vx[i] = env.U(t) + V_elem[3] #Freestream velocity  
+            Vy[i] = - V_elem[2]
+        end
 
 
         ### Update solution

@@ -489,7 +489,7 @@ function create_simplebeam(radii, chords, twists, rhub, rtip, thicknesses; densi
     return N, p
 end
 
-function convert_assemblystate(state;include_extra_states=false) #Convert a the assembly state of a beam with a fixed end into a vector of states. 
+function convert_assemblystate(state, assembly;include_extra_states=false) #Convert a the assembly state of a beam with a fixed end into a vector of states. 
     points_states = view(state.points, :)
     elements_states = view(state.elements, :)
 
@@ -548,11 +548,12 @@ function convert_assemblystate(state;include_extra_states=false) #Convert a the 
             xe[idx+16:idx+18] = elements_states[i].Omega
         end
         ## Combine the point and element states and return them.
-        return vcat(xp[1:6], xe, xp[end-5:end])
+        force_scaling = GXBeam.default_force_scaling(assembly)
+        return vcat(xp[1:6], xe, xp[end-5:end])./force_scaling
     end
 end
 
-function convert_history(history; include_extra_states=false)
+function convert_history(history, assembly; include_extra_states=false)  
     np = length(history[1].points)
     ne = length(history[1].elements)
     nt = length(history)
@@ -565,7 +566,7 @@ function convert_history(history; include_extra_states=false)
 
     x = zeros(nt, n)
     for i = 1:nt
-        x[i,:] = convert_assemblystate(history[i])
+        x[i,:] = convert_assemblystate(history[i], assembly)
     end
     
     return x
@@ -601,7 +602,7 @@ function initialize_gxbeam(gxmodel, p, distributedload)
 
     state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
-    return convert_assemblystate(state)
+    return convert_assemblystate(state, assembly)
 end
 
 function initialize_gxbeam2(gxmodel, p, distributedload) #Todo: Need to add kwargs that go to GXBeam's initalize function so that I can have the same initial conditions. 
@@ -648,7 +649,7 @@ function initialize_gxbeam2(gxmodel, p, distributedload) #Todo: Need to add kwar
 
     state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
-    return convert_assemblystate(state)
+    return convert_assemblystate(state, assembly)
 end
 
 function plotpoints(points; xdim = true, ydim = true, zdim=true)
@@ -931,5 +932,19 @@ function initializegravityloads(gxmodel, env, p; g=9.817)
 
     state = GXBeam.AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
-    return convert_assemblystate(state)
+    return convert_assemblystate(state, assembly)
+end
+
+
+function derivative(sol, tvec)
+    solatt = sol(tvec)
+    x = Array(solatt)'
+    m, n = size(x)
+    du = zero(x)
+
+    for i= 1:n
+        spline = Akima(tvec, x[:,i])
+        du[:,i] = FLOWMath.gradient(spline, tvec)
+    end
+    return du
 end

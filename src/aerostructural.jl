@@ -322,7 +322,7 @@ function initialize_aerostructural_states(bemmodel, gxmodel, env, blade, p; maxi
 
     x0_gxbeam = convert_assemblystate(state)
 
-    x0 = vcat(x0_riso, x0_bem, x0_gxbeam)
+    x0 = vcat(x0_riso, x0_bem, x0_gxbeam) #Todo: Are these in the correct order? 
 
     dx0_riso = zero(x0_riso)
     dx0_bem = zero(x0_bem)
