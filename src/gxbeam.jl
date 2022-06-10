@@ -934,17 +934,3 @@ function initializegravityloads(gxmodel, env, p; g=9.817)
 
     return convert_assemblystate(state, assembly)
 end
-
-
-function derivative(sol, tvec)
-    solatt = sol(tvec)
-    x = Array(solatt)'
-    m, n = size(x)
-    du = zero(x)
-
-    for i= 1:n
-        spline = Akima(tvec, x[:,i])
-        du[:,i] = FLOWMath.gradient(spline, tvec)
-    end
-    return du
-end

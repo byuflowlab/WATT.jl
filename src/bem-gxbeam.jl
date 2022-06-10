@@ -276,8 +276,10 @@ function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Enviro
             m_follower = @SVector zeros(3)
     
     
-    
-    
+            # @show eltype(x[1])
+            # @show isa(x[1], ForwardDiff.Dual)
+            # @show typeof(x[1])
+            phivec = Array{eltype(x)}(undef, n)
     
     
             ############ Iterate across the sections. Update the aero states and create the loads for GXBeam. 
@@ -360,6 +362,8 @@ function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Enviro
                 # get_bem_residual!(outs_a, i, xbem[1], rotor, sections[i], op) ### I can probably directly use the ccblade residual. 
                 # outs_a[i], ccout = CCBlade.residual(phi, rotor, sections[i], op) #Todo: Solution is getting forced past phi=1
                 ccout = CCBlade.solve(rotor, sections[i], op)
+
+                phivec[i] = ccout.phi
     
     
     
@@ -392,7 +396,10 @@ function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Enviro
                 distributed_loads[i] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
             end
     
-    
+            ### Save phi
+            saveextra(t, "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/projects/bladeopt/Rotors/testing/savingfile.csv", phivec...) #Todo: Change to the saving callback. 
+
+            
     
             ### System velocities and accelerations
             ## create the origin
@@ -437,7 +444,7 @@ function initialize_bemgx_states(bemmodel, gxmodel, env, blade, p; maxiter=100, 
         @show converged
     end
 
-    x0_gxbeam = convert_assemblystate(state)
+    x0_gxbeam = convert_assemblystate(state, assembly)
 
     x0 = vcat(x0_bem, x0_gxbeam)
 

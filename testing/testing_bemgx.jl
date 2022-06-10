@@ -1,5 +1,6 @@
-using Plots, GXBeam, StaticArrays, LinearAlgebra, DifferentialEquations, CCBlade, FLOWMath, CurveFit, NLsolve
+using Plots, GXBeam, StaticArrays, LinearAlgebra, DifferentialEquations, CCBlade, FLOWMath, CurveFit, NLsolve, DelimitedFiles, ForwardDiff
 
+include("../src/extra.jl")
 include("../src/blades.jl")
 include("../src/environments.jl")
 include("../src/bem.jl")
@@ -30,7 +31,7 @@ rtip = 63.0
 rvec = [11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.6333]
 chordvec = [4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
 twistvec = pi/180*[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
-thickvec = chordvec.*0.08
+thickvec = chordvec.*0.40495
 B = 3.0
 hubht = 90.0
 
@@ -62,8 +63,15 @@ a = 343.0
 shearexp = 0.0
 
 #### Define solution
-tspan = (0.0, 0.5)
+tspan = (0.0, 1.0)
 dt = 0.01
+
+#### Look at an airfoil cross section for a reference thickness
+# du40_a17 = readdlm("/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/projects/bladeopt/Rotors/data/airfoils/DU40_A17.cor")
+
+
+# airfoilplt = scatter(du40_a17[:,1], du40_a17[:,2], aspectratio=:equal)
+# display(airfoilplt)
 
 ### Prep the ASD rotor and operating conditions 
 aftypes = Array{AlphaAF}(undef, 8)
@@ -120,7 +128,7 @@ fun2 = create_explicitbemgxfun(rhub, rtip, bemmodel, blade, env)
 #### Initialize states 
 println("Initialize states")
 println("")
-x0, dx0 = initialize_bemgx_states(bemmodel, gxmodel, env, blade, p)
+x0, dx0 = initialize_bemgx_states(bemmodel, gxmodel, env, blade, p) #Todo: Which p should this be? 
 
 x02 = x0[n+1:end]
 dx02 = dx0[n+1:end]
@@ -130,25 +138,33 @@ fo2 = zero(x02)
 
 # fun(fakeouts, dx0, x0, p, 0.0) #Note: I expect this to be equal to zero... since the initialize_bemgx_states function uses the fixed point iteration static solve. So we should be at steady state... and shouldn't need any further convergence... unless my read states function is garbage (for GXBeam). But.... I don't think it is... since I used that function to validate my GXBeam wrapper. 
 
+# @show fakeouts
 # println("Call explicit function")
 # println("")
-fun2(fo2, dx02, x02, p, 0.0)
+# fun2(fo2, dx02, x02, p, 0.0)
+
+# lb = fill(-Inf, length(x02))
+# ub = fill(Inf, length(x02))
+# solved = static_solve(fun2, x02, p, 0.0, lb, ub) #Solves, I don't know if it's a good solve. 
 
 # @show fakeouts
-@show fo2
+# @show fo2
 
 
 println("Create the DAE")
-# probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars) #This runs... forever. And looking at phi, it looks like it is struggling to find a consistent set of states.
+# probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars) #This runs... forever. And looking at phi, it looks like it is struggling to find a consistent set of states. -> After normalizing the GXBeam states like they should be (during initialization), this still didn't solve after 20+ minutes. 
 
-probdae = DifferentialEquations.DAEProblem(fun2, dx02, x02, tspan, p, differential_vars=dvs) #phi is also getting shoved past 1... which means that the twist that I'm adding is... a lot? I'm not sure. Something is off with the twist. It must be. -> Well it is erroring with the tip correction... which is not handy. Is the solution just happen to through the tip correction off? What if I don't do a tip correction. 
+#Todo: Which p should be given here? 
+probdae = DifferentialEquations.DAEProblem(fun2, dx02, x02, tspan, p, differential_vars=dvs) #phi is also getting shoved past 1... which means that the twist that I'm adding is... a lot? I'm not sure. Something is off with the twist. It must be. -> Well it is erroring with the tip correction... which is not handy. Is the solution just happen to through the tip correction off? What if I don't do a tip correction. -> I changed how the states were initialized (I normalized the GXBeam states like they should be), and this actually solved. 
+
+prepareextra(tspan, "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/projects/bladeopt/Rotors/testing/savingfile.csv", n)
 
 
 ## Solve
 println("Solve the DAE")
-# sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
+sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
 
-
+savedmat = readextra("/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/projects/bladeopt/Rotors/testing/savingfile.csv") #-> Some of these inflow angles are ridiculous. Like 172 degrees. That's not realistic... right? That'd be psycho. So what the duece happened? 
 
 
 
@@ -183,5 +199,85 @@ println("Solve the DAE")
 
 # result = static_solve(fun, x0, p, 0.0, lowbounds, upbounds; iterations=10000) 
 #Todo: It runs but doesn't converge. I think that since I'm forcing dx to be equal to zero, It can't solve because some of the states would have to be changing... although... moving doesn't mean accelerating. But moving does mean position is changing... so if there is any sort of change of position... then we'd have a problem. Although, it might be moving but not deflecting. 
+
+############### Extract the data. 
+
+
+### Create GXBeam structures to analyze with GXBeam. 
+assembly = create_gxbeam_assembly(gxmodel, p_s)
+
+prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) #Root section is fixed. 
+
+fload = SVector(0.0, 0.0, 0.0)
+
+distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> fload[2], fz= (s) -> fload[3]) for ielem in 1:n)
+
+
+system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false)
+
+
+history = [AssemblyState(system, assembly, sol[it]; prescribed_conditions) for it in eachindex(sol)]
+
+tback = 0
+nt_me = length(sol.t)
+tidx_me = nt_me-tback
+
+x_me = [assembly.points[ipoint][1] + history[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+
+deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+
+
+### Plot
+# plt = plot(leg=:topleft, xaxis="Beam length (m)", yaxis="Beam Position (m)")
+# scatter!(x_me, deflection_me, lab="Current", markershape=:x, markersize=8)
+# display(plt)
+
+
+
+# ################ Animate
+# println("Beginning Animation. ")
+# numframes = length(sol.t)
+# tvec = range(tspan[1], tspan[2], length=numframes)
+# solt = sol(tvec)
+# historyt = [AssemblyState(system, assembly, solt[it]; prescribed_conditions) for it in eachindex(solt)]
+
+# anim = @animate for i in 1:numframes
+#     x_m = [assembly.points[ipoint][1] + historyt[i].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+#     deflection_m = [historyt[i].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+
+#     scatter(x_m, deflection_m, leg=false, xaxis="Beam length (m)", yaxis="Beam Position (m)", markershape=:circle, markersize=8, xlims = (0, 65), ylims = (0, 30))
+# end
+# gif(anim, "BeamDeflection_3.0s.gif", fps=30)
+
+
+######### Test to see if a state from the explicit solve will work in the implicit solver. 
+totalstates = hcat(savedmat[:,2:end], Array(sol)')
+xs2 = vcat(savedmat[end,2:end], Array(sol)'[end,:])
+dxs2 = mat_derivative(totalstates, savedmat[:,1])
+
+# fakeouts = zero(x0)
+
+# fun(fakeouts, dxs2[end,:], xs2, p, tspan[2]) 
+
+# @show fakeouts  #It's fairly well converged. The aero residauls aren't great, but they aren't awful. 
+
+
+###### Use initial conditions from explicit solve for an implicit solve. 
+tspan2 = (tspan[2], tspan[2]+1.0)
+
+println("Create the new DAE")
+probdae = DifferentialEquations.DAEProblem(fun, dxs2[end,:], xs2, tspan2, p, differential_vars=diffvars) 
+ 
+
+## Solve
+println("Solve the new DAE")
+sol2 = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
+
+
+
+
+
+
+
 
 nothing
