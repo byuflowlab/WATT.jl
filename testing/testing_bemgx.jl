@@ -128,7 +128,7 @@ fun2 = create_explicitbemgxfun(rhub, rtip, bemmodel, blade, env)
 #### Initialize states 
 println("Initialize states")
 println("")
-x0, dx0 = initialize_bemgx_states(bemmodel, gxmodel, env, blade, p) #Todo: Which p should this be? 
+x0, dx0 = initialize_bemgx_states(bemmodel, gxmodel, env, blade, p)
 
 x02 = x0[n+1:end]
 dx02 = dx0[n+1:end]
@@ -154,17 +154,19 @@ fo2 = zero(x02)
 println("Create the DAE")
 # probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars) #This runs... forever. And looking at phi, it looks like it is struggling to find a consistent set of states. -> After normalizing the GXBeam states like they should be (during initialization), this still didn't solve after 20+ minutes. 
 
-#Todo: Which p should be given here? 
+
 probdae = DifferentialEquations.DAEProblem(fun2, dx02, x02, tspan, p, differential_vars=dvs) #phi is also getting shoved past 1... which means that the twist that I'm adding is... a lot? I'm not sure. Something is off with the twist. It must be. -> Well it is erroring with the tip correction... which is not handy. Is the solution just happen to through the tip correction off? What if I don't do a tip correction. -> I changed how the states were initialized (I normalized the GXBeam states like they should be), and this actually solved. 
 
-prepareextra(tspan, "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/projects/bladeopt/Rotors/testing/savingfile.csv", n)
+savefile = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/projects/bladeopt/Rotors/testing/savingfile.csv"
+
+prepareextra(tspan, savefile, n)
 
 
 ## Solve
 println("Solve the DAE")
 sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
 
-savedmat = readextra("/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/projects/bladeopt/Rotors/testing/savingfile.csv") #-> Some of these inflow angles are ridiculous. Like 172 degrees. That's not realistic... right? That'd be psycho. So what the duece happened? 
+savedmat = readextra(savefile) #-> Some of these inflow angles are ridiculous. Like 172 degrees. That's not realistic... right? That'd be psycho. So what the duece happened? 
 
 
 
@@ -250,6 +252,72 @@ deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(asse
 # gif(anim, "BeamDeflection_3.0s.gif", fps=30)
 
 
+#####Take a look at the forces. 
+
+
+loadsT, loadsN = extractBEMloads(savefile, Array(sol)', bemmodel, blade, env, p)
+
+
+# ###### Plot the forces
+# x_elem = [assembly.elements[ielem].x[1] for ielem = 1:length(assembly.elements)]
+
+# anim = @animate for i in 1:length(sol.t)
+    
+#     plt1 = plot(x_elem, loadsT[i,:], leg=:topright, xaxis="Beam length (m)", yaxis="Distributed Load (N)", lab="Tangential", ylims = (0,1500))
+#     plt2 = plot(x_elem, loadsN[i,:], lab="Normal", ylims = (0,3e4))
+#     plot(plt1, plt2, layout=(2,1))
+# end
+# gif(anim, "Beamloads_1.0s.gif", fps=15)
+
+
+
+####### Compare with the fixed point solution. 
+outs_fp, state_fp, system_fp, _, _, _, _, _ = fixedpoint(bemmodel, gxmodel, env, blade, p)
+
+
+## Animate
+x_elem = [assembly.elements[ielem].x[1] for ielem = 1:length(assembly.elements)]
+
+anim = @animate for i in 1:length(sol.t)
+    
+    plt1 = plot(x_elem, loadsT[i,:], leg=:topright, xaxis="Beam length (m)", yaxis="Tangential Load (N)", lab="Dynamic", ylims = (0,1500))
+    plot!(x_elem, outs_fp.Tp, lab="Static")
+
+    plt2 = plot(x_elem, loadsN[i,:], lab="Dynamic", ylims = (0,3e4), yaxis="Normal Load (N)", legend=false)
+    plot!(x_elem, outs_fp.Np, lab="Static")
+
+    plot(plt1, plt2, layout=(2,1))
+end
+gif(anim, "dynamicbeamloads_wfixedpoint_1.0s.gif", fps=15)
+
+### Todo: x_elem != rvec..... what's up with that? 
+
+#### Visualize the deflections through Paraview
+
+# root_chord = chordvec[1]
+# tip_chord =  chordvec[end]
+# airfoil = readdlm("/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/projects/bladeopt/Rotors/data/airfoils/DU40_A17.cor")
+
+# x = [assembly.points[ip][1] for ip in 1:length(assembly.points)]
+# L = rtip-rhub
+
+# sections = zeros(3, size(airfoil, 1), length(assembly.points))
+# for ip = 1:length(assembly.points)
+#     chord = root_chord * (1 - x[ip]/L) + tip_chord * x[ip]/L
+#     sections[1, :, ip] .= 0
+#     sections[2, :, ip] .= chord .* (airfoil[:,1] .- 0.5)
+#     sections[3, :, ip] .= chord .* airfoil[:,2]
+# end
+
+# write_vtk("wind-turbine-blade-simulation", assembly, history, sol.t; sections = sections)
+
+
+
+
+
+
+
+
 ######### Test to see if a state from the explicit solve will work in the implicit solver. 
 totalstates = hcat(savedmat[:,2:end], Array(sol)')
 xs2 = vcat(savedmat[end,2:end], Array(sol)'[end,:])
@@ -263,15 +331,15 @@ dxs2 = mat_derivative(totalstates, savedmat[:,1])
 
 
 ###### Use initial conditions from explicit solve for an implicit solve. 
-tspan2 = (tspan[2], tspan[2]+1.0)
+# tspan2 = (tspan[2], tspan[2]+1.0)
 
-println("Create the new DAE")
-probdae = DifferentialEquations.DAEProblem(fun, dxs2[end,:], xs2, tspan2, p, differential_vars=diffvars) 
+# println("Create the new DAE")
+# probdae = DifferentialEquations.DAEProblem(fun, dxs2[end,:], xs2, tspan2, p, differential_vars=diffvars) 
  
 
-## Solve
-println("Solve the new DAE")
-sol2 = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
+# ## Solve
+# println("Solve the new DAE")
+# sol2 = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt, initializealg=NoInit())
 
 
 

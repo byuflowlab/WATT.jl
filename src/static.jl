@@ -26,7 +26,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     radii_idx = 1:7:(7*n)
     chord_idx = 2:7:(7*n)
     twist_idx = 3:7:(7*n)
-    rvec = view(pa, radii_idx)
+    rvec = view(pa, radii_idx) #Todo: This isn't what I want. Currently the BEM node and the GXBeam node aren't co-located. 
     chordvec = view(pa, chord_idx)
     twistvec = view(pa, twist_idx)
 
@@ -88,7 +88,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     outs = CCBlade.solve.(Ref(rotor), sections, operatingpoints) 
 
     ### Extract CCBlade Loads
-    Fz = -outs.Np
+    Fz = -outs.Np #Todo: I need to interpolate the loads onto the GXBeam nodes. 
     Fy = outs.Tp
 
     ### Create distributed_load
@@ -140,7 +140,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
         ### Iterate through the aerodynamic stations and solve
         ## Create Section
-        r_displaced = rvec .+ def_x #Todo: Why is there deflection in the positive x? 
+        r_displaced = rvec .+ def_x #Todo: Why is there deflection in the positive x? #Todo: The rvec location and the gxbeam location are not the same. 
         twist_displaced = twistvec .- def_thetax
         sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils) #Todo: Try adding the velocities. 
 
@@ -240,7 +240,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     end
     # iter -= 1
 
-    return outs, state, system, assembly, prescribed_conditions, converged, iter, resids[1:iter,:]
+    return outs, state, system, assembly, prescribed_conditions, converged, iter, resids[1:iter,:] #Todo: Is the state and system that are getting passed out the state and system that were most recently calculated... or the one before the loop. I'm guessing it's the one before the loop. ... but then how/why does my dynamic solution look like it is converging to the fixed-point solution? 
 end
 
 

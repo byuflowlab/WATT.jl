@@ -160,7 +160,7 @@ function create_bemgxbeamfun(radiusvec, chordvec, twistvec, rhub, rtip, bem::BEM
 
 
 
-            ### Create loadings for structures
+            ### Create loadings for structures #Todo: I need to interpolate the CCBlade loads to the GXBeam nodes. I think that's going to require me to save the loads to a vector. Or something. Because I need to access the loads, or at least the surrounding load nodes. Which, depending on the type of interpolation, I might need the entire load framework. 
          
             f = SVector(0.0, ccout.Tp, -ccout.Np) #TODO: Should I multiply by L? Does it need the section length?
             # # f = qinf*elements[i].L*f #qinf*elements[i].L*f/2  #TODO. Why divided by 2? -> Because the BEM gives the distributed loa..... wait.... the BEM gives the distributed load.... not the total load. It shouldn't be divided by 2.  
@@ -454,4 +454,85 @@ function initialize_bemgx_states(bemmodel, gxmodel, env, blade, p; maxiter=100, 
     dx0 = vcat(dx0_bem, dx0_gxbeam)
 
     return x0, dx0
+end
+
+function extractBEMloads(filename, states, bem, blade, env, p)
+
+    mat = readextra(filename)
+    
+    tvec = mat[:,1]
+    data = mat[:,2:end]
+
+    nt, nn = size(data)
+
+    pa = view(p, 1:7*n) # radius, chord, twist, pitch, rhub, rtip, hubHt = p #Extract aerodynamic parameters
+    ps = view(p, (7*n + 1):length(p)) #Extract structural parameters
+
+    rhub = pa[5]
+    rtip = pa[6]
+
+    rotor = CCBlade.Rotor(rhub, rtip, 1.0, precone=0.0, turbine=bem.turbine, tip=nothing)
+    airfoils = Array{CCBlade.AFType}(undef,n)
+    sections = Array{CCBlade.Section}(undef,n)
+
+    loadsT = Array{eltype(states)}(undef, size(data)...)
+    loadsN = Array{eltype(states)}(undef, size(data)...)
+
+
+    for j = 1:nt
+        xs = states[j,:]
+        t = tvec[j]
+        for i = 1:nn
+            ## Extract values out of the parameters vector for this radial position. 
+            pas = view(pa, 1+7*(i-1):7+7*(i-1)) 
+            radius, chord, twist, pitch, _, _, _ = pas
+
+            ## Extract the GXBeam element states
+            elem_idx = 6 + 18*(i-1)
+            xss = view(xs, (elem_idx+1):(elem_idx + 18))
+
+            ## Get the structural displacements
+            # Linear displacement
+            delta_elem = SVector(xss[1], xss[2], xss[3])
+    
+            # angular displacement
+            theta_elem = SVector(xss[4], xss[5], xss[6]) 
+            # dtheta_elem = SVector(dxss[3], dxss[4], dxss[5])
+    
+            # Linear velocity
+            V_elem = SVector(xss[13], xss[14], xss[15])
+            # dV_elem = SVector(dxss[12], dxss[13], dxss[14])
+    
+            # angular velocity
+            Omega_elem = SVector(xss[16], xss[17], xss[18])
+            # dOmega_elem = SVector(dus[15], dus[16], dus[17])
+            
+            # convert rotation parameter to Wiener-Milenkovic parameters
+            scaling = GXBeam.rotation_parameter_scaling(theta_elem)
+            theta_elem *= scaling # angular displacement (Wiener-Milenkovic parameters)
+            # dtheta_elem *= scaling # angular displacement rate (Wiener-Milenkovic parameters)
+
+            Vx = env.U(t) + V_elem[3] #Freestream velocity 
+            Vy = - V_elem[2]
+    
+    
+            airfoils[i] = CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3], "", 0.0, 0.0)
+                
+            ### Create section object
+            radius_displaced = radius + delta_elem[1]
+            twist_displaced = twist - theta_elem[1]
+            sections[i] = CCBlade.Section(radius_displaced, chord, twist_displaced, airfoils[i])
+
+    
+            ### Create OperatingPoint #TODO: Make general so it can take propeller configurations.
+            op = CCBlade.OperatingPoint(Vx, Vy, env.rho, pitch, env.mu, env.a)
+    
+            ccout = CCBlade.solve(rotor, sections[i], op)
+
+            loadsT[j,i] = ccout.Tp
+            loadsN[j,i] = ccout.Np
+        end
+    end
+
+    return loadsT, loadsN
 end

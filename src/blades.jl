@@ -1,3 +1,7 @@
+struct Blade #TODO: Do I want structural information in this? Or a different struct? or any struct at all. 
+    airfoils
+end
+
 struct Airfoil{TF, Tfit}
     polar::Array{TF, 2}
     cl::Tfit
@@ -44,6 +48,3 @@ function complexairfoil(polar; A = [0.3, 0.7], b = [0.14, 0.53], T = [1.7, 3.0])
     return Airfoil(polar, cl, cd, cm, dcldalpha, alpha0, A, b, T)
 end
 
-struct Blade #TODO: Do I want structural information in this? Or a different struct? or any struct at all. 
-    airfoils
-end
