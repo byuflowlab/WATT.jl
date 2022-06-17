@@ -1,6 +1,6 @@
 
 
-function derivative(sol, tvec)
+function derivative_me(sol, tvec)
     solatt = sol(tvec)
     x = Array(solatt)'
     m, n = size(x)

@@ -50,10 +50,10 @@ twistvec = ones(length(rvec)).*twist
 thickvec = ones(length(rvec)).*h
 
 ## Create parameters
-n, p = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
+p, xp, xe = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
 ## Create models
-gxmodel = gxbeam(n)
+gxmodel = gxbeam(xp, xe)
 env = environment(0.0, 0.0, 0.0, 0.0, omega, 0.0, 0.0) #I'm not using any of these inputs in this test. 
 
 ## Create distributed load
@@ -99,7 +99,7 @@ xfp = SVector{length(xf)}(xf)
 dxfp = SVector{length(xf)}(dxf)
 pp = SVector{length(p)}(p) #That increased the number of allocations. 
 
-@time fun(outs, dxfp, xfp, p, 0.11)  #0.140568 seconds (285.55 k allocations: 18.899 MiB, 98.18% compilation time) #Todo: Why is 98% compliation time? What is there to compile?.... Wait... Is this part of the global variable that I'm using? 
+@time fun(outs, dxfp, xfp, p, 0.11)  #0.140568 seconds (285.55 k allocations: 18.899 MiB, 98.18% compilation time) #Todo. Why is 98% compliation time? What is there to compile?.... Wait... Is this part of the global variable that I'm using? -> It recompiles everytime for the first run because the function is recreated at run time. Thus the function needs to be recompiled every time the script is called. 
 @time fun(outs, dxfp, xfp, p, 0.11)
 
 

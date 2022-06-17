@@ -34,10 +34,8 @@ omega = vinf*tsr/rotorR
 
 
 ### Create GXBeam Inputs to create function for DifferentialEquations
-
-
 ## DifferentialEquations inputs
-tspan = (0.0, 2.5)
+tspan = (0.0, 3.0)
 
 
 
@@ -50,10 +48,10 @@ twistvec = ones(length(rvec)).*twist
 thickvec = ones(length(rvec)).*h
 
 ## Create parameters
-n, p = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
+p, xp, xe = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
 ## Create models
-gxmodel = gxbeam(n)
+gxmodel = gxbeam(xp, xe)
 env = environment(0.0, 0.0, 0.0, 0.0, omega, 0.0, 0.0) #I'm not using any of these inputs in this test. 
 
 ## Create distributed load
@@ -82,13 +80,9 @@ fload = dsl(0)
 
 distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> fload[2], fz= (s) -> fload[3]) for ielem in 1:nelem)
 
-# distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> -load) for ielem in 1:nelem) #The previous line acheives the same output. 
 Omega = SVector(0.0, 0.0, omega)
 
-g = 9.817
-grav(t) = SVector(-g*cos(pi/2 - env.Omega(t)), -g*sin(pi/2 - env.Omega(t)), 0.0)
-
-system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega, gravity=grav)
+system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega)
 
 state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
@@ -105,20 +99,20 @@ deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 ### Test GXBeam DAE formulation
 ## run initial condition analysis to get consistent set of initial conditions
-system2, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescribed_conditions, distributed_loads, angular_velocity = Omega, gravity=grav)
+system2, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescribed_conditions, distributed_loads, angular_velocity = Omega)
 
 ## construct a DAEProblem
-prob = GXBeam.DAEProblem(system2, assembly, tspan; prescribed_conditions, distributed_loads, angular_velocity= Omega, gravity=grav) 
+prob = GXBeam.DAEProblem(system2, assembly, tspan; prescribed_conditions, distributed_loads, angular_velocity= Omega) 
 
 ## solve DAEProblem
-sol_gxbeam = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.01) #Currently taking 0.08 seconds for a 0.5 second simulation.... so I have some speeding up to do on my implementation. -> Although... I think it might just be slower. Because we're putting information for the assembly in P... so it might inherently be slower. I need to talk to Dr. Ning about this. 
+sol_gxbeam = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.01) 
 
 
 
 history = [AssemblyState(system2, assembly, sol_gxbeam[it]; prescribed_conditions) for it in eachindex(sol_gxbeam)]
 
 nt = length(sol_gxbeam.t)
-tback = 5
+tback = 65
 tidx = nt-tback
 
 xd = [assembly.points[ipoint][1] + history[tidx].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
@@ -137,36 +131,40 @@ display(tplt)
 
 
 
-
-### Post Process my data
 ## Create gxbeam function. 
-fun = create_gxbeamfun(gxmodel, env, dsl, g=9.817)
+fun = create_gxbeamfun(gxmodel, env, dsl, g=0.0, damping=false)
 diffvars = differentialvars(gxmodel)
 
 
 ## Initialize
-# x0 = initialize_gxbeam2(gxmodel, p, dsl)
-x0 = sol_gxbeam[1]
+x0 = initialize_gxbeam2(gxmodel, p, dsl)
 dx0 = zeros(length(x0))
-
+x0 = sol_gxbeam[1]
 
 probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
 
 
 ## Solve
-sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01) #Currently taking 4.6-4.8 seconds for 0.5 time domain simulation. 
+sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01) 
 
+
+### Post Process my data
 history_me = [AssemblyState(system2, assembly, sol[it]; prescribed_conditions) for it in eachindex(sol)]
 
 nt_me = length(sol.t)
 tidx_me = nt_me-tback
 
-x_me = [assembly.points[ipoint][1] + history[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+x_me = [assembly.points[ipoint][1] + history_me[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
-deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+deflection_me = [history_me[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 
+t2 = sol.t
+nt = length(t2)
+def_tip2 = [history_me[it].points[end].u[2] for it = 1:nt]
 
+t2plt = plot(t2, def_tip2, xaxis="Time (s)", yaxis="Tip Deflection (m)")
+# display(t2plt)
 
 
 
@@ -181,10 +179,10 @@ points = zeros(4,3)
 points[:,1] = boxx
 points[:,2] = boxy
 
-points[1,:] = rotate_z(pi/2 - twistvec[1])*points[1,:]
-points[2,:] = rotate_z(pi/2 - twistvec[2])*points[2,:]
-points[3,:] = rotate_z(pi/2 - twistvec[3])*points[3,:]
-points[4,:] = rotate_z(pi/2 - twistvec[4])*points[4,:]
+points[1,:] = rotate_z(twistvec[1])*points[1,:]
+points[2,:] = rotate_z(twistvec[2])*points[2,:]
+points[3,:] = rotate_z(twistvec[3])*points[3,:]
+points[4,:] = rotate_z(twistvec[4])*points[4,:]
 
 # Aplt = plot(points[:,1], points[:,2], aspectratio=:equal)
 # display(Aplt)
@@ -194,21 +192,19 @@ Iy = h*(w^3)/12
 
 Iz1, Iy1, Izy = secondmomentofarea(points[:,1], points[:,2])
 
-Iz2, Iy2, Izy2 = rotate_smoa(Iz, Iy, 0.0, pi/2 - twist)
+Iz2, Iy2, Izy2 = rotate_smoa(Iz, Iy, 0.0, twist)
 
 EIz = assembly.elements[1].compliance[6,6]
 EIy = assembly.elements[1].compliance[5,5]
 
-Iz3 = 1/(EIz*E) #Todo: Correct values, but swapped with each other. 
+Iz3 = 1/(EIz*E) 
 Iy3 = 1/(EIy*E)
 
-# println("Outside functions (script)")
-# @show Iz, Iy
-# @show Iz1, Iy1
-# @show Iz2, Iy2
-# @show Iz3, Iy3
-
-load2 = load + 2.69e3*g*w*h
+### Check that the second moment of inertias are correct. 
+@show Iz, Iy
+@show Iz1, Iy1
+@show Iz2, Iy2
+@show Iz3, Iy3
 
 yfun(x) = load*x^2*(4*L*x -x^2 -6*L^2)/(24*E*Iz1) #Shigley's
 # Using Iz because the force in the -Y causes a negative moment about the Z axis. 
@@ -223,8 +219,10 @@ yvec = yfun.(xvec)
 
 ### Plot
 plt = plot(leg=:bottomleft, xaxis="Beam length (m)", yaxis="Beam Position (m)")
-# plot!(xvec, yvec, lab="Theory", markershape=:cross)
+# plot!(xvec, yvec, lab="Theory", markershape=:cross) #Theory doesn't apply because we have a spinning beam.
 scatter!(x, deflection, lab="GXBeam")
-scatter!(xd, deflectiond, lab="Differential Equations") # The Differential Equations solution passes through the steady state solution. Who knows if it converges to the steady state solution... cause... I don't want to look through to see if that works. At least, not right now. 
+scatter!(xd, deflectiond, lab="Differential Equations") 
 scatter!(x_me, deflection_me, lab="Current", markershape=:x, markersize=8)
 display(plt)
+
+nothing

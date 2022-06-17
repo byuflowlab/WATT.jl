@@ -1,7 +1,7 @@
 using Revise, DifferentialEquations, StaticArrays, FLOWMath, GXBeam, Plots, CurveFit, BenchmarkTools, LinearAlgebra, DelimitedFiles
 
 #=
-Test everything that my method can do.
+Test everything that my method can do. #Todo: This isn't ready. 
 - An unsteady, spatially dependent distributed load
 - unsteady angular velocity
 - gravity through time

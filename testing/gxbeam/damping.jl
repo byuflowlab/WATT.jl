@@ -8,7 +8,7 @@ function getfieldnames(x)
     return fieldnames(typeof(x))
 end
 
-#= Test whether or not my wrapper can create a beam and solve a simple beam case. 
+#= Test whether or not my wrapper can create a beam and solve a simple beam case, but let's include some damping!!! 
 
 Cantilevered beam with a constant distributed load. 
 =#
@@ -18,8 +18,6 @@ load = 100*4.48 # Newtons
 E = 6.83e10 #Young's Modulus
 h = 0.25 # Thickness (meters)
 w = 3.4 # Width (meters)
-Iz = w*(h^3)/12 #Second moment of area
-Iy = h*(w^3)/12
 
 ### Create GXBeam Inputs to create function for DifferentialEquations
 ## Base inputs
@@ -43,10 +41,10 @@ twistvec = ones(length(rvec)).*twist
 thickvec = ones(length(rvec)).*h
 
 ## Create parameters
-n, p = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
+p, xp, xe = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
 ## Create models
-gxmodel = gxbeam(n)
+gxmodel = gxbeam(xp, xe)
 env = environment(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0) #I'm not using any of these inputs in this test. 
 
 ## Create distributed load
@@ -99,8 +97,7 @@ probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_
 
 outs = zeros(length(x0))
 
-# fun(outs, dx0, x0, p, 0.0)
-# fun(outs, dx0, sol[end], p, 0.0)
+
 
 ## Solve
 sol = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=dt) 
@@ -132,7 +129,9 @@ display(tplt)
 
 
 ### Analytical Solution
-Izz, Iy, Izy = rotate_smoa(Iz, Iy, 0.0, pi/2 - twist)
+Iz = w*(h^3)/12 #Second moment of area
+Iy = h*(w^3)/12
+Izz, Iy, Izy = rotate_smoa(Iz, Iy, 0.0, twist)
 
 yfun(x) = load*x^2*(4*L*x -x^2 -6*L^2)/(24*E*Izz) #Shigley's
 # Using Iz because the force in the -Y causes a negative moment about the Z axis. 

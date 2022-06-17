@@ -39,27 +39,28 @@ where y_pl is the point loadings, y_dl is the distributed loads, y_pm are any po
 
 
 =#
-# """
-#    gxbeam(displacement)
-# A struct to hold information about the gxbeam model.
-
-# ### Inputs
-# - displacement::Array{Float64, 2} - a matrix that holds fixity/DoF information for all the points in the beam. The matrix will be nx6 where n is the number of points, and the row represents the x, y, z, theta_x, theta_y, theta_z degree of freedom (DoF). If the value is true, then the point has that degree of freedom. To iterate, if the value is false, then the point is fixed in that direction. For example, if the first row of the matrix read [false, false, true, false, false, false], then the start of the beam would be fixed in the x and y directions, but free to translate in the z. It would not be allowed to rotate at all. 
-# """
-# struct gxbeam{TF}
-#     displacement::Array{TF, 2} 
-# end
 
 """
-    gxbeam(displacement)
+    gxbeam(xp, xe)
 A struct to hold information about the gxbeam model. 
 
-### Inputs
-- L::Float64 - The length of the beam
-- n::Int64 - Number of beam elements
+### Fields
+- np::Int - Number of points
+- ne::Int - Number of elements
+- xp::SVector{3, Float64} - The initial geometric location of the points. (x, y, z) for a given point. 
+- xe::SVector{3, Float64} - The initial geometric location of the element nodes
 """
 struct gxbeam{TI}
-    n::TI #Do I even need this? 
+    np::TI
+    ne::TI
+    xp
+    xe
+end
+
+function gxbeam(points, elements)
+    np = length(points)
+    ne = length(elements)
+    return gxbeam(np, ne, points, elements)
 end
 
 ### residual function
@@ -104,17 +105,11 @@ end
     - a0 - body frame linear acceleration
     - alpha0 - body frame angular acceleration
 =#
-function gxbeam_residual(residuals, dx, x, assembly, prescribed_conditions) #Not going to use this function, going to use the GXBeam function. #TODO: Clean this function away. 
 
 
-    GXBeam.dynamic_system_residual!(residuals, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec,
-    force_scaling, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem,
-    x0, v0, omega0, a0, alpha0)
-end
+create_gxbeam_point(p) = SVector(p[1], p[2], p[3]) #TODO: I might not need this function anymore. 
 
-create_gxbeam_point(p) = SVector(p[1], p[2], p[3])
-
-function create_gxbeam_element(p, points, start, stop)
+function create_gxbeam_element(p, points, elements, start, stop)
     # separate element parameters
     e1x, e1y, e1z, e2x, e2y, e2z, e3x, e3y, e3z, C11, C12, C13, C14, C15, C16, C22, C23, C24, C25, C26, C33, C34, C35, C36, C44, C45, C46, C55, C56, C66, mu, xm2, xm3, i22, i33, i23 = p  
         # e - reference frame orientation vector (1,2,3 correspond to x,y,z respectively)
@@ -123,7 +118,7 @@ function create_gxbeam_element(p, points, start, stop)
     DeltaL = norm(points[stop] - points[start])
     
     # element location
-    x = (points[start] + points[stop])/2
+    x = elements[start]
 
     # element compliance matrix
     C = @SMatrix [
@@ -154,80 +149,72 @@ function create_gxbeam_element(p, points, start, stop)
     end
 
 function create_gxbeam_assembly(gxmodel::gxbeam, p, start, stop)
-    ne = gxmodel.n
-    np = gxmodel.n+1
-    points = [create_gxbeam_point(view(p, 3*(ip-1) + 1 : 3*(ip-1) + 3)) for ip = 1:np] 
-    elements = [create_gxbeam_element(view(p, 3*np + 36*(ie-1) + 1 : 3*np + 36*(ie-1) + 36),
-    points, start[ie], stop[ie]) for ie = 1:ne]
+    ne = gxmodel.ne
+    np = gxmodel.np
 
-    return GXBeam.Assembly(points, start, stop, elements)
+    elements = [create_gxbeam_element(view(p, 36*(ie-1) + 1 : 36*(ie-1) + 36),
+    gxmodel.xp, gxmodel.xe, start[ie], stop[ie]) for ie = 1:ne]
+
+    return GXBeam.Assembly(gxmodel.xp, start, stop, elements)
 end
 
 function create_gxbeam_assembly(gxmodel::gxbeam, p) #For ease of use outside of the package. 
-    ne = gxmodel.n
-    np = gxmodel.n+1
+    ne = gxmodel.ne
+    np = gxmodel.np
 
-    start = 1:gxmodel.n
-    stop = 2:gxmodel.n+1
+    start = 1:ne
+    stop = 2:np
 
-    points = [create_gxbeam_point(view(p, 3*(ip-1) + 1 : 3*(ip-1) + 3)) for ip = 1:np] 
-    elements = [create_gxbeam_element(view(p, 3*np + 36*(ie-1) + 1 : 3*np + 36*(ie-1) + 36),
-    points, start[ie], stop[ie]) for ie = 1:ne]
+    elements = [create_gxbeam_element(view(p, 36*(ie-1) + 1 : 36*(ie-1) + 36),
+    gxmodel.xp, gxmodel.xe, start[ie], stop[ie]) for ie = 1:ne]
 
-    return GXBeam.Assembly(points, start, stop, elements)
+    return GXBeam.Assembly(gxmodel.xp, start, stop, elements)
 end
 
 
 
 function get_element_velocity(states, ielem; allstates=false) #TODO: Apply multiple dispatch
-    idx = 6 + 18*(ielem-1)
+    idx = 6 + 18*(ielem-1) #Todo: Does the velocity need to be scaled?
     if allstates
     end
-    # @show idx
     return states[idx+13:idx+15]
 end
 
 function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Function; g = 9.817, damping=true, b=0.01)
 
-    ### Todo. I might accidently be "globalizing" these variables. Allocating them outside of the function might actually be worse. -> I don't think that I am, because I tried to declare force_scaling a constant, and it balked saying that it is a local variable. 
     ### Create prescribed conditions
-    prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed #0.000019 seconds 0.000003 seconds (4 allocations: 2.156 KiB)
+    prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed 
 
     ### Create point masses
     #TODO: Do I want point masses to be a differentiable thing? If so then this should probably go inside gxbeamfun!(). 
-    # create dictionary of point masses
     point_masses = Dict(1 => PointMass(0.0, SVector(0.0, 0.0, 0.0), @SMatrix zeros(3,3)))
 
-    # force_scaling = 1.0 #"unsupported 'const' declaration on local variable". I guess this is a local variable.
 
     ### Create GXBeam pass ins.
-    start = 1:gxmodel.n
-    stop = 2:gxmodel.n+1
-    N, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem = GXBeam.system_indices(start, stop, false; prescribed_points=1:1) #The third argument is whether or not the system is static. #prescribed_points=[1, gxmodel.n+1]
-    # @show N
-    # @show irow_point
-    # @show irow_elem
-    # @show icol_point
-    # @show icol_elem
-    # @show irow_elem1 
-    # @show irow_elem2
+    start = 1:gxmodel.ne
+    stop = 2:gxmodel.np
+    N, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem = GXBeam.system_indices(start, stop, false; prescribed_points=1:1) 
 
-    gxbeamfun! = function(outs, dx, x, p, t) #Todo: I'm not sure that this is type stable. Adding types to the inputs didn't decrease the number of allocations. 
+
+    gxbeamfun! = function(outs, dx, x, p, t) 
+        #TODO: I'm not sure that this is type stable.
+        #TODO: Additionally, this is be recompiled every run. Which... I guess makes sense. But the first function call takes a long time. 
+
+
         ### Create assembly
-        assembly = create_gxbeam_assembly(gxmodel, p, start, stop) #0.000004 seconds (2 allocations: 7.172 KiB)
+        assembly = create_gxbeam_assembly(gxmodel, p, start, stop) 
 
         ### Create distributed load 
-        elements = view(assembly.elements, :) #0.000000 seconds 
+        elements = view(assembly.elements, :)  
 
-        f = distributedload(t) #0.000007 seconds (7 allocations: 240 bytes) ... 0.000005 seconds (3 allocations: 80 bytes)
+        f = distributedload(t) 
         m = @SVector zeros(3)
-        # distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem;fx = (s) -> f[1], fy = (s) -> f[2], fz = (s) -> f[3]) for ielem in 1:nelem)
 
         ### follower distributed loads
         f1_follower = f2_follower = @SVector zeros(3) 
         m1_follower = m2_follower = @SVector zeros(3)
         
-        f1 = f2 = elements[1].L*f/2 #0.000002 seconds (3 allocations: 80 bytes)
+        f1 = f2 = elements[1].L*f/2 
         m1 = m2 = elements[1].L*m/2
         if damping
             ## Write a function that gets the element velocities. 
@@ -243,7 +230,7 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
         distributed_loads = Dict(1 => GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)) #0.000007 seconds (6 allocations: 3.922 KiB)
         # distributed_loads = Dict() #0.000002 seconds (4 allocations: 608 bytes)
 
-        for ielem in 2:gxmodel.n #0.000007 seconds (50 allocations: 4.844 KiB)... 0.000004 seconds (36 allocations: 2.531 KiB)
+        for ielem in 2:gxmodel.ne #0.000007 seconds (50 allocations: 4.844 KiB)... 0.000004 seconds (36 allocations: 2.531 KiB)
             f1 = f2 = elements[ielem].L*f/2 #TODO: Why am I multiplying by the length of the element? Isn't the force integrated? 
             m1 = m2 = elements[ielem].L*m/2
             if damping
@@ -252,70 +239,31 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
 
                 ## Calculate the damping force
                 Fd = -b.*ue
-                # @show ue
 
                 ## Apply the damping force
                 f1_follower += Fd./elements[ielem].L
                 f2_follower += Fd./elements[ielem].L
-                # @show f1_follower
-                # @show typeof(f1_follower)
             end
-            # if maximum(f1_follower)>0.0 #It does eventually go positive. 
-            #     @show f1_follower
-            # end
+
             distributed_loads[ielem] = GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)
         end
 
-        # println(distributed_loads[5])
-
-        # for ielem in 1:gxmodel.n
-        #     f1_follower = f2_follower = elements[ielem].L*f/2
-        #     m1_follower = m2_follower = elements[ielem].L*m/2
-        #     distributed_loads[ielem] = GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)
-        # end
-
 
         ### System velocities and accelerations
-            ### create the origin
-        x0 = @SVector zeros(3)
-        v0 = @SVector zeros(3) #System linear velocity #0.000000 seconds
-        omega0 = SVector(0.0, 0.0, env.Omega(t)) #System angular velocity #0.000000 seconds
-        a0 = @SVector zeros(3) #System linear acceleration #0.000000 seconds
-        alpha0 = SVector(0.0, 0.0, env.Omegadot(t)) #System angular acceleration #0.000000 seconds
+        x0 = @SVector zeros(3) # create the origin
+        v0 = @SVector zeros(3) #System linear velocity 
+        omega0 = SVector(0.0, 0.0, env.Omega(t)) #System angular velocity 
+        a0 = @SVector zeros(3) #System linear acceleration 
+        alpha0 = SVector(0.0, 0.0, env.Omegadot(t)) #System angular acceleration 
 
-        ### Create gravity vector #TODO: Convert this from steady to dependent on actual position? 
-        alpha = pi/2 - env.Omega(t)*t #Assuming the blade starts horizontal. # 0.000004 seconds (5 allocations: 80 bytes) #Todo. Why are there allocations here? This is scalar math.... evaluating env.Omega is two allocations. 0.000000 seconds The Environment object wasn't type stable.  
+        ### Create gravity vector 
+        alpha = pi/2 - env.Omega(t)*t #Assuming the blade starts horizontal.  
         gx = -g*cos(alpha)
         gy = -g*sin(alpha)
         gz = 0.0
-        gvec = SVector(gx, gy, gz) #[gx gy gz]
+        gvec = SVector(gx, gy, gz) 
 
-        force_scaling = GXBeam.default_force_scaling(assembly) #"unsupported 'const' declaration on local variable". I guess this is a local variable.
-
-        # if any(isnan, dx)
-        #     println("dx: ", dx)
-        # end
-
-        # if any(isnan, x)
-        #     println("x: ", x)
-        # end
-        # println("")
-        # println(outs[end-18:end])
-
-        #Todo. Are the states actually the way that I think that they are? Like... Is GXBeam expecting a different set of states? Now they are. I needed to cut the excess states (the zero states). 
-
-        # println(length(outs)) #This is the length that I expect it to be. 
-
-
-        # println(typeof(outs)) #Vector{Float64} I'm not sure that this can be a static vector. 
-        # println(typeof(dx)) #Depends on what is passed in. 
-        # println(typeof(irow_point)) #Vector{Int64}
-
-        # println(typeof(prescribed_conditions))
-        # println(typeof(distributed_loads))
-        # println(typeof(point_masses))
-
-        # @show distributed_loads
+        force_scaling = GXBeam.default_force_scaling(assembly) 
 
         GXBeam.dynamic_system_residual!(outs, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec, force_scaling, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem, x0, v0, omega0, a0, alpha0) # 0.000020 seconds (17 allocations: 5.266 KiB)
         
@@ -326,8 +274,8 @@ end
 
 
 function differentialvars(gxmodel; include_extra_states=false) #Todo. Make sure that these actually line up with the states that I think they do. It appears Taylor uses fewer states than what he said in AerostructuralDynamics. He is eliminating states of points that aren't needed. He keeps the states of any constrained point, and the last point. I'm going to assume that he'd also keep the states of the first point if it wasn't constrained.
-    np = gxmodel.n + 1
-    ne = gxmodel.n
+    np = gxmodel.np
+    ne = gxmodel.ne
 
     if include_extra_states
         differential_vars = fill(false, 6*np + 18*ne)
@@ -376,49 +324,43 @@ function create_simplebeam(radii, chords, twists, rhub, rtip, thicknesses; densi
     # shear and torsion correction factors: ky, kz, kt
     # material properties: E, nu
 
-    N = length(radii) #Number of elements
+    ne = length(radii) #Number of elements
+    np = ne + 1
 
     ### Create the point location parameters
-    interior_points = zeros(N-1)
-    for i=1:N-1
-        interior_points[i] = (radii[i] + radii[i+1])/2
+    pnts = zeros(np)
+
+    pnts[1] = rhub
+
+    for i = 1:ne-1
+        pnts[i+1] = (radii[i] + radii[i+1])/2
     end
 
-    points = vcat(rhub, interior_points, rtip) #All of the points together
+    pnts[end] = rtip
 
-    pp = zeros(3*(N+1))
+    points = [SVector(pnts[i], 0.0, 0.0) for i in 1:np] 
+    #^ I'm assuming that the beam extends in the structural X direction.
 
-    for i = 1:(N+1) #Beam extends in x direction -> points go into every third position of pp, starting with the first position. . 
-        idx = 3*(i-1)
-        pp[idx+1] = points[i] 
-    end
+
+    ### Create the elements
+    elements = [SVector(radii[i], 0.0, 0.0) for i in 1:ne]
+
+
 
     ### Create the element parameters
-    pe = zeros(36*N)
+    p = zeros(36*ne)
 
     ## Create the orientation vectors of the local reference frame (Cab matrix)
-
     Cab = [1.0 0.0 0.0; #e1x e1y e1z
            0.0 1.0 0.0  #e2x e2y e2z
            0.0 0.0 1.0] #e3x e3y e3z
 
-    for i = 1:N
+    for i = 1:ne #Iterate across the sections and store the section parameters. 
         idx = 36*(i-1)
 
-        # Local Cab matrix (The local reference frame should be rotated by the local twist. The beam cross section will initially be in the YZ plane with the horizontal in the Z. For convinience, I'm going to let that be and rotate the airfoil here. So the airfoil needs.... actually... that's mildly complicated. It depends on how the airfoil is defined. So.... let's deal with that problem when we get there. For now we'll just rotate the beam so the width is vertical. 
-        # Cab_local = rotate_x(pi/2 - twists[i])*Cab #Todo: Wait... If my beam is extending in the x direction, and I have no rotation... then .... I shouldn't be multiplying by a shift. right? 
-        # Cab_local = rotate_x(pi/2 - twists[i])'*Cab*rotate_x(pi/2 - twists[i]) #todo:
-
-        Cab_local = Cab
-        # if i==1
-        #     @show rotate_x(pi/2 - twists[i])
-        #     @show twists[i]
-        #     @show Cab_local
-        # end
-
-        pe[idx+1:idx+3] = Cab_local[1,:] # Store e1
-        pe[idx+4:idx+6] = Cab_local[2,:] # Store e2
-        pe[idx+7:idx+9] = Cab_local[3,:] # Store e3
+        p[idx+1:idx+3] = Cab[1,:] # Store e1 #Todo: I can probably remove this since I'm always going to assume that the blade is extending in the X direction. Which means my solver wouldn't need to create the Cab. 
+        p[idx+4:idx+6] = Cab[2,:] # Store e2
+        p[idx+7:idx+9] = Cab[3,:] # Store e3
 
         ## Create compliance matrix elements 
         # cross section
@@ -430,44 +372,19 @@ function create_simplebeam(radii, chords, twists, rhub, rtip, thicknesses; densi
         Iy = h*(w^3)/12
         Izy = 0.0
 
-        # if i==1
-        #     println("Inside CreateSimpleBeam")
-        #     @show Iz, Iy
-        # end
-
-        Izz, Iyy, Izy = rotate_smoa(Iz, Iy, Izy, twists[i]) #Todo: Izy might be non-zero now.... I wonder if that'll play with the compliance matrix. 
-
-        # Izz = Iz
-        # Iyy = Iy
-        # if i==1
-        #     @show Izz, Iyy, Izy
-        # end
+        Izz, Iyy, Izy = rotate_smoa(Iz, Iy, Izy, twists[i]) 
 
         J = Iyy + Izz #Second polar moment of area about axis through centroid
-
-        # apply corrections
-        # Ay = A/ky
-        # Ax = A/kz
-        # Jx = J/kt
-
         G = E/(2*(1+nu)) ##Todo. Is this to correct relationship? -> For an isotropic material, yes. 
-
-        #= 
-            - Why does he have the area moment of inertia in the compliance matrix? Should I have that? -> Yes, he uses the integrated unit length compliance matrix, so yes, it has the area moment of inertia in the bottom.
-
-            - What about the other terms. I did just the main diagonal here. That's fairly problematic. -> Added entries for an isotripic material. The isotropic compliance matrix looks like the orthotropic compliance matrix. But simpler. -> Yes, but this is the integrated unit length compliance matrix, so it won't look like the compliance matrix that I was previously looking at. It will in fact be just the main diagonal. 
-
-            - Who determines what axis these mass moment of inertia should be. For instance, if I'm extending in the z direction, then should I have Iyy and Ixx? I'm going to guess so. -> NO. So, GXBeam assumes that your beam extends in the x direction. So all properties here should be Y and Z properties. 
-        =#
 
 
         ### Trying Taylor's isotropic version
-        pe[idx + 10] = 1/(E*A) #c11 
-        pe[idx + 16] = 1/(G*A) #c22
-        pe[idx + 21] = 1/(G*A) #c33
-        pe[idx + 25] = (1)/(G*J) #c44 
-        pe[idx + 28] = (1)/(E*Iyy) #c55 
-        pe[idx + 30] = (1)/(E*Izz) #c66 
+        p[idx + 10] = 1/(E*A) #c11 
+        p[idx + 16] = 1/(G*A) #c22
+        p[idx + 21] = 1/(G*A) #c33
+        p[idx + 25] = (1)/(G*J) #c44 
+        p[idx + 28] = (1)/(E*Iyy) #c55 
+        p[idx + 30] = (1)/(E*Izz) #c66 
 
         
 
@@ -475,18 +392,15 @@ function create_simplebeam(radii, chords, twists, rhub, rtip, thicknesses; densi
         xm3 = 0.0
 
         ## Create mass matrix elements
-        pe[idx + 31] = density*A # mu (distributed weight) #Todo. This is going to be in kilograms, not Newtons. Should this be in Newtons? -> No, this should be kg/m, so mass per length. This will be used to calculated accelerations based on forces. 
-        pe[idx + 32] = xm2 #xm2 distance to center of mass 
-        pe[idx + 33] = xm3 #xm3 distance to center of mass
-        pe[idx + 34] = density*Iyy #i22 # Mass moment of inertia #For an isotropic beam, the unit mass moment of inertia is equal to the density times the second moment of area. 
-        pe[idx + 35] = density*Izz #i33
-        pe[idx + 36] = density*Izy #i23 #Todo. This says i23. Should it be J, or should it be Izy? He says on the getting started page that it should be the product of inertia. 
+        p[idx + 31] = density*A # mu (distributed weight) #Todo. This is going to be in kilograms, not Newtons. Should this be in Newtons? -> No, this should be kg/m, so mass pr length. This will be used to calculated accelerations based on forces. 
+        p[idx + 32] = xm2 #xm2 distance to center of mass #Todo: This might need to be updated since the element nodes are not neccisarily equally set between the poionts. 
+        p[idx + 33] = xm3 #xm3 distance to center of mass
+        p[idx + 34] = density*Iyy #i22 # Mass moment of inertia #For an isotropic beam, the unit mass moment of inertia is equal to the density times the second moment of area. 
+        p[idx + 35] = density*Izz #i33
+        p[idx + 36] = density*Izy #i23 
     end
-
-    ### Create p
-    p = vcat(pp, pe)
-
-    return N, p
+ 
+    return p, points, elements
 end
 
 function convert_assemblystate(state, assembly;include_extra_states=false) #Convert a the assembly state of a beam with a fixed end into a vector of states. 
@@ -607,8 +521,8 @@ end
 
 function initialize_gxbeam2(gxmodel, p, distributedload) #Todo: Need to add kwargs that go to GXBeam's initalize function so that I can have the same initial conditions. 
 
-    start = 1:gxmodel.n
-    stop = 2:gxmodel.n+1
+    start = 1:gxmodel.ne
+    stop = 2:gxmodel.np
 
     assembly = create_gxbeam_assembly(gxmodel, p, start, stop)
     elements = view(assembly.elements, :)
@@ -639,7 +553,7 @@ function initialize_gxbeam2(gxmodel, p, distributedload) #Todo: Need to add kwar
     f = distributedload(0.0)
 
     distributed_loads = Dict()
-    for ielem in 1:gxmodel.n
+    for ielem in 1:gxmodel.ne
         f1_follower = f2_follower = elements[ielem].L*f/2
         m1_follower = m2_follower = elements[ielem].L*m/2
         distributed_loads[ielem] = GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)

@@ -4,6 +4,7 @@ include("../../src/blades.jl")
 include("../../src/environments.jl")
 include("../../src/gxbeam.jl")
 include("../../src/static.jl")
+include("../../src/extra.jl")
 
 function getfieldnames(x)
     return fieldnames(typeof(x))
@@ -51,10 +52,10 @@ twistvec = ones(length(rvec)).*twist
 thickvec = ones(length(rvec)).*h
 
 ## Create parameters
-n, p = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
+p, xp, xe = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
 ## Create models
-gxmodel = gxbeam(n)
+gxmodel = gxbeam(xp, xe)
 env = environment(0.0, 0.0, 0.0, 0.0, omega, 0.0, 0.0) #I'm not using any of these inputs in this test. 
 
 ## Create distributed load
@@ -195,7 +196,7 @@ fun(fakeouts, dx0, xgxs, p, sol.t[tidx_me]) #using the scaled states is much bet
 ######## Test if any of my states produce a zero residual
 tvec = 0:0.01:tspan[2]
 xme = Array(sol(tvec))'
-# dxme = derivative(sol, tvec)
+dxme = derivative_me(sol, tvec)
 
 fakeouts2 = zero(x0)
 
