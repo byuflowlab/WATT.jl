@@ -6,7 +6,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
 
     ### Seperate the parameters and read in any pertainent data
-    n = gxmodel.n
+    n = gxmodel.ne
     pa = view(p, 1:(7*n))
     ps = view(p, (7*n+1):length(p))
 
@@ -26,7 +26,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     radii_idx = 1:7:(7*n)
     chord_idx = 2:7:(7*n)
     twist_idx = 3:7:(7*n)
-    rvec = view(pa, radii_idx) #Todo: This isn't what I want. Currently the BEM node and the GXBeam node aren't co-located. 
+    rvec = view(pa, radii_idx)  
     chordvec = view(pa, chord_idx)
     twistvec = view(pa, twist_idx)
 
@@ -86,9 +86,10 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     ##### Run initial solution
     ### Run CCBlade
     outs = CCBlade.solve.(Ref(rotor), sections, operatingpoints) 
+    outshistory = [outs]
 
     ### Extract CCBlade Loads
-    Fz = -outs.Np #Todo: I need to interpolate the loads onto the GXBeam nodes. 
+    Fz = -outs.Np  
     Fy = outs.Tp
 
     ### Create distributed_load
@@ -105,14 +106,16 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_load, linear = false, angular_velocity = Omega, gravity=grav)
 
     state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
+    history = [state]
+    syshistory = [system]
 
     ### Obtain the deflections
-    def_x = [state.elements[ielem].u[1] for ielem = 1:n]
-    def_y = [state.elements[ielem].u[2] for ielem = 1:n]
-    def_z = [state.elements[ielem].u[3] for ielem = 1:n]
-    def_thetax = [state.elements[ielem].theta[1] for ielem = 1:n]
+    def_x = [history[1].elements[ielem].u[1] for ielem = 1:n]
+    def_y = [history[1].elements[ielem].u[2] for ielem = 1:n]
+    def_z = [history[1].elements[ielem].u[3] for ielem = 1:n]
+    def_thetax = [history[1].elements[ielem].theta[1] for ielem = 1:n]
     Vx = [env.U(t) for ielem = 1:n]
-    Vy = [-state.elements[ielem].V[2] for ielem = 1:n]
+    Vy = [-history[1].elements[ielem].V[2] for ielem = 1:n]
 
 
     ### Store old solution 
@@ -140,9 +143,9 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
         ### Iterate through the aerodynamic stations and solve
         ## Create Section
-        r_displaced = rvec .+ def_x #Todo: Why is there deflection in the positive x? #Todo: The rvec location and the gxbeam location are not the same. 
+        r_displaced = rvec #.+ def_x #Todo: Why is there deflection in the positive x? #I'm not including the displacement in the r direction, because that'll mess with the tip and hub corrections. -> 
         twist_displaced = twistvec .- def_thetax
-        sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils) #Todo: Try adding the velocities. 
+        sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils)  
 
         ## Create Operating Point
         # ops = CCBlade.windturbine_op.(U, env.Omega(t), pitch, r_displaced, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
@@ -158,6 +161,8 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         Fz_new .= -outs.Np
         Fy_new .= outs.Tp
 
+        outshistory[1] = outs
+
         # @show Fz_new
 
         ### Solve GXBeam
@@ -168,19 +173,19 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         end
 
         ## Run GXBeam
-        system, converged = steady_state_analysis!(system, assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_load, linear = false, angular_velocity = Omega, gravity=grav)
+        syshistory[1], converged = steady_state_analysis!(system, assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_load, linear = false, angular_velocity = Omega, gravity=grav)
 
-        state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
+        history[1] = AssemblyState(syshistory[1], assembly; prescribed_conditions = prescribed_conditions)
 
         ## Obtain the deflections
-        def_x .= [state.elements[ielem].u[1] for ielem = 1:n]
-        def_y .= [state.elements[ielem].u[2] for ielem = 1:n]
-        def_z .= [state.elements[ielem].u[3] for ielem = 1:n]
-        def_thetax .= [state.elements[ielem].theta[1] for ielem = 1:n]
+        def_x .= [history[1].elements[ielem].u[1] for ielem = 1:n]
+        def_y .= [history[1].elements[ielem].u[2] for ielem = 1:n]
+        def_z .= [history[1].elements[ielem].u[3] for ielem = 1:n]
+        def_thetax .= [history[1].elements[ielem].theta[1] for ielem = 1:n]
 
         ## Update the velocities
         for i = 1:n
-            V_elem = state.elements[i].V # Element linear velocity
+            V_elem = history[1].elements[i].V # Element linear velocity
             Vx[i] = env.U(t) + V_elem[3] #Freestream velocity  
             Vy[i] = - V_elem[2]
         end
@@ -225,6 +230,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
         if def_flag*y_flag*z_flag
             converged_flag = true
+            break
         end
 
         if iter>=maxiterations
@@ -240,7 +246,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     end
     # iter -= 1
 
-    return outs, state, system, assembly, prescribed_conditions, converged, iter, resids[1:iter,:] #Todo: Is the state and system that are getting passed out the state and system that were most recently calculated... or the one before the loop. I'm guessing it's the one before the loop. ... but then how/why does my dynamic solution look like it is converging to the fixed-point solution? 
+    return outshistory[1], history[1], syshistory[1], assembly, prescribed_conditions, converged, iter, resids[1:iter,:] #Todo. Is the state and system that are getting passed out the state and system that were most recently calculated... or the one before the loop. I'm guessing it's the one before the loop. ... but then how/why does my dynamic solution look like it is converging to the fixed-point solution? -> I know that it's passing out the correct solution now. I don't think it was doing it incorrectly in the first place. 
 end
 
 

@@ -217,7 +217,7 @@ function create_bemgxbeamfun(radiusvec, chordvec, twistvec, rhub, rtip, bem::BEM
 
 end
 
-function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Environment; b=0.01, g=9.817, damping=false)
+function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Environment; b=0.01, g=9.817)
         ### BEM preamble 
         n = length(blade.airfoils)
     
@@ -308,8 +308,7 @@ function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Enviro
                 # dtheta_elem = SVector(dxss[3], dxss[4], dxss[5])
     
                 # Linear velocity
-                V_elem = SVector(xss[13], xss[14], xss[15]) #Todo: Should this be scaled at all? 
-                # @show V_elem
+                V_elem = SVector(xss[13], xss[14], xss[15])
                 # dV_elem = SVector(dxss[12], dxss[13], dxss[14])
     
                 # angular velocity
@@ -334,8 +333,8 @@ function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Enviro
                 # end
     
                 # Find velocities in BEM frame
-                Vx = env.U(t) + V_elem[3] #Freestream velocity #TODO: I could include the system velocity in the structural frame, but.... I don't think it would accomplish what I want. 
-                Vy = - V_elem[2] #Includes the angular velocity*radius, and all the displacements.
+                Vx = env.U(t) #+ V_elem[3] #Freestream velocity #TODO: I could include the system velocity in the structural frame, but.... I don't think it would accomplish what I want. 
+                Vy = env.Omega(t)*radius #- V_elem[2] #Includes the angular velocity*radius, and all the displacements.
     
                 # ulocal = sqrt(Vx^2 + Vy^2)
     
@@ -343,8 +342,9 @@ function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Enviro
                 airfoils[i] = CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3], "", 0.0, 0.0)
             
                 ### Create section object
-                twist_displaced = twist - theta_elem[1]
-                sections[i] = CCBlade.Section(radius, chord, twist_displaced, airfoils[i])
+                radius_displaced = radius #+ delta_elem[1]
+                twist_displaced = twist #- theta_elem[1]
+                sections[i] = CCBlade.Section(radius_displaced, chord, twist_displaced, airfoils[i])
     
                 # @show -Omega_elem[3] #This is positive like I want. 
     
@@ -387,14 +387,7 @@ function create_explicitbemgxfun(rhub, rtip, bem::BEM, blade::Blade, env::Enviro
     
                 # @show typeof(b)
                 # Calculate the damping force
-                if damping #Todo: How do I get the velocity of relative motion? (Not including the velocity from the blade moving through the environment) -> I think that the only velocity that should be affected by environmental variables would be the Y velocity. 
-                    radius_displaced = radius + delta_elem[1] #Get the displaced radius so that I can extract the relative velocity from the system velocity. 
-                    Vrel = SVector(V_elem[1], V_elem[2] + env.Omega(t)*radius_displaced, V_elem[3]) #TODO: There is a lot of radial velocity of the outer elements. Is this from the blade flipping around? Or is this actual radial displacement? 
-                    # @show Vrel
-                    f_follower = SVector(-b*Vrel[1]/elements[i].L, -b*Vrel[2]/elements[i].L, -b*Vrel[3]/elements[i].L) #Fd = -b.*ue
-                else
-                    f_follower = SVector(0.0, 0.0, 0.0)
-                end
+                f_follower = SVector(-b*V_elem[1]/elements[i].L, -b*V_elem[2]/elements[i].L, -b*V_elem[3]/elements[i].L) #Fd = -b.*ue
     
                 # @show typeof(f) typeof(m)
                 # @show typeof(f_follower) typeof(m_follower)

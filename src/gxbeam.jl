@@ -180,6 +180,11 @@ function get_element_velocity(states, ielem; allstates=false) #TODO: Apply multi
     return states[idx+13:idx+15]
 end
 
+
+
+
+
+
 function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Function; g = 9.817, damping=true, b=0.01)
 
     ### Create prescribed conditions
@@ -219,9 +224,12 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
         if damping
             ## Write a function that gets the element velocities. 
             ue = get_element_velocity(x, 1)
+            displaced_x = 0.0 #assembly.elements[1].x[1] + 0.0
+            Vrel = SVector(ue[1], ue[2] + env.Omega(t)*displaced_x, ue[3])
 
-            ## Calculate the damping force
-            Fd = -b.*ue
+            ## Calculate the damping force #Todo: I think this might not work if the velocity also contains any environmental velocity. 
+            #Todo: Does GXBeam account for centripedal force? -> The code looks like it does.... actually, it looks like it only accounts for loads due to acceleration. Does that mean that the acceleration accounts for angular velocity? 
+            Fd = -b.*Vrel
 
             ## Apply the damping force
             f1_follower += Fd./elements[1].L
@@ -236,6 +244,11 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
             if damping
                 ## Write a function that gets the element velocities. 
                 ue = get_element_velocity(x, ielem)
+                # @show ue
+
+                if ielem==gxmodel.ne
+                    # @show ue
+                end
 
                 ## Calculate the damping force
                 Fd = -b.*ue
@@ -252,9 +265,9 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
         ### System velocities and accelerations
         x0 = @SVector zeros(3) # create the origin
         v0 = @SVector zeros(3) #System linear velocity 
-        omega0 = SVector(0.0, 0.0, env.Omega(t)) #System angular velocity 
+        omega0 = SVector(0.0, 0.0, -env.Omega(t)) #System angular velocity 
         a0 = @SVector zeros(3) #System linear acceleration 
-        alpha0 = SVector(0.0, 0.0, env.Omegadot(t)) #System angular acceleration 
+        alpha0 = SVector(0.0, 0.0, -env.Omegadot(t)) #System angular acceleration 
 
         ### Create gravity vector 
         alpha = pi/2 - env.Omega(t)*t #Assuming the blade starts horizontal.  

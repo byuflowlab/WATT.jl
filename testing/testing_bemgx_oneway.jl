@@ -8,7 +8,7 @@ include("../src/riso.jl")
 include("../src/bem-riso.jl")
 include("../src/gxbeam.jl")
 include("../src/static.jl")
-include("../src/bem-gxbeam.jl")
+include("../src/bemgx_oneway.jl")
 
 
 function nearestto(xvec, x)
@@ -127,7 +127,7 @@ p = vcat(p_a, p_s)
 diffvars = vcat(dvb, dvs)
 
 fun = create_bemgxbeamfun(rvec, chordvec, twistvec, rhub, rtip, bemmodel, blade, env)
-fun2 = create_explicitbemgxfun(rhub, rtip, bemmodel, blade, env; damping=true)
+fun2 = create_explicitbemgxfun(rhub, rtip, bemmodel, blade, env)
 
 
 #### Initialize states 
@@ -233,6 +233,8 @@ x_me = [assembly.points[ipoint][1] + history[tidx_me].points[ipoint].u[1] for ip
 
 deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
+tipdef = [history[it].points[end].u[2] for it = 1:length(sol.t)]
+
 
 ### Plot
 # plt = plot(leg=:topleft, xaxis="Beam length (m)", yaxis="Beam Position (m)")
@@ -240,9 +242,15 @@ deflection_me = [history[tidx_me].points[ipoint].u[2] for ipoint = 1:length(asse
 # display(plt)
 
 
+### Plot the tip across time
+tplt = plot(leg=false, xaxis="Time (s)", yaxis="Tip Deflection (m)")
+plot!(sol.t, tipdef)
+display(tplt)
+
+
 
 # ################ Animate
-# println("Beginning Animation. ")
+println("Beginning Animation. ")
 # numframes = length(sol.t)
 # tvec = range(tspan[1], tspan[2], length=numframes)
 # solt = sol(tvec)
@@ -281,7 +289,7 @@ outs_fp, state_fp, system_fp, _, _, _, _, _ = fixedpoint(bemmodel, gxmodel, env,
 
 
 ## Animate
-x_elem = [assembly.elements[ielem].x[1] for ielem = 1:length(assembly.elements)]
+# x_elem = [assembly.elements[ielem].x[1] for ielem = 1:length(assembly.elements)]
 
 anim = @animate for i in 1:length(sol.t)
     
@@ -293,7 +301,7 @@ anim = @animate for i in 1:length(sol.t)
 
     plot(plt1, plt2, layout=(2,1))
 end
-gif(anim, "dynamicbeamloads_wdamping_3.0s.gif", fps=15)
+gif(anim, "dynamicbeamloaåds_oneway_3.0s.gif", fps=15)
 
 
 #### Visualize the deflections through Paraview

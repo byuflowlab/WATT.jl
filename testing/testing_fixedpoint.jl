@@ -105,10 +105,12 @@ bemmodel = bem(;shearexp=shearexp)
 
 
 env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
-gxmodel = gxbeam(n)
 
+## Create parameters
+p_s, xp, xe = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
-_, p_s = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
+## Create models
+gxmodel = gxbeam(xp, xe)
 
 p = vcat(p_a, p_s)
 
@@ -128,7 +130,7 @@ def_z = [state.elements[ielem].u[3] for ielem = 1:n]
 x = [assembly.elements[ielem].x[1] + state.elements[ielem].u[1] for ielem = 1:n]
 
 
-
+x_assembly = [assembly.elements[ielem].x[1] for ielem = 1:n]
 
 
 ### Run CCBlade by itself
@@ -147,7 +149,7 @@ outs_ccblade = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 
 
 
-
+### Visualize the loads. 
 defplt = plot(xaxis="Radial Location (m)", yaxis="Element Deflection (m)", legend=:topleft)
 plot!(x, def_x, lab="X deflection")
 plot!(x, def_y, lab="Y deflection")
@@ -157,6 +159,8 @@ display(defplt)
 loadsplt = plot(xaxis = "Radial Location (m)", yaxis = "Element Load (N)", legend=:topleft)
 plot!(x, outs.Np, lab="Flapwise")
 plot!(x, outs.Tp, lab="Lead-Lag")
+plot!(rvec, outs_ccblade.Np, lab="Flapwise - CCBlade") #-> It looks like most of the convergence occurs in the GXBeam solution. The max difference between the initial CCBlade solution and the fixed point iteration is like .16 N... which is tiny. 
+plot!(rvec, outs_ccblade.Tp, lab="Lead-Lag - CCBlade")
 display(loadsplt)
 
 nothing

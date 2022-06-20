@@ -1,14 +1,14 @@
 using Plots, GXBeam, StaticArrays, LinearAlgebra, CCBlade, FLOWMath, CurveFit, BenchmarkTools, DifferentialEquations
 
 
-include("../../src/blades.jl")
-include("../../src/environments.jl")
-include("../../src/bem.jl")
+include("../src/blades.jl")
+include("../src/environments.jl")
+include("../src/bem.jl")
 # include("../src/riso.jl")
 # include("../src/bem-riso.jl")
-include("../../src/gxbeam.jl")
+include("../src/gxbeam.jl")
 # include("../src/aerostructural.jl")
-include("../../src/static.jl")
+include("../src/static.jl")
 
 
 
@@ -106,10 +106,12 @@ bemmodel = bem(;shearexp=shearexp)
 
 
 env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
-gxmodel = gxbeam(n)
 
+## Create parameters
+p_s, xp, xe = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
-_, p_s = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
+## Create models
+gxmodel = gxbeam(xp, xe)
 
 p = vcat(p_a, p_s)
 
@@ -121,7 +123,7 @@ outs, state, system, assembly, prescribed_conditions, converged, iters, resids =
 
 
 ### Pull out GXBeam states
-xs_gxbeam = convert_assemblystate(state)
+xs_gxbeam = convert_assemblystate(state, assembly)
 
 dsl = function(t)
     return SVector(0.0, 0.0, 0.0)
@@ -139,4 +141,10 @@ fun(fakeouts, dxs_gxbeam, xs_gxbeam, p_s, 0.0)
 
 
 @show fakeouts
+
+
+
+
+
+
 nothing

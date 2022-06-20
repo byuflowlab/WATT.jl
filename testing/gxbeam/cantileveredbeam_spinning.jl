@@ -8,7 +8,7 @@ function getfieldnames(x)
     return fieldnames(typeof(x))
 end
 
-#= Test whether or not my wrapper can create a beam and solve a simple spinning beam case, with twist.
+#= Test whether or not my wrapper can create a beam and solve a simple spinning beam case, with twist. #Todo: There is something broken on this file that the current solution is super crazy. 
 
 Cantilevered beam with a constant distributed load, a constant cross sectional distribution, and a constant twist.... the only difference from the last test is that this includes an angular velocity. 
 =#
@@ -52,7 +52,7 @@ p, xp, xe = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
 
 ## Create models
 gxmodel = gxbeam(xp, xe)
-env = environment(0.0, 0.0, 0.0, 0.0, omega, 0.0, 0.0) #I'm not using any of these inputs in this test. 
+env = environment(0.0, 0.0, 0.0, 0.0, omega, 0.0, 0.0) 
 
 ## Create distributed load
 function dsl(t) 
