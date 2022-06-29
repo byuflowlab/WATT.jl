@@ -50,6 +50,6 @@ gxmodel = gxbeam(xp, xe)
 assembly = create_gxbeam_assembly(gxmodel, p)
 
 plt = plotassembly(assembly)
-# display(plt)
+display(plt)
 
 nothing

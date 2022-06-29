@@ -49,21 +49,21 @@ function dsl(t)
 end
 
 ## Create gxbeam function. 
-fun = create_gxbeamfun(gxmodel, env, dsl; g=0.0, damping=false, b=0.0)
-diffvars = differentialvars(gxmodel) 
+# fun = create_gxbeamfun(gxmodel, env, dsl; g=0.0, damping=false)
+# diffvars = differentialvars(gxmodel) 
 
 
 ## Initialize
 # x0 = initialize_gxbeam2(gxmodel, p, dsl)  
 
-ns = 18*gxmodel.ne + 12
-x0 = zeros(ns) #It appears that gxbeam's DAE starts from zeros. 
-dx0 = zeros(ns) 
+# ns = 18*gxmodel.ne + 12
+# x0 = zeros(ns) #It appears that gxbeam's DAE starts from zeros. 
+# dx0 = zeros(ns) 
 
-probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
+# probdae = DifferentialEquations.DAEProblem(fun, dx0, x0, tspan, p, differential_vars=diffvars)
 
-## Solve
-sol_me = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01, reltol=1e-10) 
+# ## Solve
+# sol_me = DifferentialEquations.solve(probdae, DABDF2(), force_dtmin=true, dtmin=0.01, reltol=1e-10) 
 
 
 
@@ -97,17 +97,20 @@ deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 ### Test GXBeam DAE formulation
 ## run initial condition analysis to get consistent set of initial conditions
-system2, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescribed_conditions, distributed_loads)
+gxdaesystem, converged = GXBeam.initial_condition_analysis(assembly, tspan[1]; prescribed_conditions=prescribed_conditions, distributed_loads=distributed_loads)
+
+pgxdae = (; prescribed_conditions=prescribed_conditions, distributed_loads=distributed_loads)
 
 ## construct a DAEProblem 
-prob = GXBeam.DAEProblem(system2, assembly, tspan; prescribed_conditions, distributed_loads) 
+gxdae_prob = GXBeam.DAEProblem(gxdaesystem, assembly, tspan, pgxdae)
+
 
 ## solve DAEProblem
-sol_gxbeam = DifferentialEquations.solve(prob, DABDF2(), force_dtmin=true, dtmin=0.01) #It bottoms out and hits dtmin... 
+sol_gxbeam = DifferentialEquations.solve(gxdae_prob, DABDF2(), force_dtmin=true, dtmin=0.01) #Currently taking 18.78 seconds to run for a 8 second simulation... not bueno. 
 
 
 
-history = [AssemblyState(system2, assembly, sol_gxbeam[it]; prescribed_conditions) for it in eachindex(sol_gxbeam)]
+history = [AssemblyState(gxdaesystem, assembly, sol_gxbeam[it]; prescribed_conditions) for it in eachindex(sol_gxbeam)]
 
 nt = length(sol_gxbeam.t)
 tback = 360
@@ -130,15 +133,15 @@ display(tplt)
 
 
 
-### Post Process my data
-history_me = [AssemblyState(system2, assembly, sol_me[it]; prescribed_conditions) for it in eachindex(sol_me)]
+# ### Post Process my data
+# history_me = [AssemblyState(system2, assembly, sol_me[it]; prescribed_conditions) for it in eachindex(sol_me)]
 
-nt_me = length(sol_me.t)
-tidx_me = nt_me - tback
+# nt_me = length(sol_me.t)
+# tidx_me = nt_me - tback
 
-x_me = [assembly.points[ipoint][1] + history_me[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+# x_me = [assembly.points[ipoint][1] + history_me[tidx_me].points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
-deflection_me = [history_me[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+# deflection_me = [history_me[tidx_me].points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
 
 
@@ -164,6 +167,6 @@ yvec = yfun.(xvec)
 plt = plot(leg=:bottomleft, xaxis="Beam length (m)", yaxis="Beam Position (m)")
 plot!(xvec, yvec, lab="Theory", markershape=:cross)
 scatter!(x, deflection, lab="GXBeam")
-scatter!(xd, deflectiond, lab="Differential Equations") 
-scatter!(x_me, deflection_me, lab="Current", markershape=:x, markersize=8)
+# scatter!(xd, deflectiond, lab="Differential Equations") 
+# scatter!(x_me, deflection_me, lab="Current", markershape=:x, markersize=8)
 display(plt)

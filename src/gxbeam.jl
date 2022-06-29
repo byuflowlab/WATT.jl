@@ -136,16 +136,17 @@ function create_gxbeam_element(p, points, elements, start, stop)
             0       0     mu   mu*xm2     0      0;
             0  -mu*xm3 mu*xm2 i22+i33     0      0;
          mu*xm3      0     0       0   i22   -i23;
-        -mu*xm2      0     0       0  -i23    i33;
-    ]
-    # element triad
+        -mu*xm2      0     0       0  -i23    i33]
+
+    # element triad #Todo: I can probably get rid of the e inputs and just make this a diagonal of 1. 
     Cab = @SMatrix [
         e1x e2x e3x;
         e1y e2y e3y;
-        e1z e2z e3z;
-    ]
+        e1z e2z e3z]
+
+    mu = SVector(0.01, 0.01, 0.01, 0.01, 0.01, 0.01)
     
-    return GXBeam.Element(DeltaL, x, C, mass, Cab)
+    return GXBeam.Element(DeltaL, x, C, mass, Cab, mu)
     end
 
 function create_gxbeam_assembly(gxmodel::gxbeam, p, start, stop)
@@ -185,7 +186,7 @@ end
 
 
 
-function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Function; g = 9.817, damping=true, b=0.01)
+function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Function; g = 9.817, damping=true) # b=0.01)
 
     ### Create prescribed conditions
     prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed 
@@ -198,7 +199,11 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
     ### Create GXBeam pass ins.
     start = 1:gxmodel.ne
     stop = 2:gxmodel.np
-    N, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem = GXBeam.system_indices(start, stop, false; prescribed_points=1:1) 
+    # N, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem = GXBeam.system_indices(start, stop, false; prescribed_points=1:1) 
+    # Todo: It looks like he may have changed the state variables. 
+    # Todo: I wonder if he changed the order as well. :| 
+
+    indices = GXBeam.SystemIndices(start, stop; static=false)
 
 
     gxbeamfun! = function(outs, dx, x, p, t) 
@@ -221,42 +226,42 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
         
         f1 = f2 = elements[1].L*f/2 
         m1 = m2 = elements[1].L*m/2
-        if damping
-            ## Write a function that gets the element velocities. 
-            ue = get_element_velocity(x, 1)
-            displaced_x = 0.0 #assembly.elements[1].x[1] + 0.0
-            Vrel = SVector(ue[1], ue[2] + env.Omega(t)*displaced_x, ue[3])
+        # if damping
+        #     ## Write a function that gets the element velocities. 
+        #     ue = get_element_velocity(x, 1)
+        #     displaced_x = 0.0 #assembly.elements[1].x[1] + 0.0
+        #     Vrel = SVector(ue[1], ue[2] + env.Omega(t)*displaced_x, ue[3])
 
-            ## Calculate the damping force #Todo: I think this might not work if the velocity also contains any environmental velocity. 
-            #Todo: Does GXBeam account for centripedal force? -> The code looks like it does.... actually, it looks like it only accounts for loads due to acceleration. Does that mean that the acceleration accounts for angular velocity? 
-            Fd = -b.*Vrel
+        #     ## Calculate the damping force #Todo: I think this might not work if the velocity also contains any environmental velocity. 
+        #     #Todo: Does GXBeam account for centripedal force? -> The code looks like it does.... actually, it looks like it only accounts for loads due to acceleration. Does that mean that the acceleration accounts for angular velocity? 
+        #     Fd = -b.*Vrel
 
-            ## Apply the damping force
-            f1_follower += Fd./elements[1].L
-            f2_follower += Fd./elements[1].L
-        end
+        #     ## Apply the damping force
+        #     f1_follower += Fd./elements[1].L
+        #     f2_follower += Fd./elements[1].L
+        # end
         distributed_loads = Dict(1 => GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)) #0.000007 seconds (6 allocations: 3.922 KiB)
         # distributed_loads = Dict() #0.000002 seconds (4 allocations: 608 bytes)
 
         for ielem in 2:gxmodel.ne #0.000007 seconds (50 allocations: 4.844 KiB)... 0.000004 seconds (36 allocations: 2.531 KiB)
             f1 = f2 = elements[ielem].L*f/2 #TODO: Why am I multiplying by the length of the element? Isn't the force integrated? 
             m1 = m2 = elements[ielem].L*m/2
-            if damping
-                ## Write a function that gets the element velocities. 
-                ue = get_element_velocity(x, ielem)
-                # @show ue
+            # if damping
+            #     ## Write a function that gets the element velocities. 
+            #     ue = get_element_velocity(x, ielem)
+            #     # @show ue
 
-                if ielem==gxmodel.ne
-                    # @show ue
-                end
+            #     if ielem==gxmodel.ne
+            #         # @show ue
+            #     end
 
-                ## Calculate the damping force
-                Fd = -b.*ue
+            #     ## Calculate the damping force
+            #     Fd = -b.*ue
 
-                ## Apply the damping force
-                f1_follower += Fd./elements[ielem].L
-                f2_follower += Fd./elements[ielem].L
-            end
+            #     ## Apply the damping force
+            #     f1_follower += Fd./elements[ielem].L
+            #     f2_follower += Fd./elements[ielem].L
+            # end
 
             distributed_loads[ielem] = GXBeam.DistributedLoads(f1, f2, m1, m2, f1_follower, f2_follower, m1_follower, m2_follower)
         end
@@ -278,7 +283,15 @@ function create_gxbeamfun(gxmodel::gxbeam, env::Environment, distributedload::Fu
 
         force_scaling = GXBeam.default_force_scaling(assembly) 
 
-        GXBeam.dynamic_system_residual!(outs, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec, force_scaling, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem, x0, v0, omega0, a0, alpha0) # 0.000020 seconds (17 allocations: 5.266 KiB)
+        # GXBeam.dynamic_system_residual!(outs, dx, x, assembly, prescribed_conditions, distributed_loads, point_masses, gvec, force_scaling, irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem, x0, v0, omega0, a0, alpha0) # 0.000020 seconds (17 allocations: 5.266 KiB)
+
+        #Todo: What is indices? -> A new object holding all of the values below.
+        #irow_point, irow_elem, irow_elem1, irow_elem2, icol_point, icol_elem ????
+
+        GXBeam.dynamic_system_residual!(outs, dx, x, indices, force_scaling, damping, assembly, prescribed_conditions, distributed_loads, point_masses, gvec, x0, v0, omega0, a0, alpha0)
+        
+        
+         
         
         return outs
     end
