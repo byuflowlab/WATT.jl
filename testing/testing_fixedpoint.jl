@@ -99,12 +99,12 @@ for i = 0:n-1
 
 end
 
-blade = Blade(afs)
+blade = Blade(rhub, rtip, rvec, afs)
 
-bemmodel = bem(;shearexp=shearexp)
+bemmodel = createbem(;shearexp=shearexp)
 
 
-env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
+env = environment(rho, mu, a, vinf, omega)
 
 ## Create parameters
 p_s, xp, xe = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
@@ -139,7 +139,7 @@ rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=bemmodel.turbine)
 sections = CCBlade.Section.(rvec, chordvec, twistvec, airfoils)
 
 ### Create Operating Point
-operatingpoints = CCBlade.windturbine_op.(env.U(0.0), env.Omega(0.0), pitch, rvec, 0.0, 0.0, 0.0, 0.0, hubht, bemmodel.shearexp, env.rho)
+operatingpoints = CCBlade.windturbine_op.(env.Vinf(0.0), env.RS(0.0), pitch, rvec, 0.0, 0.0, 0.0, 0.0, hubht, bemmodel.shearexp, env.rho)
 
 outs_ccblade = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 

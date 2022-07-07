@@ -131,6 +131,7 @@ function riso_states(X, u, udot, v, vdot, theta, thetadot, c, airfoil)
     # println(typeof(X[1]))
     # @show U, Tu, c
     # @show X[1]
+    # @show Tp
     
     ### Calculate the state rates
     dx1 = (b1*A1*alpha/Tu) - X[1]*(b1+ (c*Udot/(2*(U)^2)))/Tu 
@@ -138,6 +139,7 @@ function riso_states(X, u, udot, v, vdot, theta, thetadot, c, airfoil)
     dx2 = (b2*A2*alpha/Tu) - X[2]*(b2+ (c*Udot/(2*(U)^2)))/Tu
 
     ae = alpha*(1-A1-A2) + X[1] + X[2] #Effective Angle of Attack
+    # @show dcldalpha, ae, alpha0, Tu, alphadot, Tp, X[3]
     dx3 = (dcldalpha*(ae-alpha0) + pi*Tu*alphadot)/Tp - X[3]/Tp
 
     alphaf = (X[3]/dcldalpha)+alpha0 #Seperation Angle of Attack
@@ -339,3 +341,5 @@ function riso_coefs_funs(X, U, c, alphadot, airfoil)
     end
     return clfun, cdfun
 end
+
+

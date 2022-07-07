@@ -4,7 +4,7 @@ struct BEM{TF, TB}
     tipcorrection::TB #Include tip corrections
 end
 
-function bem(;shearexp=0.0, turbine=true, tipcorrection=true)
+function createbem(;shearexp=0.0, turbine=true, tipcorrection=true)
     return BEM(shearexp, turbine, tipcorrection)
 end
 

@@ -1,4 +1,9 @@
-struct Blade #TODO: Do I want structural information in this? Or a different struct? or any struct at all. 
+import CCBlade.afeval
+
+struct Blade{TF} #TODO: Do I want structural information in this? Or a different struct? or any struct at all. 
+    rhub::TF
+    rtip::TF
+    rR::Array{TF,1}
     airfoils
 end
 
@@ -13,6 +18,15 @@ struct Airfoil{TF, Tfit}
     b::Array{TF,1}
     T::Array{TF,1}
 end
+
+function (af::Airfoil)(alpha, Re, Mach)
+    return af.cl(alpha), af.cd(alpha)
+end
+
+function afeval(af::Airfoil, alpha, Re, Mach)
+    return af(alpha, Re, Mach)
+end
+
 
 function simpleairfoil(polar)
     cl = Akima(polar[:,1], polar[:,2])
@@ -44,7 +58,10 @@ function complexairfoil(polar; A = [0.3, 0.7], b = [0.14, 0.53], T = [1.7, 3.0])
     _, cl0idx = nearestto(middlepolar[:,2], 0.0)
     alpha50 = middlepolar[end,1]*0.25
     _, alf50idx = nearestto(middlepolar[:,1], alpha50)
-    _, dcldalpha = linear_fit(middlepolar[cl0idx:alf50idx,1], middlepolar[cl0idx:alf50idx,2]) #TODO: Create my own linear fit function so I don't have to pull in a package. 
+    _, dcldalpha = linear_fit(middlepolar[cl0idx:alf50idx,1], middlepolar[cl0idx:alf50idx,2]) #TODO: Create my own linear fit function so I don't have to pull in a package. #Todo: This is returning a NaN
+    if isnan(dcldalpha)
+        dcldalpha=0.0
+    end
     return Airfoil(polar, cl, cd, cm, dcldalpha, alpha0, A, b, T)
 end
 

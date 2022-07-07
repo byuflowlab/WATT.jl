@@ -17,9 +17,9 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     hubHt = pa[7]
 
     ### Environmental variables
-    Omega = SVector(0.0, 0.0, -env.Omega(0.0))
+    Omega = SVector(0.0, 0.0, -env.RS(0.0))
     grav = SVector(0.0, -g, 0.0)
-    U = env.U(0.0)
+    U = env.Vinf(0.0)
 
 
     ### Base vectors for turbine. 
@@ -62,13 +62,15 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     # @show twistvec
 
     ### Create Airfoils
-    airfoils = [CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3], "", env.rho*U*rvec[i]/env.mu, U/env.a) for i in 1:n]
+    # airfoils = [CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3], "", env.rho*U*rvec[i]/env.mu, U/env.a, Akima(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2]), Akima(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,3])) for i in 1:n] #Todo: Failing for some reason. 
+
+    airfoils = [CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3]) for i in 1:n]
 
     ### Create Section
     sections = CCBlade.Section.(rvec, chordvec, twistvec, airfoils)
 
     ### Create Operating Point
-    operatingpoints = CCBlade.windturbine_op.(U, env.Omega(t), pitch, rvec, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
+    operatingpoints = CCBlade.windturbine_op.(U, env.RS(t), pitch, rvec, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
 
 
 
@@ -114,7 +116,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     def_y = [history[1].elements[ielem].u[2] for ielem = 1:n]
     def_z = [history[1].elements[ielem].u[3] for ielem = 1:n]
     def_thetax = [history[1].elements[ielem].theta[1] for ielem = 1:n]
-    Vx = [env.U(t) for ielem = 1:n]
+    Vx = [env.Vinf(t) for ielem = 1:n]
     Vy = [-history[1].elements[ielem].V[2] for ielem = 1:n]
 
 
@@ -148,7 +150,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils)  
 
         ## Create Operating Point
-        # ops = CCBlade.windturbine_op.(U, env.Omega(t), pitch, r_displaced, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
+        # ops = CCBlade.windturbine_op.(U, env.RS(t), pitch, r_displaced, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
         for i = 1:n #Iterate throught the nodes and update the operating points
             operatingpoints[i] = CCBlade.OperatingPoint(Vx[i], Vy[i], env.rho, pitch, env.mu, env.a)
         end
@@ -186,7 +188,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         ## Update the velocities
         for i = 1:n
             V_elem = history[1].elements[i].V # Element linear velocity
-            Vx[i] = env.U(t) + V_elem[3] #Freestream velocity  
+            Vx[i] = env.Vinf(t) + V_elem[3] #Freestream velocity  
             Vy[i] = - V_elem[2]
         end
 

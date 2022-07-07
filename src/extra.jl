@@ -1,3 +1,22 @@
+function nearestto(xvec, x)
+    mins = abs.(xvec.-x)
+    minval, minidx = findmin(mins)
+    minval = xvec[minidx]
+    return minval, minidx
+end
+
+function getfieldnames(obj)
+    return fieldnames(typeof(obj))
+end
+
+function isnanvec(vec)
+    for i=1:length(vec)
+        if isnan(vec[i])
+            return true
+        end
+    end
+    return false
+end
 
 
 function derivative_me(sol, tvec)
