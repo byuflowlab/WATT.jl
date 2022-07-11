@@ -144,9 +144,10 @@ function create_gxbeam_element(p, points, elements, start, stop)
         e1y e2y e3y;
         e1z e2z e3z]
 
-    mu = SVector(0.01, 0.01, 0.01, 0.01, 0.01, 0.01)
+    # mu = SVector(0.01, 0.01, 0.01, 0.01, 0.01, 0.01) #Damping coefficients
     
-    return GXBeam.Element(DeltaL, x, C, mass, Cab, mu)
+    # return GXBeam.Element(DeltaL, x, C, mass, Cab, mu) #For constant-mass-matrix branch
+    return GXBeam.Element(DeltaL, x, C, mass, Cab)
     end
 
 function create_gxbeam_assembly(gxmodel::gxbeam, p, start, stop)

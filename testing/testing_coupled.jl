@@ -111,22 +111,27 @@ gxmodel = gxbeam(points, elements)
 
 p = vcat(p_a, p_s)
 
-## Create system indices - TODO: Might not need. We'll see. 
+## Create system indices  
 start = 1:gxmodel.ne
 stop = 2:gxmodel.np
-indices = GXBeam.SystemIndices(start, stop; static=false)
 
 ## Create assembly
 assembly = create_gxbeam_assembly(gxmodel, p, start, stop) 
 
 t0 = tspan[1]
-outs, state = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, t0, assembly)
+outs, state, sol, risoode = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt)
 
 
 x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
 deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
+x0 = zeros(4*length(rvec))
+odeprob = ODEProblem(risoode, x0, (0,10))
 
+
+integrator = init(odeprob, Tsit5())
+
+step!(integrator, 0.01, true)
 
 nothing
