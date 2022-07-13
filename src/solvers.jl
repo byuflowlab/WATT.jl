@@ -1,7 +1,7 @@
 abstract type Solver end
 
 
-struct RK4{F} <: Solver 
+struct RK4 <: Solver 
 end
 
 function (s::RK4)(fun, x, p, t, dt)

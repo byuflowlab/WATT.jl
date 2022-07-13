@@ -116,23 +116,6 @@ p = vcat(p_a, p_s)
 
 
 
-
-outs, state, system, assembly, prescribed_conditions, converged, iters, resids, distributed_load = fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = 100, verbose = true, tolerance= 1e-12)
-
-# @btime fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = 4, verbose = false, tolerance= 1e-12) ### 12.281 ms (21900 allocations: 9.92 MiB)
-# state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
-
-## Obtain the deflections
-def_x = [state.elements[ielem].u[1] for ielem = 1:n]
-def_y = [state.elements[ielem].u[2] for ielem = 1:n]
-def_z = [state.elements[ielem].u[3] for ielem = 1:n]
-
-x = [assembly.elements[ielem].x[1] + state.elements[ielem].u[1] for ielem = 1:n]
-
-
-x_assembly = [assembly.elements[ielem].x[1] for ielem = 1:n]
-
-
 ### Run CCBlade by itself
 rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=bemmodel.turbine)
 
@@ -141,26 +124,60 @@ sections = CCBlade.Section.(rvec, chordvec, twistvec, airfoils)
 ### Create Operating Point
 operatingpoints = CCBlade.windturbine_op.(env.Vinf(0.0), env.RS(0.0), pitch, rvec, 0.0, 0.0, 0.0, 0.0, hubht, bemmodel.shearexp, env.rho)
 
-outs_ccblade = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
+outs = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 
 
+## Create system indices  
+start = 1:gxmodel.ne
+stop = 2:gxmodel.np
 
+## Create assembly
+# assembly = create_gxbeam_assembly(gxmodel, p, start, stop) #Todo: I think something is broken with this function call. 
+assembly = create_gxbeam_assembly(gxmodel, p_s) 
+elements = view(assembly.elements, :)
+nelem = length(elements)
 
+### Extract CCBlade Loads
+Fz = -outs.Np
+Fy = outs.Tp
+Fzfit = Akima(rvec, -outs.Np)
+Fyfit = Akima(rvec, outs.Tp)
 
+rgx = [assembly.elements[i].x[1] for i = 1:nelem]
 
+### Create distributed_load #Todo: The distributed loads are different. 
+distributed_load = Dict{Int64, GXBeam.DistributedLoads{eltype(p)}}()
+f = @SVector zeros(3)
+m = @SVector zeros(3)
+m_follower = @SVector zeros(3)
+for i = 1:nelem #Iterate through the elements and apply the distributed load at every element. 
+    # f_follower = SVector(0.0, Fyfit(rgx[i]), Fzfit(rgx[i])) #Dividing by the length of the element so the force is distributed across the element. 
+    f_follower = SVector(0.0, Fy[i], Fz[i]) #I'm going to leave this like this for now because that's what I do in the fixed point iteration, even though it isn't as general. 
+    distributed_load[i] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
+end
 
-### Visualize the loads. 
-defplt = plot(xaxis="Radial Location (m)", yaxis="Element Deflection (m)", legend=:topleft)
-plot!(x, def_x, lab="X deflection")
-plot!(x, def_y, lab="Y deflection")
-plot!(x, def_z, lab="Z deflection")
-display(defplt)
+### Create Prescribed Conditions
+prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0))
 
-loadsplt = plot(xaxis = "Radial Location (m)", yaxis = "Element Load (N)", legend=:topleft)
-plot!(x, outs.Np, lab="Flapwise")
-plot!(x, outs.Tp, lab="Lead-Lag")
-plot!(rvec, outs_ccblade.Np, lab="Flapwise - CCBlade") #-> It looks like most of the convergence occurs in the GXBeam solution. The max difference between the initial CCBlade solution and the fixed point iteration is like .16 N... which is tiny. 
-plot!(rvec, outs_ccblade.Tp, lab="Lead-Lag - CCBlade")
-display(loadsplt)
+g = 0.0 #9.817
+Omega = SVector(0.0, 0.0, -env.RS(0.0))
+grav = SVector(0.0, -g, 0.0)
+
+### Run GXBeam
+system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_load, linear = false, angular_velocity = Omega, gravity=grav)
+
+state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
+
+### Obtain the deflections
+x = [assembly.elements[ielem].x[1] + state.elements[ielem].u[1] for ielem = 1:n]
+def_x = [state.elements[ielem].u[1] for ielem = 1:n]
+def_y = [state.elements[ielem].u[2] for ielem = 1:n]
+def_z = [state.elements[ielem].u[3] for ielem = 1:n]
+def_thetax = [state.elements[ielem].theta[1] for ielem = 1:n]
+Vx = [env.Vinf(0.0) for ielem = 1:n]
+Vy = [-state.elements[ielem].V[2] for ielem = 1:n]
+
+ydefplt = plot(x, def_y, xaxis="Beam Length (m)", yaxis="Deflection (m)", lab="Beam Deflection")
+display(ydefplt)
 
 nothing

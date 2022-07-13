@@ -60,7 +60,7 @@ a = 343.0
 shearexp = 0.0
 
 #### Define solution
-tspan = (0.0, 0.5)
+tspan = (0.0, 10.0)
 dt = 0.01
 
 ### Prep the ASD rotor and operating conditions 
@@ -103,7 +103,27 @@ blade = Blade(rhub, rtip, rR, afs)
 dsmodel = Riso()
 bemmodel = createbem(;shearexp=shearexp)
 
-env = environment(rho, mu, a, vinf, omega)
+function rampingU(rho, mu, a, vinf, Omega, ramptime)
+    function U(t)
+        if t<ramptime
+            return t*vinf/ramptime + 0.1
+        else
+            return vinf
+        end
+    end
+    ufun(t) = SVector(U(t), 0.0, 0.0)
+    omegafun(t) = SVector(0.0, 0.0, 0.0)
+    udotfun(t) = SVector(vinf/ramptime, 0.0, 0.0)
+    omegadotfun(t) = SVector(0.0, 0.0, 0.0)
+    Vinf(t) = U(t)
+    RS(t) = Omega
+    Vinfdot(t) = vinf/ramptime
+    RSdot(t) = 0.0
+    return Environment(rho, mu, a, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
+end
+
+# env = environment(rho, mu, a, vinf, omega)
+env = rampingU(rho, mu, a, vinf, omega, 0.5)
 
 
 p_s, points, elements = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
@@ -116,22 +136,27 @@ start = 1:gxmodel.ne
 stop = 2:gxmodel.np
 
 ## Create assembly
-assembly = create_gxbeam_assembly(gxmodel, p, start, stop) 
+assembly = create_gxbeam_assembly(gxmodel, p_s, start, stop) 
 
 t0 = tspan[1]
-outs, state, sol, risoode = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt)
+cchistory, gxhistory, tvec, state = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt; verbose=false)
 
+
+tipdef = [gxhistory[i].points[end].u[2] for i in 1:length(tvec)]
+
+tipplt = plot(tvec, tipdef, leg=false, xaxis="time (s)", yaxis="deflection (m)")
+display(tipplt) 
+
+#Alright, the tip is not displacing any further because the beam is starting from steady state. Which is what we were looking for. 
 
 x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
 deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
-x0 = zeros(4*length(rvec))
-odeprob = ODEProblem(risoode, x0, (0,10))
+bodydefplt = plot(x, deflection, xaxis="beam length (m)", yaxis="Deflection (m)", lab="simulate")
+# display(bodydefplt)
 
 
-integrator = init(odeprob, Tsit5())
 
-step!(integrator, 0.01, true)
 
 nothing

@@ -99,8 +99,9 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     f = @SVector zeros(3)
     m = @SVector zeros(3)
     m_follower = @SVector zeros(3)
-    for i = 1:n #Iterate through the elements and apply the distributed load at every element. 
-        f_follower = SVector(0.0, Fy[i]/elements[i].L, Fz[i]/elements[i].L) #Dividing by the length of the element so the force is distributed across the element. 
+    for i = 1:n #Iterate through the elements and apply the distributed load at every element.
+        f_follower = SVector(0.0, Fy[i], Fz[i]) #The load that I get out should be a distributed load... so I shouldn't need to divide by zero. Right? If I want the total thrust, I'd have to integrate the loading across the rotor. So this must be a distributed load. 
+        # f_follower = SVector(0.0, Fy[i]/elements[i].L, Fz[i]/elements[i].L) #Dividing by the length of the element so the force is distributed across the element. 
         distributed_load[i] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end
 
@@ -170,7 +171,8 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         ### Solve GXBeam
         ## Update GXBeam Loads
         for i = 1:n #Iterate through the elements and apply the distributed load at every element. 
-            f_follower = SVector(0.0, Fy_new[i]/elements[i].L, Fz_new[i]/elements[i].L) #Dividing by the length of the element so the force is distributed across the element. 
+            # f_follower = SVector(0.0, Fy_new[i]/elements[i].L, Fz_new[i]/elements[i].L) #Dividing by the length of the element so the force is distributed across the element. 
+            f_follower = SVector(0.0, Fy_new[i], Fz_new[i])
             distributed_load[i] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
         end
 
@@ -248,7 +250,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     end
     # iter -= 1
 
-    return outshistory[1], history[1], syshistory[1], assembly, prescribed_conditions, converged, iter, resids[1:iter,:] #Todo. Is the state and system that are getting passed out the state and system that were most recently calculated... or the one before the loop. I'm guessing it's the one before the loop. ... but then how/why does my dynamic solution look like it is converging to the fixed-point solution? -> I know that it's passing out the correct solution now. I don't think it was doing it incorrectly in the first place. 
+    return outshistory[1], history[1], syshistory[1], assembly, prescribed_conditions, converged, iter, resids[1:iter,:], distributed_load #Todo. Is the state and system that are getting passed out the state and system that were most recently calculated... or the one before the loop. I'm guessing it's the one before the loop. ... but then how/why does my dynamic solution look like it is converging to the fixed-point solution? -> I know that it's passing out the correct solution now. I don't think it was doing it incorrectly in the first place. 
 end
 
 
