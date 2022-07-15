@@ -111,13 +111,22 @@ function rampingU(rho, mu, a, vinf, Omega, ramptime)
             return vinf
         end
     end
+
+    function dU(t)
+        if t<ramptime
+            return vinf/ramptime
+        else
+            return 0.0
+        end
+    end
+
     ufun(t) = SVector(U(t), 0.0, 0.0)
     omegafun(t) = SVector(0.0, 0.0, 0.0)
-    udotfun(t) = SVector(vinf/ramptime, 0.0, 0.0)
+    udotfun(t) = SVector(dU(t), 0.0, 0.0)
     omegadotfun(t) = SVector(0.0, 0.0, 0.0)
     Vinf(t) = U(t)
     RS(t) = Omega
-    Vinfdot(t) = vinf/ramptime
+    Vinfdot(t) = dU(t)
     RSdot(t) = 0.0
     return Environment(rho, mu, a, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
 end
@@ -139,24 +148,43 @@ stop = 2:gxmodel.np
 assembly = create_gxbeam_assembly(gxmodel, p_s, start, stop) 
 
 t0 = tspan[1]
-cchistory, gxhistory, tvec, state = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt; verbose=false)
+cchistory, gxhistory, tvec = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt; verbose=false, coupling=TwoWay())
 
+nt = length(tvec)
 
-tipdef = [gxhistory[i].points[end].u[2] for i in 1:length(tvec)]
+tipdef = [gxhistory[i].points[end].u[2] for i in 1:nt]
 
 tipplt = plot(tvec, tipdef, leg=false, xaxis="time (s)", yaxis="deflection (m)")
-display(tipplt) 
+# display(tipplt) 
 
 #Alright, the tip is not displacing any further because the beam is starting from steady state. Which is what we were looking for. 
 
-x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+# x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
-deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+# deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
 
-bodydefplt = plot(x, deflection, xaxis="beam length (m)", yaxis="Deflection (m)", lab="simulate")
+# bodydefplt = plot(x, deflection, xaxis="beam length (m)", yaxis="Deflection (m)", lab="simulate")
 # display(bodydefplt)
 
+anim = @animate for i in 1:nt
+    state = gxhistory[i]
+    x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+
+    deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+    plot(x, deflection, leg=false, xaxis="Beam length (m)", yaxis="Deflection (m)", ylims= (-0.05, 0.65), xlims=(0, rtip))
+end
+gif(anim, "bodydeflections_twoway_071522.gif", fps = 100)
+
+anim = @animate for i in 1:nt
+    ccout = cchistory[i]
+    x = [assembly.elements[ipoint].x[1] + state.elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
+
+    
+    plot(x, ccout.Np, leg=:topleft, xaxis="Beam length (m)", yaxis="Distributed Loading (N/m)", ylims= (-500, 8000), xlims=(0, rtip), lab="Normal")
+    plot!(x, ccout.Tp, lab="Tangent")
+end
+gif(anim, "bodyforces_twoway_071522.gif", fps = 100)
 
 
 
-nothing
+# nothing
