@@ -8,6 +8,7 @@ This is an attempt at not tightly coupling the models. The tight coupling is pro
 ##### Work Notes
 - I just had the thought. I should go simpler than this. I should do a solution of just BEM to GXBeam across time. Simple one-way coupling. Then do a two-way coupling. Then add in the dynamic stall model. Then add in the possibility of having multiple interior iterations.
     - I've done the simple one-way coupling. I haven't validated it, but it looks good. 
+    - I got the two-way coupling done. I'm not sure if it's 100% correct, but it looks good. It doesn't seem to oscillate about the steady state solution... but I'm not crazy worried about that. It might be due to the fact that the blade is massive. I'll see what happens once I add dynamic stall and damping. 
 
 =#
 
@@ -19,6 +20,9 @@ end
 struct TwoWay <: Coupling
 end
 
+struct ThreeWay <: Coupling
+end
+
 
 struct RisoState{TF}
     x::Array{TF, 1}
@@ -27,9 +31,14 @@ struct RisoState{TF}
     airfoil::Airfoil
 end
 
-function (state::RisoState)(alpha, Re , Mach)
+function (state::RisoState)(alpha, Re , Mach) #TODO: I might be able to combine this with the function below.... which might be good. 
     y = [state.u, 0.0, 0.0, 0.0, alpha, 0.0]
-    return riso_coefs(state.x, y, state.c, state.airfoil) #TODO: I don't know if the fact that this function returns a Static Vector will throw a wrench in the works, but we'll just have to see... won't we? 
+    # return riso_coefs(state.x, y, state.c, state.airfoil) #TODO: I don't know if the fact that this function returns a Static Vector will throw a wrench in the works, but we'll just have to see... won't we? 
+    cf = riso_coefs(state.x, y, state.c, state.airfoil)
+    # if cf[1]<0
+    #     @show cf
+    # end
+    return cf
 end
 
 function afeval(state::RisoState, alpha, Re, Mach)
@@ -70,6 +79,7 @@ function createrisoode(blade)
 
         ### Iterate through the nodes and calculate the state rates. 
         dx = zeros(4*n)
+        # @show length(dx)
         for i = 1:n
             idx = 4*(i-1)
             xs = x[1+idx:idx+4]
@@ -80,8 +90,12 @@ function createrisoode(blade)
             udot = Wdotvec[i] #sqrt(Vxdotvec[i]^2 + Vydotvec[i]^2)  
             vdot = 0.0
 
-            theta = -((twistvec[i] + pitch) - phivec[i]) #Calculate the angle of attack that the airfoil see
+            theta = -((twistvec[i] + pitch) - phivec[i]) #((twistvec[i] + pitch) - phivec[i]) #Calculate the angle of attack that the airfoil see #Note: In CCBlade's out struct, it has the alpha of the airfoil section... and for a wind turbine... all the values are positive. All of the inflow values are also positive.... So I don't know... I'll try not negating this whole thing and see what happens. -> Except when you check the source code, it evaluates the negative of the angle of attack. -> And it stores the negative in the angle of attack. Which means.... that the aoa was negative in the first place... which tells me that I've got something backwards somewhere. What I'm using (with the negative out front) matches what I would expect using the diagram for wind turbine operation from CCBlade. 
             thetadot = 0.0 #Assuming that the airfoil isn't in the act of turning???? TODO: What are my other options?
+
+            # if theta <0 #Theta is pretty much always negative. Which tells me that whatever this angle of attack is.... it is likely wrong. Should my angle of attack just be phi? 
+            #     @show t, i, theta
+            # end
     
             dx[1+idx:4+idx] = riso_states(xs, u, udot, v, vdot, theta, thetadot, chordvec[i], blade.airfoils[i])
 
@@ -109,7 +123,7 @@ Update the aerodynamic parameters that change from iteration to iteration (for R
 ### Notes
 - Recall that the order of p_a is: [chordvec, twistvec, phivec, Vxvec, Vyvec, Vxdotvec, Vydotvec, pitch]. Changed to vcat(chordvec, twistvec, phivec, Wvec, Wdotvec, pitch)
 """
-function update_p_a!(p_a, deformed_twist, phivec, Wvec, Wvecdot; n=Int(length(deformed_twist)-1)/5)
+function update_p_a!(p_a, deformed_twist, phivec, Wvec, Wvecdot; n=length(deformed_twist))
     p_a[n+1:2*n] = deformed_twist
     p_a[2n+1:3n] = phivec
     p_a[3n+1:4n] = Wvec
@@ -198,7 +212,7 @@ interpolate_velocity(ip, assembly, state, env)
 
 Get the relative velocity of an aerodynamic point. 
 """
-function interpolate_velocity(ip, assembly, state) #Note: This is probably a very poor approximation. But it'll have to do for now. Maybe there is a better way to get the velocity of the points. #Todo: Something I'm doing here means that I'm getting velocities that are close, but off. 
+function interpolate_velocity(ip, assembly, state) #Note: This is probably a very poor approximation. But it'll have to do for now. Maybe there is a better way to get the velocity of the points.  
     ne = length(assembly.elements)
     np = ne + 1
 
@@ -236,7 +250,7 @@ end
 
 
 """
-update_aero_inputs!(coupling::OneWay, sections, operatingpoints, Vxvec, Vyvec, env, blade, rvec, aeroV, twist_displaced, t) #TODO: I need to rethink the name of this function. the _blah_ syntax underlines blah in a docstring... which isn't useful in a title. 
+update_aero_inputs!(coupling::OneWay, sections, operatingpoints, Vxvec, Vyvec, env, dsstates, rvec, aeroV, twist_displaced, t) #TODO: I need to rethink the name of this function. the _blah_ syntax underlines blah in a docstring... which isn't useful in a title. 
 
     Updates the inputs for the aerodynamic models for a one-way coupling (BEM to GXBeam). Specifically it updates the sections, operatingpoints, Vxvec, Vyvec, and Wvec. 
 
@@ -261,7 +275,7 @@ update_aero_inputs!(coupling::OneWay, sections, operatingpoints, Vxvec, Vyvec, e
 - This version of the function is for a one-way coupling, meaning that none of the structural outputs are actually input back into the aerodynamic model every time step. This means that for this function, there will be several inputs that are unused. They are just there for ease of multiple dispatch. 
 - I decided not to update the rvec for ease of coupling between the aerodynamic mesh and the structural mesh. I just use the original location of the aerodynamic mesh to create a fit, then use the origianl location of the structural mesh to determine where the load should be applied. -> TODO: A lot of content from this note really belongs in a header comment. 
 """
-function update_aero_inputs!(coupling::OneWay, sections, operatingpoints, Vxvec, Vyvec, Wvec, env, blade, rvec, aeroV, twist_displaced, t, pitch) #TODO: Will need to add Wvec and other Riso inputs in here. 
+function update_aero_inputs!(coupling::OneWay, sections, operatingpoints, Vxvec, Vyvec, Wvec, Wdotvec, env, blade, dsstates, rvec, aeroV, twist_displaced, t, pitch)
     na = length(sections)
 
     for i = 1:na
@@ -272,8 +286,10 @@ function update_aero_inputs!(coupling::OneWay, sections, operatingpoints, Vxvec,
     end
 end
 
-function update_aero_inputs!(coupling::TwoWay, sections, operatingpoints, Vxvec, Vyvec, Wvec, env, blade, rvec, aeroV, twist_displaced, t, pitch) #TODO: Will need to add Wvec and other Riso inputs in here. 
+function update_aero_inputs!(coupling::TwoWay, sections, operatingpoints, Vxvec, Vyvec, Wvec, Wdotvec, env, blade, dsstates, rvec, aeroV, twist_displaced, t, pitch) 
     na = length(sections) 
+
+    # Wdotvec .= 0.0 #Note: I think this will need to change, but I'm not 100% how to get the acceleration out of the structural model.
 
     for i = 1:na
         sections[i] = Section(rvec[i], chordvec[i], twist_displaced[i], blade.airfoils[i])  
@@ -286,6 +302,41 @@ function update_aero_inputs!(coupling::TwoWay, sections, operatingpoints, Vxvec,
     end
 end
 
+function update_aero_inputs!(coupling::ThreeWay, sections, operatingpoints, Vxvec, Vyvec, Wvec, Wdotvec, env, blade, dsstates, rvec, aeroV, twist_displaced, t, pitch) #TODO: Will need to add Wvec and other Riso inputs in here. 
+    na = length(sections) 
+
+    # Wdotvec .= 0.0 #Note: I think this will need to change, but I'm not 100% how to get the acceleration out of the structural model.
+
+    for i = 1:na
+        sections[i] = Section(rvec[i], chordvec[i], twist_displaced[i], dsstates[i]) #Section(rvec[i], chordvec[i], twist_displaced[i], blade.airfoils[i])  
+
+        Vxvec[i] = env.Vinf(t) + aeroV[i][3] 
+        Vyvec[i] = aeroV[i][2] #For some reason this was negative before and isn't anymore. 
+        Wvec[i] = sqrt(Vxvec[i]^2 + Vyvec[i]^2)
+
+        operatingpoints[i] = CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a)
+    end
+end
+
+
+"""
+update_dsstates!(x, dsstates, Wvec, chordvec, blade)
+
+    Updates the dynamic stall state object vector based on the new state vector x. 
+
+### Inputs
+- x::Array{TF, 1} - A vector of Riso states. Four states for each aerodynamic node (4*na). Arranged with the four states concatonated together [x1, x2, x3, x4] for each node, then vcat that sucker. 
+- dsstates::Array{RisoState, 1} - A vector holding the RisoState objects, one for each aerodynamic node. 
+- Wvec::Array{TF, 1} - A vector holding the total inflow velocity for each aerodynamic node. 
+- chordvec::Array{TF, 1} - A vector holding the chord length for each aerodynamic node. 
+- blade::Blade - the blade info. 
+"""
+function update_dsstates!(x, dsstates, Wvec, chordvec, blade)
+    na = length(dsstates)
+    for i = 1:na
+        dsstates[i] = RisoState(x[4*(i-1)+1:4*(i-1)+4], Wvec[i], chordvec[i], blade.airfoils[i])
+    end
+end
 
 
 """
@@ -327,12 +378,11 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
     sections = [Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i in 1:na]
 
     ### Create OperatingPoint #TODO: Make general so it can take propeller configurations. 
-    Vx = env.Vinf(t0)
+    Vxvec = [env.Vinf(t0) for i in 1:na] #Freestream velocity
     Vyvec = [env.RS(t0)*rvec[i] for i in 1:na]
     pitch = 0.0 #TODO: I'm not sure if this pitch does something or not. And I don't know if I want to pitch yet. 
-    operatingpoints = [CCBlade.OperatingPoint(Vx, Vyvec[i], env.rho, pitch, env.mu, env.a) for i in 1:na] 
+    operatingpoints = [CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a) for i in 1:na] 
     #TODO: Dr. Ning uses mu=1 and a=1 in his example.  
-    # @show t0, Vyvec[end]
 
      
     ### Solve BEM residual
@@ -341,26 +391,24 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
     
 
     ### Get steady state Riso states
-    Vxvec = [env.Vinf(t0) for i in 1:na]
-    Wvec = [sqrt(Vxvec[i]^2 + Vyvec[i]^2) for i = 1:na]
-    # Wdotvec = zeros(na)
+    Wvec = [sqrt(Vxvec[i]^2 + Vyvec[i]^2) for i = 1:na] #Total inflow velocity (assumed) -> Question: will the inflow velocity from CCBlade be different? 
+    Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i])^2) for i = 1:na] #Derivative of the total inflow velocity
 
-    # risoode = createrisoode(blade)
+    risoode = createrisoode(blade) 
 
-    # p_a = vcat(chordvec, twistvec, phivec, Wvec, Wdotvec, pitch) #Create p_a #Todo: I don't think that I've done the twist & inflow relationship correctly for the dynamic stall model. 
+    p_a = vcat(chordvec, twistvec, ccout.phi, Wvec, Wdotvec, pitch) #Create p_a 
 
-    # x0 = zeros(4*na) #TODO: I think that one of these states might need to be initialized as phi.
-    # x0[4:4:4*na] .= 1.0 
+    x0 = zeros(4*na) #TODO: I think that one of these states might need to be initialized as phi.
+    x0[4:4:4*na] .= 1.0 
 
-    # prob = SteadyStateProblem(risoode, x0, p = p_a)
-    # sol = DifferentialEquations.solve(prob)
+    prob = SteadyStateProblem(risoode, x0, p = p_a)
+    sol = DifferentialEquations.solve(prob)
+    # @show sol.u
+    xds = sol.u #Array(sol)' #TODO. I think this will work. -> The array didn't work. It was returning an array instead of a vector. 
 
-    # dsstates = [RisoState(sol[4*(i-1)+1:4*(i-1)+4], Wvec[i], chordvec[i], blade.airfoils[i]) for i = 1:na]
-
-
-
-
-
+    dsstates = [RisoState(sol[4*(i-1)+1:4*(i-1)+4], Wvec[i], chordvec[i], blade.airfoils[i]) for i = 1:na]
+    # sections = [Section(rvec[i], chordvec[i], twistvec[i], dsstates[i]) for i in 1:na] #TODO: Should probably make a multiple-dispatch function for this bad boy. Or an if statement. :| 
+    sections = [Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i in 1:na]
 
     ### Create GXBeam State & constant inputs 
     ## Create prescribed conditions
@@ -388,6 +436,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
     
     cchistory = [ccout for i = 1:nt]
     gxhistory = [gxstate for i = 1:nt]
+    # dshistory = [dsstates for i = 1:n] #Question: Do I need to save these across time? 
 
 
     interpolationpoints = create_interpolationpoints(assembly, rvec) 
@@ -402,21 +451,29 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
 
         ## Update CCBlade inputs (based on GXBeam state)
         twist_displaced = twistvec .- def_thetax 
-        update_aero_inputs!(coupling, sections, operatingpoints, Vxvec, Vyvec, Wvec, env, blade, rvec, aeroV, twist_displaced, t, pitch)
-
+        update_aero_inputs!(coupling, sections, operatingpoints, Vxvec, Vyvec, Wvec, Wdotvec, env, blade, dsstates, rvec, aeroV, twist_displaced, t, pitch)
+        # @show t, Vyvec[end]
 
         # Solve BEM residual
         cchistory[i+1] = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 
+        # if i ==5 
+            # @show cchistory[i+1].W #Todo: ccout.W and Wvec are very different from each other..... 
+            # @show Wvec
+            # @show twist_displaced #Positive. I think they are in an acceptable range. 
+            # @show cchistory[i+1].phi #Positive, ranges from .1 to .1e-5
+            # @show cchistory[i+1].alpha #has some negatives.. actually is mostly negative. 
+            # @show cchistory[i+1].cl #half negative, half positive
+        # end
 
         ## Solve Riso states based on inflow and deflection
-        # Wdotvec .= 0.0 #Note: I think this will need to change, but I'm not 100% how to get the acceleration out of the structural model. 
+        # update_p_a!(p_a, twist_displaced, ccout.phi, Wvec, Wdotvec) #TODO: Update p_a #WorkLocation: The Riso model is off somehow. -> I wonder if there is something wrong with the BEM... because if I recall... the BEM-GXBeam coupling wasn't in the same force range as the static coupling. -> I'm going to try the two-way coupling without the dynamic stall model again. Make sure that that oscillates about the solution that I expect. 
+        # @show size(xds)
+        # Note: I could just pass the angle of attack and inflow velocity from CCBlade to the DS model. 
+        # xds[:] = solver(risoode, xds, p_a, t, dt) #TODO: I need to convert this to work in place. #Todo. This function isn't working properly. It's creating more states. -> I was passing in an array instead of a vector. 
+        # update_dsstates!(xds, dsstates, Wvec, chordvec, blade) #Todo: A lot of these states are returning a negative state. 
 
-        # p_a = update_p_a!(p_a, twist_displaced, ccout.phi, Wvec, Wvecdot) #TODO: Update p_a
-        # x_new = solver(risoode, x_old, p_a, t, dt) 
         
-
-
         ## Update GXBeam loads
         Fzfit = Akima(rvec, -cchistory[i].Np ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
         Fyfit = Akima(rvec, cchistory[i].Tp)
@@ -432,7 +489,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
 
 
         ## Extract GXBeam outputs
-        gxhistory[i+1] = localhistory[end] #TODO: Maybe I can move this to the line above. (replace localhistory and ) -> No. No I can't. local history is length 2, and .... well... I could use gxhistory[i:i+1]... that might work. 
+        gxhistory[i+1] = localhistory[end]  
 
 
         for j = 1:na

@@ -289,16 +289,12 @@ function riso_coefs(X, y, c, airfoil)
     Tu = c/(2*U)
 
     clfs = Clfs(ae, liftfit, dcldalpha, alpha0)
+    # @show X
 
     Cl = dcldalpha*(ae-alpha0)*X[4] + clfs*(1-X[4]) + pi*Tu*alphadot
 
     fae = fst(ae, liftfit, dcldalpha, alpha0) 
-    # if (fae<0)|(X[4]<0) # The whole state vector has gone negative. 
-    #     @infiltrate
-    # end
-    # if !all(i -> i>= 0.0, X)
-    #     @show X
-    # end
+    
     fpp = X[4]
     if X[4] < 0
         fpp = 0

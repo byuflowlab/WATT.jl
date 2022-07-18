@@ -166,24 +166,24 @@ tipplt = plot(tvec, tipdef, leg=false, xaxis="time (s)", yaxis="deflection (m)")
 # bodydefplt = plot(x, deflection, xaxis="beam length (m)", yaxis="Deflection (m)", lab="simulate")
 # display(bodydefplt)
 
-anim = @animate for i in 1:nt
-    state = gxhistory[i]
-    x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+# anim = @animate for i in 1:nt
+#     state = gxhistory[i]
+#     x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
-    deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
-    plot(x, deflection, leg=false, xaxis="Beam length (m)", yaxis="Deflection (m)", ylims= (-0.05, 0.65), xlims=(0, rtip))
-end
-gif(anim, "bodydeflections_twoway_071522.gif", fps = 100)
+#     deflection = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+#     plot(x, deflection, leg=false, xaxis="Beam length (m)", yaxis="Deflection (m)", ylims= (-0.05, 0.65), xlims=(0, rtip))
+# end
+# gif(anim, "bodydeflections_threeway_071822.gif", fps = 100)
 
-anim = @animate for i in 1:nt
-    ccout = cchistory[i]
-    x = [assembly.elements[ipoint].x[1] + state.elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
-
+# anim = @animate for i in 1:nt
+#     ccout = cchistory[i]
+#     state = gxhistory[i]
+#     x = [assembly.elements[ipoint].x[1] + state.elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
     
-    plot(x, ccout.Np, leg=:topleft, xaxis="Beam length (m)", yaxis="Distributed Loading (N/m)", ylims= (-500, 8000), xlims=(0, rtip), lab="Normal")
-    plot!(x, ccout.Tp, lab="Tangent")
-end
-gif(anim, "bodyforces_twoway_071522.gif", fps = 100)
+#     plot(x, ccout.Np, leg=:topleft, xaxis="Beam length (m)", yaxis="Distributed Loading (N/m)", ylims= (-500, 8000), xlims=(0, rtip), lab="Normal")
+#     plot!(x, ccout.Tp, lab="Tangent")
+# end
+# gif(anim, "bodyforces_threeway_071822.gif", fps = 100)
 
 
 
