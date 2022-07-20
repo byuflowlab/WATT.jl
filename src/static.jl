@@ -1,7 +1,34 @@
 
 
+"""
+    fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolerance=1e-3, g=0.0, verbose=false)
+
+Iterates between the BEM (CCBlade) and structural model (GXBeam) until the steady state solution converges to a given tolerance. The convergence criteria is Y deflections and the Y and Z loadings. 
+
+### Inputs
+- bemmodel::BEM - The bem model. Doesn't do much right now because I don't allow for propeller analysis yet. 
+- gxmodel::gxbeam - The structural model. Holds the x location for the points and elements. 
+- env::Environment - the environment model
+- blade::Blade - the blade model
+- p::Array{TF, 1} - Array of parameters for the aerodynamic and structural models. It goes [p_a, p_s]. There are 7*n aero parameters (where n is the number of nodes). The rest are structural nodes. 
+- maxiterations::TI - The maximum number of iterations that the solver will take. 
+- tolerance::TF - The accuracy of decimals that the user requires. 
+- g::TF - The amount of gravity applied. Currently defaults to 0.0, but one day will default to 9.817
+- verbose::Bool - Whether or not to print out statements showing the convergence progress. 
+
+### Outputs
+- outs::CCBlade.Outputs - The final CCBlade output struct
+- state::GXBeam.State - The final GXBeam state
+- system::GXBeam.System
+- assembly::GXBeam.Assembly
+- converged::Bool - Whether or not the solver converged within the maximum number of iterations.
+- iterations::TI - The number of iterations that the solver required to converge the residuals. 
+- residuals::Array{TF, 2} - a 3 x j matrix of the residuals at every iteration. Column 1 is the y deflection residuals, Column 2 is the y force residuals, and Column 3 is the z force residuals. j is the number of iterations taken by the solver. 
 
 
+### Notes
+- Currently yaw, tilt, and azimuth aren't included. 
+"""
 function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolerance=1e-3, g=0.0, verbose=false)
 
 
@@ -34,18 +61,13 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     t = 0.0
     precone = 0.0 #Precone. -> I'm going to change the radius manually. -> I could have a base precone, then allow for changes on top of that? 
     B = 1 #Number of blades
-    yaw = 0.0
+    yaw = 0.0 #TODO: Need to include these. 
     tilt = 0.0
     azimuth = 0.0
 
 
-
-
-
     ### Create storage structures for solution
     resids = zeros(maxiterations, 3) #columns of resids is deflection y, force y, force z
-
-
 
 
 
@@ -57,33 +79,18 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=bemmodel.turbine, tip=nothing)
     end
 
-    # @show rotor #
-    # @show rvec
-    # @show chordvec
-    # @show twistvec
-    
-
-    ### Create Airfoils
-    # airfoils = [CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3], "", env.rho*U*rvec[i]/env.mu, U/env.a, Akima(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2]), Akima(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,3])) for i in 1:n] #Todo: Failing for some reason. 
-
-    airfoils = [CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3]) for i in 1:n]
 
     ### Create Section
-    # sections = CCBlade.Section.(rvec, chordvec, twistvec, airfoils)
-    sections = [Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i in 1:n] #Didn't change anything. 
-    # @show sections[1]
+    sections = [Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i in 1:n] 
 
     ### Create Operating Point
-    # operatingpoints = CCBlade.windturbine_op.(U, env.RS(t), pitch, rvec, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
-
     operatingpoints = [CCBlade.OperatingPoint(U, env.RS(t)*rvec[i], env.rho, pitch, env.mu, env.a) for i in 1:n] 
-    # @show operatingpoints[end]
 
 
     #### Create GXBeam inputs
     ### Create Assembly
     assembly = create_gxbeam_assembly(gxmodel, ps)
-    elements = view(assembly.elements, :) 
+    # elements = view(assembly.elements, :) 
 
 
     ### Create Prescribed Conditions
@@ -93,8 +100,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
     ##### Run initial solution
     ### Run CCBlade
-    outs = CCBlade.solve.(Ref(rotor), sections, operatingpoints) 
-    # @show outs.Np #outs gets overwritten. 
+    outs = CCBlade.solve.(Ref(rotor), sections, operatingpoints)  
     outshistory = [outs]
 
     ### Extract CCBlade Loads
@@ -107,8 +113,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     m = @SVector zeros(3)
     m_follower = @SVector zeros(3)
     for i = 1:n #Iterate through the elements and apply the distributed load at every element.
-        f = SVector(0.0, Fy[i], Fz[i]) #The load that I get out should be a distributed load... so I shouldn't need to divide by zero. Right? If I want the total thrust, I'd have to integrate the loading across the rotor. So this must be a distributed load. 
-        # f_follower = SVector(0.0, Fy[i]/elements[i].L, Fz[i]/elements[i].L) #Dividing by the length of the element so the force is distributed across the element. 
+        f = SVector(0.0, Fy[i], Fz[i]) # Update the distributed dead load (as opposed to a follower load). 
         distributed_load[i] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end
 
@@ -116,7 +121,8 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_load, linear = false, angular_velocity = Omega, gravity=grav)
 
     state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
-    # @show state.elements[end].u[2]
+
+    ### Create vectors to update across iterations so that I can pass the solution out of the iteration vector. 
     history = [state]
     syshistory = [system]
 
@@ -125,6 +131,8 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     def_y = [history[1].elements[ielem].u[2] for ielem = 1:n]
     def_z = [history[1].elements[ielem].u[3] for ielem = 1:n]
     def_thetax = [history[1].elements[ielem].theta[1] for ielem = 1:n]
+
+
     Vx = [env.Vinf(t) for ielem = 1:n]
     Vy = [-history[1].elements[ielem].V[2] for ielem = 1:n]
 
@@ -139,8 +147,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     deflection_new = deepcopy(def_y)
     deflection_old = deepcopy(def_y)
 
-    # @show Fz_new
-    # @show deflection_new
+
 
     ### Create solution flags
     converged_flag = false
@@ -154,35 +161,30 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
         ### Iterate through the aerodynamic stations and solve
         ## Create Section
-        r_displaced = rvec #.+ def_x #Todo. Why is there deflection in the positive x? #I'm not including the displacement in the r direction, because that'll mess with the tip and hub corrections. -> And.... it isn't needed because I update the X and Y velocities. 
-        
         twist_displaced = twistvec .- def_thetax
-        sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils)  
-        # @show def_y[end] #y deflection is converged to four decimal places after a single iteration. 
+        sects = CCBlade.Section.(rvec, chordvec, twist_displaced, blade.airfoils) #Update the section. 
+        #I don't displace the radial vector to avoid issues with the hub and tip corrections. The effects of their displacement is felt through the X and Y velocities. 
+        
 
         ## Create Operating Point
-        # ops = CCBlade.windturbine_op.(U, env.RS(t), pitch, r_displaced, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
         for i = 1:n #Iterate throught the nodes and update the operating points
             operatingpoints[i] = CCBlade.OperatingPoint(Vx[i], Vy[i], env.rho, pitch, env.mu, env.a)
         end
-        # @show operatingpoints[end].Vx operatingpoints[end].Vy
 
         ## Run CCBlade
         outs = CCBlade.solve.(Ref(rotor), sects, operatingpoints)
 
         ## Extract CCBlade Loads
-        Fz_new .= -outs.Np
+        Fz_new .= -outs.Np #TODO: Does the dot operator do anything in this case? 
         Fy_new .= outs.Tp
 
         outshistory[1] = outs
 
-        # @show Fz_new
 
         ### Solve GXBeam
         ## Update GXBeam Loads
         for i = 1:n #Iterate through the elements and apply the distributed load at every element. 
-            # f_follower = SVector(0.0, Fy_new[i]/elements[i].L, Fz_new[i]/elements[i].L) #Dividing by the length of the element so the force is distributed across the element. 
-            f = SVector(0.0, Fy_new[i], Fz_new[i])
+            f = SVector(0.0, Fy_new[i], Fz_new[i]) #Update the distributed dead load
             distributed_load[i] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
         end
 
@@ -200,7 +202,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         ## Update the velocities
         for i = 1:n
             V_elem = history[1].elements[i].V # Element linear velocity
-            Vx[i] = env.Vinf(t) + V_elem[3] #Freestream velocity  
+            Vx[i] = env.Vinf(t) + V_elem[3] #Freestream velocity  #Todo: This assumes that the structural and aerodynamic meshs are co-located. I need to switch to an interpolated method. 
             Vy[i] = - V_elem[2]
         end
 
@@ -258,9 +260,8 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         Fy_old .= Fy_new
         Fz_old .= Fz_new
     end
-    # iter -= 1
 
-    return outshistory[1], history[1], syshistory[1], assembly, prescribed_conditions, converged, iter, resids[1:iter,:], distributed_load #Todo. Is the state and system that are getting passed out the state and system that were most recently calculated... or the one before the loop. I'm guessing it's the one before the loop. ... but then how/why does my dynamic solution look like it is converging to the fixed-point solution? -> I know that it's passing out the correct solution now. I don't think it was doing it incorrectly in the first place. 
+    return outshistory[1], history[1], syshistory[1], assembly, converged, iter, resids[1:iter,:] 
 end
 
 

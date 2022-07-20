@@ -117,7 +117,7 @@ p = vcat(p_a, p_s)
 
 
 
-outs, state, system, assembly, prescribed_conditions, converged, iters, resids, distributed_load = fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = 100, verbose = true, tolerance= 1e-12)
+outs, state, system, assembly, converged, iters, resids = fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = 100, verbose = true, tolerance= 1e-12)
 
 # @btime fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = 4, verbose = false, tolerance= 1e-12) ### 12.281 ms (21900 allocations: 9.92 MiB)
 # state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)

@@ -152,7 +152,7 @@ stop = 2:gxmodel.np
 ## Create assembly
 assembly = create_gxbeam_assembly(gxmodel, p_s, start, stop) 
 
-outs, state, system, assembly, prescribed_conditions, converged, iters, resids, distributed_load = fixedpoint(bemmodel, gxmodel, env_steady, blade, p; maxiterations = 100, verbose = false, tolerance= 1e-12, g=0.0)
+outs, state, system, assembly, converged, iters, resids = fixedpoint(bemmodel, gxmodel, env_steady, blade, p; maxiterations = 100, verbose = false, tolerance= 1e-12, g=0.0)
 
 
 t0 = tspan[1]
@@ -162,12 +162,6 @@ cchistory, gxhistory, tvec = simulate(rvec, chordvec, twistvec, rhub, rtip, blad
 
 
 
-# outs, state, system, assembly, prescribed_conditions, converged, iters, resids, distributed_load = fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations = 100, verbose = true, tolerance= 1e-12) #Todo The static solution is mucho different from the time domain simulation... even though I thought I was passing in the same assembly... but obviously not. That is .... troublesome. It makes sense that the fixedpoint solution is near the initial time domain solution. They are both steady state solutions. -> Aight... See below (not the one directly below, but the one below that). 
-
-#Todo. Another thing that is interesting is that this FP simulation is very different from the one in the other file.... -> Aha, the fixed point solution uses the environment struct at t=0... which the velocity is super low... which makes sense. Okay.. 
-
-# Todo. Now the time domain solution is pretty far off from the steady solution. Well... right from the outset, the solution is off. -> Alright. So I was using a follower load in the fixed point iteration, which changes the solution... right. Then the difference at that point is the fact that I'm plotting the solution after several iterations, and the scale I'm looking at shows the difference between just a one-way coupling and a fixed point iteration. 
-# -> Oh dang, also... I was showing the end element's deflection versus the end point's deflection... so yeah.. that's the real reason why it's off (I had forgot that a single iteration of the fixed point iteration gets it right to the fourth decimal point (at least for this case).).
 
 nt = length(tvec)
 
@@ -175,10 +169,9 @@ tipdef = [gxhistory[i].points[end].u[2] for i in 1:nt]
 
 tipplt = plot(tvec, tipdef, leg=:topright, xaxis="time (s)", yaxis="deflection (m)", lab="dynamic")
 hline!([state.points[end].u[2]], lab="static")
-# hline!([0.1339370376174049]) #On top of the static solution. (First iteration from static solution.)
 display(tipplt) 
 
-#Alright, the tip is not displacing any further because the beam is starting from steady state. Which is what we were looking for. 
+
 
 # x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
@@ -196,15 +189,15 @@ display(tipplt)
 # end
 # gif(anim, "bodydeflections_threeway_071822.gif", fps = 100)
 
-# anim = @animate for i in 1:nt
-#     ccout = cchistory[i]
-#     state = gxhistory[i]
-#     x = [assembly.elements[ipoint].x[1] + state.elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
+anim = @animate for i in 1:nt
+    ccout = cchistory[i]
+    state = gxhistory[i]
+    x = [assembly.elements[ipoint].x[1] + state.elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
     
-#     plot(x, ccout.Np, leg=:topleft, xaxis="Beam length (m)", yaxis="Distributed Loading (N/m)", ylims= (-500, 8000), xlims=(0, rtip), lab="Normal")
-#     plot!(x, ccout.Tp, lab="Tangent")
-# end
-# gif(anim, "bodyforces_threeway_071822.gif", fps = 100)
+    plot(x, ccout.Np, leg=:topleft, xaxis="Beam length (m)", yaxis="Distributed Loading (N/m)", ylims= (-500, 8000), xlims=(0, rtip), lab="Normal")
+    plot!(x, ccout.Tp, lab="Tangent")
+end
+gif(anim, "bodyforces_threeway_072022.gif", fps = 100)
 
 
 
