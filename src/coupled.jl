@@ -349,7 +349,7 @@ function update_structural_forces!(distributed_loads, assembly, gxstate, ccstate
     Fzfit = Akima(rvec, -ccstate.Np ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
     Fyfit = Akima(rvec, ccstate.Tp)
 
-    f = @SVector zeros(3)
+    f_follower = @SVector zeros(3)
     m = @SVector zeros(3)
     m_follower = @SVector zeros(3)
     
@@ -364,10 +364,10 @@ function update_structural_forces!(distributed_loads, assembly, gxstate, ccstate
         # distributed_loads[ielem] = DistributedLoads(assembly, ielem; fx = (s) -> -b*V[1]/L, fy = (s) -> Fyfit(rgx[ielem])-b*Vy/L, fz= (s) -> Fzfit(rgx[ielem])-b*V[3]/L) 
 
         # distributed_loads[ielem] = DistributedLoads(assembly, ielem; fx = (s) -> -b*V[1]/L, fy = (s) -> ccstate.Tp[ielem]-b*Vy/L, fz= (s) -> -ccstate.Np[ielem]-b*V[3]/L)
-        fy = ccstate.Tp[ielem] - b*Vy/L
+        fy = ccstate.Tp[ielem] - b*Vy/L #Dividing the damping force by length so that it is a distributed load. 
         fz = -ccstate.Np[ielem] - b*V[3]/L
 
-        f_follower = SVector(0.0, fy, fz)
+        f = SVector(0.0, fy, fz)
         distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end
 end
@@ -425,7 +425,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
 
      
     ### Solve BEM residual
-    ccout = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #Todo: There are slightly differences in the loadings of these two. #WorkLocation:
+    ccout = CCBlade.solve.(Ref(rotor), sections, operatingpoints) 
     # @show ccout.Np
 
     
@@ -467,12 +467,12 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
     # distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(rgx[ielem]), fz= (s) -> Fzfit(rgx[ielem])) for ielem in 1:nelem)  
 
     distributed_loads = Dict{Int64, GXBeam.DistributedLoads{eltype(p)}}()
-    f = @SVector zeros(3)
+    f_follower = @SVector zeros(3)
     m = @SVector zeros(3)
     m_follower = @SVector zeros(3)
     for ielem = 1:nelem #Iterate through the elements and apply the distributed load at every element.
         # f_follower = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem])) 
-        f_follower = SVector(0.0, ccout.Tp[ielem], -ccout.Np[ielem]) #Didn't change anything from the line above because I've colocated the structural and aerodynamic mesh. 
+        f = SVector(0.0, ccout.Tp[ielem], -ccout.Np[ielem]) #Didn't change anything from the line above because I've colocated the structural and aerodynamic mesh. 
         distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end #Note: Marking it as a follower load made a difference. A significant difference. -> Although thinking about it, I should probably not use a follower load, because the normal and tangental forces are defined in the aerodynamic reference frame, and the follower loads are defined in the local (deformed) structural reference frames. 
 

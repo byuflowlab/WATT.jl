@@ -103,11 +103,11 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
     ### Create distributed_load
     distributed_load = Dict{Int64, GXBeam.DistributedLoads{eltype(p)}}()
-    f = @SVector zeros(3)
+    f_follower = @SVector zeros(3)
     m = @SVector zeros(3)
     m_follower = @SVector zeros(3)
     for i = 1:n #Iterate through the elements and apply the distributed load at every element.
-        f_follower = SVector(0.0, Fy[i], Fz[i]) #The load that I get out should be a distributed load... so I shouldn't need to divide by zero. Right? If I want the total thrust, I'd have to integrate the loading across the rotor. So this must be a distributed load. 
+        f = SVector(0.0, Fy[i], Fz[i]) #The load that I get out should be a distributed load... so I shouldn't need to divide by zero. Right? If I want the total thrust, I'd have to integrate the loading across the rotor. So this must be a distributed load. 
         # f_follower = SVector(0.0, Fy[i]/elements[i].L, Fz[i]/elements[i].L) #Dividing by the length of the element so the force is distributed across the element. 
         distributed_load[i] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end
@@ -154,7 +154,8 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
 
         ### Iterate through the aerodynamic stations and solve
         ## Create Section
-        r_displaced = rvec #.+ def_x #Todo: Why is there deflection in the positive x? #I'm not including the displacement in the r direction, because that'll mess with the tip and hub corrections. -> 
+        r_displaced = rvec #.+ def_x #Todo. Why is there deflection in the positive x? #I'm not including the displacement in the r direction, because that'll mess with the tip and hub corrections. -> And.... it isn't needed because I update the X and Y velocities. 
+        
         twist_displaced = twistvec .- def_thetax
         sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils)  
         # @show def_y[end] #y deflection is converged to four decimal places after a single iteration. 
@@ -181,7 +182,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         ## Update GXBeam Loads
         for i = 1:n #Iterate through the elements and apply the distributed load at every element. 
             # f_follower = SVector(0.0, Fy_new[i]/elements[i].L, Fz_new[i]/elements[i].L) #Dividing by the length of the element so the force is distributed across the element. 
-            f_follower = SVector(0.0, Fy_new[i], Fz_new[i])
+            f = SVector(0.0, Fy_new[i], Fz_new[i])
             distributed_load[i] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
         end
 
