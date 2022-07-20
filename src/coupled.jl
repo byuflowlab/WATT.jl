@@ -111,23 +111,23 @@ function createrisoode(blade)
 end 
 
 """
-update_p_a!(p_a, deformed_twist)
+update_p_aero!(p_aero, deformed_twist)
 
 Update the aerodynamic parameters that change from iteration to iteration (for Riso). 
 
 ### Inputs
 
 ### Outputs
-- p_a::Array{TF, 1} - updated vector of aerodynamic parameters for Riso. 
+- p_aero::Array{TF, 1} - updated vector of aerodynamic parameters for Riso. 
 
 ### Notes
-- Recall that the order of p_a is: [chordvec, twistvec, phivec, Vxvec, Vyvec, Vxdotvec, Vydotvec, pitch]. Changed to vcat(chordvec, twistvec, phivec, Wvec, Wdotvec, pitch)
+- Recall that the order of p_aero is: [chordvec, twistvec, phivec, Vxvec, Vyvec, Vxdotvec, Vydotvec, pitch]. Changed to vcat(chordvec, twistvec, phivec, Wvec, Wdotvec, pitch)
 """
-function update_p_a!(p_a, deformed_twist, phivec, Wvec, Wvecdot; n=length(deformed_twist))
-    p_a[n+1:2*n] = deformed_twist
-    p_a[2n+1:3n] = phivec
-    p_a[3n+1:4n] = Wvec
-    p_a[4n+1:5n] = Wvecdot
+function update_p_aero!(p_aero, deformed_twist, phivec, Wvec, Wvecdot; n=length(deformed_twist))
+    p_aero[n+1:2*n] = deformed_twist
+    p_aero[2n+1:3n] = phivec
+    p_aero[3n+1:4n] = Wvec
+    p_aero[4n+1:5n] = Wvecdot
 end
 
 
@@ -244,8 +244,10 @@ function interpolate_velocity(ip, assembly, state) #Note: This is probably a ver
 end
 
 function interpolate_angle(ip, assembly, state)
-    thetagx = [state.points[i].theta[1] for i = 1:length(assembly.points)]
-    return (1-ip.percent)*thetagx[ip.pair[1]] + ip.percent*thetagx[ip.pair[2]]
+    # thetagx = [state.points[i].theta[1] for i = 1:length(assembly.points)]
+    # return (1-ip.percent)*thetagx[ip.pair[1]] + ip.percent*thetagx[ip.pair[2]]
+
+    return state.elements[ip.pair[1]].theta[1] #Assume that the twist at the closest elemental node is the twist at the aerodynamic node. -> Didn't make much of a difference.
 end
 
 
@@ -295,8 +297,11 @@ function update_aero_inputs!(coupling::TwoWay, sections, operatingpoints, Vxvec,
         sections[i] = Section(rvec[i], chordvec[i], twist_displaced[i], blade.airfoils[i])  
 
         Vxvec[i] = env.Vinf(t) + aeroV[i][3] 
-        Vyvec[i] = aeroV[i][2] #For some reason this was negative before and isn't anymore. 
+        Vyvec[i] = -aeroV[i][2] #For some reason this was negative before and isn't anymore. 
         Wvec[i] = sqrt(Vxvec[i]^2 + Vyvec[i]^2)
+        # if i==na
+        #     @show Vyvec[i]
+        # end
 
         operatingpoints[i] = CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a)
     end
@@ -311,8 +316,10 @@ function update_aero_inputs!(coupling::ThreeWay, sections, operatingpoints, Vxve
         sections[i] = Section(rvec[i], chordvec[i], twist_displaced[i], dsstates[i]) #Section(rvec[i], chordvec[i], twist_displaced[i], blade.airfoils[i])  
 
         Vxvec[i] = env.Vinf(t) + aeroV[i][3] 
-        Vyvec[i] = aeroV[i][2] #For some reason this was negative before and isn't anymore. 
+        Vyvec[i] = -aeroV[i][2] #For some reason this was negative before and isn't anymore. 
         Wvec[i] = sqrt(Vxvec[i]^2 + Vyvec[i]^2)
+
+        
 
         operatingpoints[i] = CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a)
     end
@@ -335,6 +342,33 @@ function update_dsstates!(x, dsstates, Wvec, chordvec, blade)
     na = length(dsstates)
     for i = 1:na
         dsstates[i] = RisoState(x[4*(i-1)+1:4*(i-1)+4], Wvec[i], chordvec[i], blade.airfoils[i])
+    end
+end
+
+function update_structural_forces!(distributed_loads, assembly, gxstate, ccstate, env, rvec, rgx, t, b)
+    Fzfit = Akima(rvec, -ccstate.Np ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
+    Fyfit = Akima(rvec, ccstate.Tp)
+
+    f = @SVector zeros(3)
+    m = @SVector zeros(3)
+    m_follower = @SVector zeros(3)
+    
+    for ielem = 1:length(rgx)
+        V = gxstate.elements[ielem].V
+        L = assembly.elements[ielem].L
+        r_deflected = rgx[ielem] + gxstate.elements[ielem].u[1]
+        Vy = V[2] + env.RS(t)*r_deflected #Need to take the rotation velocity out of the structural velocity. 
+        # if ielem == length(rgx)
+        #     @show Vy #TODO: I'm not convinced that this velocity is correct because the deflection supposedly travels just over 0.6 meters in like 1.25-1.4 seconds... I'm getting velocities on the order of 1.76e-6... which assuming a constant velocity, then 1.4*1.76e-6 = 2.454e-6 ... which a couple of micrometers is not half a meter. so... 
+        # end
+        # distributed_loads[ielem] = DistributedLoads(assembly, ielem; fx = (s) -> -b*V[1]/L, fy = (s) -> Fyfit(rgx[ielem])-b*Vy/L, fz= (s) -> Fzfit(rgx[ielem])-b*V[3]/L) 
+
+        # distributed_loads[ielem] = DistributedLoads(assembly, ielem; fx = (s) -> -b*V[1]/L, fy = (s) -> ccstate.Tp[ielem]-b*Vy/L, fz= (s) -> -ccstate.Np[ielem]-b*V[3]/L)
+        fy = ccstate.Tp[ielem] - b*Vy/L
+        fz = -ccstate.Np[ielem] - b*V[3]/L
+
+        f_follower = SVector(0.0, fy, fz)
+        distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end
 end
 
@@ -366,7 +400,7 @@ Simulates the described wind turbine across the given time span using a BEM (I a
 - The structural model does not include damping. 
 - The initial condition is assumed to be the loads from the undeflected solution (to add the option to start from the fixed point iteration solution later). Those loads are then used to find the steady state deflections and inflow velocities. The inflow velocities are used to calculate the steady state states for the Riso model.
 """
-function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt; solver=RK4(), verbose=false, coupling=OneWay())
+function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt; solver=RK4(), verbose=false, coupling=OneWay(), b=0.01)
 
     t0 = tspan[1]
     tvec = tspan[1]:dt:tspan[2]
@@ -375,18 +409,24 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
     ### Create CCBlade inputs
     rotor = CCBlade.Rotor(rhub, rtip, 1.0, precone=0.0, turbine=true)
     na = length(blade.airfoils)
-    sections = [Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i in 1:na]
+    sections = [Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i in 1:na] #TODO. I suppose that the airfoils are different between the fixed point iteration and time domain simulations. -> It didn't change anything in the fixed point solution to change to what I have here. 
+
+    # @show rotor #The same. 
+    # @show sections[1]
 
     ### Create OperatingPoint #TODO: Make general so it can take propeller configurations. 
     Vxvec = [env.Vinf(t0) for i in 1:na] #Freestream velocity
     Vyvec = [env.RS(t0)*rvec[i] for i in 1:na]
     pitch = 0.0 #TODO: I'm not sure if this pitch does something or not. And I don't know if I want to pitch yet. 
-    operatingpoints = [CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a) for i in 1:na] 
-    #TODO: Dr. Ning uses mu=1 and a=1 in his example.  
+    operatingpoints = [CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a) for i in 1:na] #Note: I do this differently in the fixed point solution. -> Now they are the same and it didn't change anything. 
+    # #TODO: Dr. Ning uses mu=1 and a=1 in his example.  
+    # @show operatingpoints[end]
+    
 
      
     ### Solve BEM residual
-    ccout = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
+    ccout = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #Todo: There are slightly differences in the loadings of these two. #WorkLocation:
+    # @show ccout.Np
 
     
 
@@ -396,12 +436,12 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
 
     risoode = createrisoode(blade) 
 
-    p_a = vcat(chordvec, twistvec, ccout.phi, Wvec, Wdotvec, pitch) #Create p_a 
+    p_aero = vcat(chordvec, twistvec, ccout.phi, Wvec, Wdotvec, pitch) #Create p_aero 
 
     x0 = zeros(4*na) #TODO: I think that one of these states might need to be initialized as phi.
     x0[4:4:4*na] .= 1.0 
 
-    prob = SteadyStateProblem(risoode, x0, p = p_a)
+    prob = SteadyStateProblem(risoode, x0, p = p_aero)
     sol = DifferentialEquations.solve(prob)
     # @show sol.u
     xds = sol.u #Array(sol)' #TODO. I think this will work. -> The array didn't work. It was returning an array instead of a vector. 
@@ -423,15 +463,27 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
 
     nelem = length(assembly.elements)
     rgx = [assembly.elements[i].x[1] for i in 1:nelem]
-    distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(rgx[ielem]), fz= (s) -> Fzfit(rgx[ielem])) for ielem in 1:nelem)  
+
+    # distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(rgx[ielem]), fz= (s) -> Fzfit(rgx[ielem])) for ielem in 1:nelem)  
+
+    distributed_loads = Dict{Int64, GXBeam.DistributedLoads{eltype(p)}}()
+    f = @SVector zeros(3)
+    m = @SVector zeros(3)
+    m_follower = @SVector zeros(3)
+    for ielem = 1:nelem #Iterate through the elements and apply the distributed load at every element.
+        # f_follower = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem])) 
+        f_follower = SVector(0.0, ccout.Tp[ielem], -ccout.Np[ielem]) #Didn't change anything from the line above because I've colocated the structural and aerodynamic mesh. 
+        distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
+    end #Note: Marking it as a follower load made a difference. A significant difference. -> Although thinking about it, I should probably not use a follower load, because the normal and tangental forces are defined in the aerodynamic reference frame, and the follower loads are defined in the local (deformed) structural reference frames. 
 
 
 
-    Omega = SVector(0.0, 0.0, env.RS(t0))
+    Omega = SVector(0.0, 0.0, -env.RS(t0))
 
     system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega) 
 
     gxstate = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
+    # @show gxstate.elements[end].u[2]
 
     
     cchistory = [ccout for i = 1:nt]
@@ -467,20 +519,18 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
         # end
 
         ## Solve Riso states based on inflow and deflection
-        # update_p_a!(p_a, twist_displaced, ccout.phi, Wvec, Wdotvec) #TODO: Update p_a #WorkLocation: The Riso model is off somehow. -> I wonder if there is something wrong with the BEM... because if I recall... the BEM-GXBeam coupling wasn't in the same force range as the static coupling. -> I'm going to try the two-way coupling without the dynamic stall model again. Make sure that that oscillates about the solution that I expect. 
+        # update_p_aero!(p_aero, twist_displaced, ccout.phi, Wvec, Wdotvec) #TODO: Update p_aero #WorkLocation: The Riso model is off somehow. -> I wonder if there is something wrong with the BEM... because if I recall... the BEM-GXBeam coupling wasn't in the same force range as the static coupling. -> I'm going to try the two-way coupling without the dynamic stall model again. Make sure that that oscillates about the solution that I expect. 
         # @show size(xds)
         # Note: I could just pass the angle of attack and inflow velocity from CCBlade to the DS model. 
-        # xds[:] = solver(risoode, xds, p_a, t, dt) #TODO: I need to convert this to work in place. #Todo. This function isn't working properly. It's creating more states. -> I was passing in an array instead of a vector. 
+        # xds[:] = solver(risoode, xds, p_aero, t, dt) #TODO: I need to convert this to work in place. #Todo. This function isn't working properly. It's creating more states. -> I was passing in an array instead of a vector. 
         # update_dsstates!(xds, dsstates, Wvec, chordvec, blade) #Todo: A lot of these states are returning a negative state. 
 
         
         ## Update GXBeam loads
-        Fzfit = Akima(rvec, -cchistory[i].Np ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
-        Fyfit = Akima(rvec, cchistory[i].Tp)
-        
-        distributed_loads = Dict(ielem => DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(rgx[ielem]), fz= (s) -> Fzfit(rgx[ielem])) for ielem in 1:nelem)
+        update_structural_forces!(distributed_loads, assembly, gxhistory[i], cchistory[i], env, rvec, rgx, t, b) #TODO: Should I use cchistory[i] or i+1
+        #Note: Interestingly, letting b>0, it reverses the direction of the loads. .... Oh, yeah... duh... there is the relative velocity. Aight... so I need the deflected radius. And the environment function. 
 
-        Omega = SVector(0.0, 0.0, env.RS(t))
+        Omega = SVector(0.0, 0.0, -env.RS(t))
 
 
         ## Solve GXBeam for time step

@@ -57,9 +57,11 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=bemmodel.turbine, tip=nothing)
     end
 
+    # @show rotor #
     # @show rvec
     # @show chordvec
     # @show twistvec
+    
 
     ### Create Airfoils
     # airfoils = [CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3], "", env.rho*U*rvec[i]/env.mu, U/env.a, Akima(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2]), Akima(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,3])) for i in 1:n] #Todo: Failing for some reason. 
@@ -67,11 +69,15 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     airfoils = [CCBlade.AlphaAF(blade.airfoils[i].polar[:,1], blade.airfoils[i].polar[:,2], blade.airfoils[i].polar[:,3]) for i in 1:n]
 
     ### Create Section
-    sections = CCBlade.Section.(rvec, chordvec, twistvec, airfoils)
+    # sections = CCBlade.Section.(rvec, chordvec, twistvec, airfoils)
+    sections = [Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i in 1:n] #Didn't change anything. 
+    # @show sections[1]
 
     ### Create Operating Point
-    operatingpoints = CCBlade.windturbine_op.(U, env.RS(t), pitch, rvec, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
+    # operatingpoints = CCBlade.windturbine_op.(U, env.RS(t), pitch, rvec, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
 
+    operatingpoints = [CCBlade.OperatingPoint(U, env.RS(t)*rvec[i], env.rho, pitch, env.mu, env.a) for i in 1:n] 
+    # @show operatingpoints[end]
 
 
     #### Create GXBeam inputs
@@ -88,6 +94,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     ##### Run initial solution
     ### Run CCBlade
     outs = CCBlade.solve.(Ref(rotor), sections, operatingpoints) 
+    # @show outs.Np #outs gets overwritten. 
     outshistory = [outs]
 
     ### Extract CCBlade Loads
@@ -109,6 +116,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_load, linear = false, angular_velocity = Omega, gravity=grav)
 
     state = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
+    # @show state.elements[end].u[2]
     history = [state]
     syshistory = [system]
 
@@ -149,6 +157,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
         r_displaced = rvec #.+ def_x #Todo: Why is there deflection in the positive x? #I'm not including the displacement in the r direction, because that'll mess with the tip and hub corrections. -> 
         twist_displaced = twistvec .- def_thetax
         sects = CCBlade.Section.(r_displaced, chordvec, twist_displaced, airfoils)  
+        # @show def_y[end] #y deflection is converged to four decimal places after a single iteration. 
 
         ## Create Operating Point
         # ops = CCBlade.windturbine_op.(U, env.RS(t), pitch, r_displaced, precone, yaw, tilt, azimuth, hubHt, bemmodel.shearexp, env.rho)
