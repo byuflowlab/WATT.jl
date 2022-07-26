@@ -27,6 +27,10 @@ function afeval(af::Airfoil, alpha, Re, Mach)
     return af(alpha, Re, Mach)
 end
 
+# function afeval(af::Airfoil, alpha, Re, Mach)
+#     return af.cl(alpha), af.cd(alpha)
+# end
+
 
 function simpleairfoil(polar)
     cl = Akima(polar[:,1], polar[:,2])

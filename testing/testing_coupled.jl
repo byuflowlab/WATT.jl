@@ -1,4 +1,4 @@
-using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, Plots, StaticArrays, CurveFit
+using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, Plots, StaticArrays, CurveFit, NLsolve
 
 include("../src/blades.jl")
 include("../src/environments.jl")
@@ -18,16 +18,7 @@ include("../src/static.jl")
 ## Define simplified NREL 5MW Turbine constants and other info. 
 rhub = 1.5
 rtip = 63.0
-# rvec = [11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.6333]
-# chordvec = [4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
-# twistvec = pi/180*[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
-# thickvec = chordvec.*0.08
-# B = 3.0
-# hubht = 90.0
 
-# rvec = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.6333]
-# chordvec = [3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
-# twistvec = pi/180*[13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
 
 rvec = [11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.6333]
 chordvec = [4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
@@ -66,7 +57,7 @@ shearexp = 0.0
 
 #### Define solution
 tspan = (0.0, 20.0)
-dt = 0.05
+dt = 0.01
 
 ### Prep the ASD rotor and operating conditions 
 aftypes = Array{AlphaAF}(undef, 8)
@@ -81,7 +72,7 @@ aftypes[8] = AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/NACA64_A17.dat"
 
 # indices correspond to which airfoil is used at which station
 af_idx = [3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
-# af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
+
 
 # create airfoil array
 airfoils = aftypes[af_idx]
@@ -156,7 +147,7 @@ outs, state, system, assembly, converged, iters, resids = fixedpoint(bemmodel, g
 
 
 t0 = tspan[1]
-cchistory, gxhistory, tvec = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt; verbose=false, coupling=TwoWay(), b=5000)
+cchistory, gxhistory, dshistory, tvec = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt; solver=DiffEQ(), verbose=false, coupling=ThreeWay(), b=5000)
 
 
 
@@ -169,9 +160,15 @@ tipdef = [gxhistory[i].points[end].u[2] for i in 1:nt]
 
 tipplt = plot(tvec, tipdef, leg=:topright, xaxis="time (s)", yaxis="deflection (m)", lab="dynamic")
 hline!([state.points[end].u[2]], lab="static")
-display(tipplt) 
+# display(tipplt) 
 
+# dsplt = plotdshistory(dshistory, tvec, 14)
+# display(dsplt)
 
+for i = 1:n
+    dsplt = plotdshistory(dshistory, tvec, i; titletext="Station $i")
+display(dsplt)
+end
 
 # x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
 
@@ -189,15 +186,15 @@ display(tipplt)
 # end
 # gif(anim, "bodydeflections_threeway_071822.gif", fps = 100)
 
-anim = @animate for i in 1:nt
-    ccout = cchistory[i]
-    state = gxhistory[i]
-    x = [assembly.elements[ipoint].x[1] + state.elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
+# anim = @animate for i in 1:nt
+#     ccout = cchistory[i]
+#     state = gxhistory[i]
+#     x = [assembly.elements[ipoint].x[1] + state.elements[ipoint].u[1] for ipoint = 1:length(assembly.elements)]
     
-    plot(x, ccout.Np, leg=:topleft, xaxis="Beam length (m)", yaxis="Distributed Loading (N/m)", ylims= (-500, 8000), xlims=(0, rtip), lab="Normal")
-    plot!(x, ccout.Tp, lab="Tangent")
-end
-gif(anim, "bodyforces_threeway_072022.gif", fps = 100)
+#     plot(x, ccout.Np, leg=:topleft, xaxis="Beam length (m)", yaxis="Distributed Loading (N/m)", ylims= (-500, 8000), xlims=(0, rtip), lab="Normal")
+#     plot!(x, ccout.Tp, lab="Tangent")
+# end
+# gif(anim, "bodyforces_threeway_072022.gif", fps = 100)
 
 
 

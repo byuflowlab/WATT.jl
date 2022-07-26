@@ -147,8 +147,6 @@ outs_ccblade = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 
 
 
-
-
 ### Visualize the loads. 
 defplt = plot(xaxis="Radial Location (m)", yaxis="Element Deflection (m)", legend=:topleft)
 plot!(x, def_x, lab="X deflection")

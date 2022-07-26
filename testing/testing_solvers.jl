@@ -1,4 +1,4 @@
-using DifferentialEquations, Plots
+using DifferentialEquations, Plots, NLsolve
 
 include("../src/solvers.jl")
 
@@ -18,6 +18,7 @@ end
 y0 = [1, 2]
 
 solver = RK4()
+bdfsolve = BDF1()
 
 
 x = 0:0.001:1 # I don't think it has anything to do with the time step. 
@@ -25,14 +26,17 @@ p = nothing
 nx = length(x)
 
 yrk4 = zeros(nx, 2)
+ybdf1 = zeros(nx, 2)
 yana = zeros(nx, 2)
 
 yrk4[1,:] = y0
+ybdf1[1,:] = y0
 yana[1,:] = y0
 
 for i=2:nx
     dx = x[i]-x[i-1]
     yrk4[i,:] = solver(testode, yrk4[i-1,:], p, x[i-1], dx)
+    ybdf1[i,:] = bdfsolve(testode, ybdf1[i-1,:], p, x[i-1], dx)
     yana[i,:] = analytical(x[i])
 end
 
@@ -43,6 +47,8 @@ yDE = Array(sol)'
 
 plt = plot(x, yrk4[:,1], lab="y1 - RK4", leg=:topleft)
 plot!(x, yrk4[:,2], lab="y2 - RK4")
+plot!(x, ybdf1[:,1], lab="y1 - BDF1")
+plot!(x, ybdf1[:,2], lab="y2 - BDF1")
 plot!(x, yana[:,1], lab="y1 - ana")
 plot!(x, yana[:,2], lab="y2 - ana")
 plot!(sol.t, yDE[:,1], lab="y1 - DE")

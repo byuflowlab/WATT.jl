@@ -90,3 +90,18 @@ function readextra(filename)
     end
     return file[keepidxs, :]
 end
+
+function plotdshistory(dshistory, tvec, index; legloc=:topright, titletext=nothing)
+    nt = length(tvec)
+    states = [dshistory[it][index] for it = 1:nt]
+    x = zeros(nt, 4)
+    for i = 1:nt
+        x[i,:] = states[i].x
+    end
+
+    plt = plot(tvec, x[:,1], lab="State 1", xaxis="Time (s)", leg=legloc, title=titletext)
+    plot!(tvec, x[:,2], lab="State 2")
+    plot!(tvec, x[:,3], lab="State 3")
+    plot!(tvec, x[:,4], lab="State 4")
+    return plt
+end

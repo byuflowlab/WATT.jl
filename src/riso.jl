@@ -140,7 +140,7 @@ function riso_states(X, u, udot, v, vdot, theta, thetadot, c, airfoil)
 
     ae = alpha*(1-A1-A2) + X[1] + X[2] #Effective Angle of Attack
     # @show dcldalpha, ae, alpha0, Tu, alphadot, Tp, X[3]
-    dx3 = (dcldalpha*(ae-alpha0) + pi*Tu*alphadot)/Tp - X[3]/Tp
+    dx3 = (dcldalpha*(ae-alpha0) + pi*Tu*alphadot)/Tp - X[3]/Tp #TODO: Should this be able to go negative? 
 
     alphaf = (X[3]/dcldalpha)+alpha0 #Seperation Angle of Attack
     fp = fst(alphaf, liftfit, dcldalpha, alpha0)

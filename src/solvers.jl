@@ -46,3 +46,26 @@ function (s::RK4)(fun, x, p, t, dt)
 
     return @. x + (k1 + k2*2 + k3*2 + k4)*dt/6
 end
+
+struct BDF1 <: Solver
+end
+
+function (s::BDF1)(fun, x, p, t, dt) #Takes about 2x the time of the RK4
+    tn = t + dt
+    
+    fun! = function(residual, xn)
+        residual .= x .+ dt.*fun(xn, p, tn) - xn
+    end
+
+    xn = nlsolve(fun!, x) #TODO: Previously I had a initial guess that I initialized with an RK4 for the nonlinear solve. I'm using the current state right now, but I might try using the RK4 later. 
+    return xn.zero
+end
+
+struct DiffEQ <: Solver 
+end
+
+function (s::DiffEQ)(fun, x, p, t, dt) #Takes about the same amount of time as the BDF1. 
+    prob = ODEProblem(fun, x, (t, t+dt), p)
+    sol = DifferentialEquations.solve(prob)
+    return sol(t+dt)
+end

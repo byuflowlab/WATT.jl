@@ -88,6 +88,9 @@ function createrisoode(blade)
             vdot = 0.0
 
             theta = -((twistvec[i] + pitch) - phivec[i]) 
+            # if i==n
+            #     @show theta, u, udot, t
+            # end
             thetadot = 0.0 #Assuming that the airfoil isn't in the act of turning???? TODO: What are my other options?
 
     
@@ -301,6 +304,7 @@ function update_aeroinputs!(coupling::ThreeWay, sections, operatingpoints, Vxvec
         Vxvec[i] = env.Vinf(t) + aeroV[i][3] 
         Vyvec[i] = -aeroV[i][2] #For some reason this was negative before and isn't anymore. 
         Wvec[i] = sqrt(Vxvec[i]^2 + Vyvec[i]^2)
+        Wdotvec[i] = sqrt(env.Vinfdot(t)^2 + (env.RSdot(t)*rvec[i])^2) #TODO: I need to get the structural accelerations in here as well. 
 
         
 
@@ -413,14 +417,25 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
     p_aero = vcat(chordvec, twistvec, ccout.phi, Wvec, Wdotvec, pitch) #Create p_aero 
 
     x0 = zeros(4*na) #TODO: I think that one of these states might need to be initialized as phi.
+    #Note: I wonder if the first three states are in an intersting spot, so if I artifically push them positive if the steady state solve will find something more reasonable. 
+    # x0[1:4:4*na] .= 0.01 
+    # x0[2:4:4*na] .= 0.01
+    # x0[3:4:4*na] .= 0.5
+    #Note: Yeah, that did nothing. The steady state solution was still the same. I wonder what happens if I don't initialize with the steady state solution. 
+
     x0[4:4:4*na] .= 1.0 
 
     ## Steady state solution of dynamic stall odes at initial condition. 
     prob = SteadyStateProblem(risoode, x0, p = p_aero)
     sol = DifferentialEquations.solve(prob)
     xds = sol.u 
+    # xds = x0
+    # @show xds[end-3:end]
 
-    dsstates = [RisoState(sol[4*(i-1)+1:4*(i-1)+4], Wvec[i], chordvec[i], blade.airfoils[i]) for i = 1:na]
+    # dsstates = [RisoState(sol[4*(i-1)+1:4*(i-1)+4], Wvec[i], chordvec[i], blade.airfoils[i]) for i = 1:na]
+    dsstates = [RisoState(xds[4*(i-1)+1:4*(i-1)+4], Wvec[i], chordvec[i], blade.airfoils[i]) for i = 1:na]
+    # @show dsstates[end].x
+
     
     if isa(coupling, ThreeWay)
         sections = [Section(rvec[i], chordvec[i], twistvec[i], dsstates[i]) for i in 1:na]
@@ -461,6 +476,8 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
     
     cchistory = [ccout for i = 1:nt]
     gxhistory = [gxstate for i = 1:nt]
+    dshistory = [dsstates for i = 1:nt] #TODO: The way this is allocated allows the first entry to get changed as dsstates changes. 
+    dshistory[1] = deepcopy(dsstates)
 
 
     interpolationpoints = create_interpolationpoints(assembly, rvec) 
@@ -485,16 +502,24 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
         #     @show Wvec
         # end
 
-        ## Solve Riso states based on inflow and deflection
-        update_p_aero!(p_aero, twist_displaced, ccout.phi, Wvec, Wdotvec) #TODO: Update p_aero #WorkLocation: The Riso model is off somehow. -> I wonder if there is something wrong with the BEM... because if I recall... the BEM-GXBeam coupling wasn't in the same force range as the static coupling. -> I'm going to try the two-way coupling without the dynamic stall model again. Make sure that that oscillates about the solution that I expect. 
+        ## Solve Riso states based on inflow and deflection #Todo: I need to determine if I shooould be using the ith or the ith +1 state. 
+        update_p_aero!(p_aero, twist_displaced, cchistory[i+1].phi, Wvec, Wdotvec) 
+        
+        #WorkLocation: The Riso model is off somehow. -> The loadings aren't anywhere near where they should be... Which tells me that the issue is either in the inflow velocity... or.... oh.... the ccout... that's the initial steady state solution. -> Now I'm getting invalid solutions for the BEM... which tells me that the dynamic stall states are likely struggling. It also appears to have stalled out. -> I got some NaNs. 
+
+
         # @show size(xds)
+
+        # @show xds[end-3:end]
         # Note: I could just pass the angle of attack and inflow velocity from CCBlade to the DS model. 
         xds[:] = solver(risoode, xds, p_aero, t, dt) #TODO: I need to convert this to work in place. #Todo. This function isn't working properly. It's creating more states. -> I was passing in an array instead of a vector. 
+        # @show xds[end-3:end]
+
         update_dsstates!(xds, dsstates, Wvec, chordvec, blade) #Todo: A lot of these states are returning a negative state. 
 
         
         ## Update GXBeam loads
-        update_structural_forces!(distributed_loads, assembly, gxhistory[i], cchistory[i], env, rvec, rgx, t, b) #TODO: Should I use cchistory[i] or i+1
+        update_structural_forces!(distributed_loads, assembly, gxhistory[i], cchistory[i+1], env, rvec, rgx, t, b) #TODO: Should I use cchistory[i] or i+1
 
         Omega = SVector(0.0, 0.0, -env.RS(t))
 
@@ -506,6 +531,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
 
         ## Extract GXBeam outputs
         gxhistory[i+1] = localhistory[end]  
+        dshistory[i+1] = deepcopy(dsstates)
 
 
         for j = 1:na
@@ -522,6 +548,6 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, ts
         println("t=", round(tvec[end], digits=4))
     end
 
-    return cchistory, gxhistory, tvec
+    return cchistory, gxhistory, dshistory, tvec
 end
 
