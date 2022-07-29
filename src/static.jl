@@ -29,7 +29,7 @@ Iterates between the BEM (CCBlade) and structural model (GXBeam) until the stead
 ### Notes
 - Currently yaw, tilt, and azimuth aren't included. 
 """
-function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolerance=1e-3, g=0.0, verbose=false)
+function fixedpoint(bemmodel, gxmodel, env, blade, p, B; maxiterations=1000, tolerance=1e-3, g=0.0, verbose=false)
 
 
     ### Seperate the parameters and read in any pertainent data
@@ -60,7 +60,7 @@ function fixedpoint(bemmodel, gxmodel, env, blade, p; maxiterations=1000, tolera
     ### Unchanging constants
     t = 0.0
     precone = 0.0 #Precone. -> I'm going to change the radius manually. -> I could have a base precone, then allow for changes on top of that? 
-    B = 1 #Number of blades
+    # B = 1 #Number of blades #Note: You can't just default to 1. B affects the Prandtl Tip/hub correction. 
     yaw = 0.0 #TODO: Need to include these. 
     tilt = 0.0
     azimuth = 0.0

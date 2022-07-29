@@ -1,4 +1,4 @@
-using Plots, GXBeam, StaticArrays, LinearAlgebra, CCBlade, FLOWMath, CurveFit, BenchmarkTools
+using Plots, GXBeam, StaticArrays, LinearAlgebra, CCBlade, FLOWMath, CurveFit, BenchmarkTools, DelimitedFiles
 
 include("../src/blades.jl")
 include("../src/environments.jl")
@@ -10,16 +10,14 @@ include("../src/gxbeam.jl")
 include("../src/static.jl")
 
 #=
-Adam Cardoza 6/?/22
+Adam Cardoza 7/27/22
 
-Test the fixed point iteration solution (Steady state coupling between CCBlade and GXbeam that iterates back and forth until the solution converges to a given level.).
+See how the fixed point iteration solution compares to the OpenFAST aero-only solution. 
 
-Dr. Ning isn't sure that this will return the same solution as the steady state of a coupling between CCBlade, a dynamic stall model, and GXBeam. 
-
-Note that this solution might be off from the OpenFAST solution... if the polars aren't the same. 
 =#
 
-
+path = dirname(@__FILE__)
+cd(path)
 
 function nearestto(xvec, x)
     mins = abs.(xvec.-x)
@@ -38,9 +36,9 @@ end
 ## Define simplified NREL 5MW Turbine constants and other info. 
 rhub = 1.5
 rtip = 63.0
-rvec = [11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.6333]
-chordvec = [4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
-twistvec = pi/180*[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
+rvec = [1.5, 2.8667, 5.6, 8.333300000000001, 11.75, 15.85, 19.95, 24.05, 28.15, 32.25, 36.35, 40.45, 44.55, 48.65, 52.75, 56.1667, 58.9, 61.6333, 62.9999]
+chordvec = [3.542, 3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.01, 2.764, 2.518, 2.313, 2.086, 1.419, 1.419]
+twistvec =[0.23226841685540536, 0.23226841685540536, 0.23226841685540536, 0.23226841685540536, 0.23226841685540536, 0.20036379812894903, 0.17736035858766377, 0.15727161889720903, 0.136048415192958, 0.11421434625050891, 0.093567101199416, 0.07309438907352252, 0.0545415391248228, 0.0404741853537485, 0.02663372438543347, 0.015062191444711064, 0.006457718232379019, 0.0018500490071139892, 0.0018500490071139892]
 thickvec = chordvec.*0.08
 B = 3.0
 hubht = 90.0
@@ -88,7 +86,7 @@ aftypes[7] = AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU21_A17.dat", 
 aftypes[8] = AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/NACA64_A17.dat", radians=false)
 
 # indices correspond to which airfoil is used at which station
-af_idx = [3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
+af_idx = [1, 1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8, 8]
 
 # create airfoil array
 airfoils = aftypes[af_idx]
@@ -155,20 +153,24 @@ outs_ccblade = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 
 
 
+fxmat = readdlm("./../data/openfast/fxmat_aeroonly.csv", ',')
+fymat = readdlm("./../data/openfast/fymat_aeroonly.csv", ',')
 
 
 ### Visualize the loads. 
-defplt = plot(xaxis="Radial Location (m)", yaxis="Element Deflection (m)", legend=:topleft)
-plot!(x, def_x, lab="X deflection")
-plot!(x, def_y, lab="Y deflection")
-plot!(x, def_z, lab="Z deflection")
-display(defplt)
+# defplt = plot(xaxis="Radial Location (m)", yaxis="Element Deflection (m)", legend=:topleft)
+# plot!(x, def_x, lab="X deflection")
+# plot!(x, def_y, lab="Y deflection")
+# plot!(x, def_z, lab="Z deflection")
+# display(defplt)
 
 loadsplt = plot(xaxis = "Radial Location (m)", yaxis = "Element Load (N)", legend=:topleft)
-plot!(x, outs.Np, lab="Flapwise")
-plot!(x, outs.Tp, lab="Lead-Lag")
-plot!(rvec, outs_ccblade.Np, lab="Flapwise - CCBlade") #-> It looks like most of the convergence occurs in the GXBeam solution. The max difference between the initial CCBlade solution and the fixed point iteration is like .16 N... which is tiny. 
-plot!(rvec, outs_ccblade.Tp, lab="Lead-Lag - CCBlade")
+plot!(x, outs.Np, lab="Flapwise", markershape=:circle)
+plot!(x, outs.Tp, lab="Lead-Lag", markershape=:circle)
+plot!(rvec, outs_ccblade.Np, lab="Flapwise - CCBlade", markershape=:cross) #-> It looks like most of the convergence occurs in the GXBeam solution. The max difference between the initial CCBlade solution and the fixed point iteration is like .16 N... which is tiny. 
+plot!(rvec, outs_ccblade.Tp, lab="Lead-Lag - CCBlade", markershape=:cross)
+plot!(rvec, fxmat[end, :], lab="Fx - OF", linestyle=:dash)
+plot!(rvec, fymat[end,:], lab="Fy - OF", linestyle=:dash)
 display(loadsplt)
 
 nothing
