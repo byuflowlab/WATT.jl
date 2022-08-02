@@ -1,8 +1,17 @@
-using Revise, DifferentialEquations, StaticArrays, FLOWMath, CCBlade, Plots, CurveFit
+using Revise, DifferentialEquations, StaticArrays, FLOWMath, CCBlade, Plots, CurveFit, NLsolve
+
+#=
+Test that the ODE, DAE, time-marching ODE, and time-marching linearized Riso models are working. (All the same model, just implemented different ways). 
+
+Adam Cardoza 8/2/22
+=#
+
 
 include("../src/blades.jl")
 include("../src/environments.jl")
 include("../src/riso.jl")
+include("../src/coupled.jl")
+include("../src/solvers.jl")
 
 function nearestto(xvec, x)
     mins = abs.(xvec.-x)
@@ -76,11 +85,11 @@ for i = 0:n-1
 
 end
 
-blade = Blade(afs)
+blade = Blade(rhub, rtip, rvec/rtip, afs)
 
 model = Riso()
 
-env = environment(rho, mu, a, vinf, omega, 0.0, 0.0)
+env = environment(rho, mu, a, vinf, omega)
 
 rfun = create_risofun(twistvec, blade, env, frequency, amplitude)
 rdiffvars = differentialvars(model, n)
@@ -105,11 +114,56 @@ solode = DifferentialEquations.solve(probode)
 
 tode, Clode, Cdode = parsesolution(model, blade, env, p_a, solode, twistvec, frequency, amplitude)
 
+
+
+
+rode3 = createrisoode(blade)
+p_aero3 = vcat(chordvec, twistvec, twistvec.*2, env.Vinf(0).*ones(n), zeros(n), pitch)
+solver = BDF1() #It appears that BDF1 is the shortest solve, and only has a slight delay on coming to steady state. 
+
+nt = length(tode)
+x3 = zeros(nt, 4*n)
+x3[1,:] = x0  
+
+for i = 2:nt
+    local dt = tode[i]-tode[i-1]
+    x3[i,:] = solver(rode3, x3[i-1,:], p_aero3, tode[i-1], dt)
+end
+
+#=
+It looks like it solves most of the states correctly, but some are blowing up. Like the third to last state looks like it exploded. .... So is it the method... or the solver? 
+
+Well, after changing the solver to DiffEQ, all the entries in a simple print are a lot closer. Like, essentially the same... which tells me that it isn't the model, but is my solver... bummer. Because the DifferentialEquations solver is so much slower. 
+
+-> So I have a couple of options. I could either use a better algorithm. Like, who knows how hard it is to write my own TSIT algorithm, or I could see if I could write a more efficient interface with DifferentialEquations. 
+
+#TODO: Write a better interface with DifferentialEquations to leverage their superior algorithms
+ 
+=#
+
+cl3 = zeros(nt, n)
+cd3 = zeros(nt, n)
+for i = 1:nt
+    for j = 1:n
+        y = [env.Vinf(0), 0.0, 0.0, 0.0, twistvec[j], 0.0]
+        idx = 4*(j-1)
+        cl3[i,j], cd3[i,j] = riso_coefs(x3[i,idx+1:idx+4], y, chordvec[j], blade.airfoils[j])
+    end
+end
+
+
+
+
+
+
+
+
 pathname = "/Users/adamcardoza/Library/CloudStorage/Box-Box/research/FLOW/bladeopt/coupling/coupling/mycoupling/figures/riso/"
 
 clplt = plot(xaxis="time (s)", yaxis="Coefficient of Lift", legend=:bottomright, title="Root Analysis") 
 plot!(t, Cl[:,1], lab="DAE solution")
 plot!(tode, Clode[:,1], lab="ODE solution")
+plot!(tode, cl3[:,1], lab="Time-Marching")
 hline!(rcl, lab="Steady value")
 display(clplt)
 # savefig(pathname*"rootcl_steady_33022.png")
@@ -117,6 +171,7 @@ display(clplt)
 cltipplt = plot(xaxis="time (s)", yaxis="Coefficient of Lift", legend=:bottomright, title="Tip Analysis") 
 plot!(t, Cl[:,end], lab="DAE solution")
 plot!(tode, Clode[:,end], lab="ODE solution")
+plot!(tode, cl3[:,end], lab="Time-Marching")
 hline!(tcl, lab="Steady value")
 display(cltipplt)
 # savefig(pathname*"tipcl_steady_33022.png")

@@ -187,8 +187,8 @@ end
 
 function get_riso_y(twist, env, frequency, amplitude, t) 
 
-    u = env.U(t)
-    udot = env.Udot(t)
+    u = env.Vinf(t)
+    udot = env.Vinfdot(t)
 
     v = 0.0
     vdot = 0.0
@@ -275,19 +275,22 @@ function riso_coefs(X, y, c, airfoil)
     Tf = airfoil.T[2]
 
     u, udot, v, vdot, theta, thetadot = y
+    # @show theta #Okay, it's passing in the correct value here. 
 
     U = sqrt(u^2 + v^2)
     Udot = (2*u*udot + 2*v*vdot)/(2*sqrt(u^2 + v^2))
 
     psi = atan(v, u)
     alpha = psi + theta #Turbine formulation
+    # @show alpha #This is the correct value
 
     psidot = (u*vdot - v*udot)/((u^2)*(((v/u)^2)+1))
     alphadot = psidot + thetadot
 
-    ae = alpha*(1-A1-A2) + X[1] + X[2]
+    ae = alpha*(1-A1-A2) + X[1] + X[2] #With the current alpha values, the angle of attack makes no difference, regardless of the state. 
     Tu = c/(2*U)
 
+    # @show ae
     clfs = Clfs(ae, liftfit, dcldalpha, alpha0)
     # @show X
 

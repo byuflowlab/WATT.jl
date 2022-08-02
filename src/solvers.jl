@@ -61,7 +61,7 @@ function (s::BDF1)(fun, x, p, t, dt) #Takes about 2x the time of the RK4
     return xn.zero
 end
 
-struct DiffEQ <: Solver 
+struct DiffEQ <: Solver #TODO: This could probably be implemented a lot better. 
 end
 
 function (s::DiffEQ)(fun, x, p, t, dt) #Takes about the same amount of time as the BDF1. 

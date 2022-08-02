@@ -33,7 +33,8 @@ struct RisoState{TF}
 end
 
 function (state::RisoState)(alpha, Re , Mach) #TODO: I might be able to combine this with the function below.... which might be good. 
-    y = [state.u, 0.0, 0.0, 0.0, alpha, 0.0]
+    # @show alpha #Okay, it's the correct value here. 
+    y = [state.u, 0.0, 0.0, 0.0, alpha, 0.0] #TODO: Need to add udot. 
     return riso_coefs(state.x, y, state.c, state.airfoil)
     # cf = riso_coefs(state.x, y, state.c, state.airfoil)
     # # if cf[1]<0
@@ -88,9 +89,11 @@ function createrisoode(blade)
             vdot = 0.0
 
             theta = -((twistvec[i] + pitch) - phivec[i]) 
+
             # if i==n
             #     @show theta, u, udot, t
             # end
+
             thetadot = 0.0 #Assuming that the airfoil isn't in the act of turning???? TODO: What are my other options?
 
     
@@ -369,7 +372,7 @@ Simulates the described wind turbine across the given time span using a BEM (I a
 - rtip::TF - the radial location of the tip (meters) # ""
 - blade::Blade - a blade struct
 - env::Environment
-- assembly
+- assembly::GXBeam.Assembly
 - tspan::Tuple{TF, TF}
 - dt::TF
 - solver::Solver - the type of integration method used for integrating the Riso states. Defaults to RK4()
@@ -383,7 +386,8 @@ Simulates the described wind turbine across the given time span using a BEM (I a
 - The structural model does not include damping. 
 - The initial condition is assumed to be the loads from the undeflected solution (to add the option to start from the fixed point iteration solution later). Those loads are then used to find the steady state deflections and inflow velocities. The inflow velocities are used to calculate the steady state states for the Riso model.
 """
-function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly, tspan, dt; solver=RK4(), verbose=false, coupling=OneWay(), b=0.01)
+function simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env, assembly::GXBeam.Assembly, tspan, dt; solver=RK4(), verbose=false, coupling=OneWay(), b=0.01)
+#Todo: I need to add an option for how many blades are desired since that has a significant effect on the hub and tip corrections. 
 
     t0 = tspan[1]
     tvec = tspan[1]:dt:tspan[2]
