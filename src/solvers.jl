@@ -69,3 +69,105 @@ function (s::DiffEQ)(fun, x, p, t, dt) #Takes about the same amount of time as t
     sol = DifferentialEquations.solve(prob)
     return sol(t+dt)
 end
+
+struct DBDF1!{TI} <: Solver
+    diffvars::Array{TI, 1} #which variables are states
+    constvars::Array{TI, 1} #which variables are constraints
+    n::TI #Number of states and constaints
+    nd::TI #Number of states
+end
+
+function DBDF1!(diffvars::Array{Bool, 1})
+    n = length(diffvars)
+    nd = 0
+    diffs = Int[] #TODO: There's probably a better way to do this. -> I could probably iterate through and get nd, then create diffs and consts
+    consts = Int[]
+    for i = 1:n
+        if diffvars[i]
+            nd += 1
+            push!(diffs, i)
+        else
+            push!(consts, i)
+        end
+    end
+    return DBDF1!(diffs, consts, n, nd)
+end
+
+
+function (s::DBDF1!)(fun!, outs, x, dx, p, t, dt)
+    tn = t + dt
+
+    residfun! = function(resids, rn)  
+        
+        xn = view(rn, 1:s.n)
+        dxn = view(rn, s.n+1:s.n+s.nd) #Should be length s.nd (length of the diffvars)
+
+        fun!(outs, dxn, xn, p, tn)
+
+        resids[1:s.n] = outs #Converge the derivatives and constraints
+
+        for i in 1:s.nd #Converge the derivative/state relationships
+            diffidx = s.diffvars[i]
+            resids[diffidx] = x[diffidx] + dt*dxn[i] - xn[diffidx] #Insure that the new states satisfy backwards compatibility. 
+        end
+    end
+
+    residuals = nlsolve(residfun!, vcat(x, dx)) 
+
+    # @show residuals.zero[s.n+1:end] #The state rates are zero... which is problematic. 
+
+    return residuals.zero[1:s.n], residuals.zero[s.n+1:end]
+end
+
+struct DBDF2!{TI} <: Solver
+    diffvars::Array{TI, 1} #which variables are states
+    constvars::Array{TI, 1} #which variables are constraints
+    n::TI #Number of states and constaints
+    nd::TI #Number of states
+end
+
+function DBDF2!(diffvars::Array{Bool, 1})
+    n = length(diffvars)
+    nd = 0
+    diffs = Int[] #TODO: There's probably a better way to do this. -> I could probably iterate through and get nd, then create diffs and consts
+    consts = Int[]
+    for i = 1:n
+        if diffvars[i]
+            nd += 1
+            push!(diffs, i)
+        else
+            push!(consts, i)
+        end
+    end
+    
+    return DBDF2!(diffs, consts, n, nd)
+end
+
+function (s::DBDF2!)(fun!, outs, x, dx, p, t, dt)
+    tn = t + dt
+
+    #Coefficients for the method
+    a = 4/3
+    b = 2*dt/3
+    c = 1/3
+    
+    residfun! = function(resids, rn)  
+        
+        xn = view(rn, 1:s.n)
+        dxn = view(rn, s.n+1:s.n+s.nd) #Should be length s.nd (length of the diffvars)
+
+        fun!(outs, dxn, xn, p, tn)
+
+        resids[1:s.n] = outs #Converge the derivatives and constraints
+
+        for i in 1:s.nd #Converge the derivative/state relationships
+            diffidx = s.diffvars[i]
+            # resids[diffidx] = x[diffidx] + dt*dxn[i] - xn[diffidx] #Insure that the new states satisfy backwards compatibility. 
+            resids[diffidx] = a*x[2, diffidx] + b*dxn[i] - c*x[1, diffidx] - xn[diffidx]
+        end
+    end
+
+    residuals = nlsolve(residfun!, vcat(x[2,:], dx)) 
+
+    return residuals.zero[1:s.n], residuals.zero[s.n+1:end]
+end

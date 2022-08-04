@@ -59,7 +59,7 @@ shearexp = 0.0
 
 #### Define solution
 tspan = (0.0, 4.0)
-dt = 0.001
+dt = 0.01
 
 ### Prep the ASD rotor and operating conditions 
 aftypes = Array{AlphaAF}(undef, 8)
@@ -133,7 +133,11 @@ env = rampingU(rho, mu, a, vinf, omega, 0.5)
 
 
 t0 = tspan[1]
-cchistory, dshistory, tvec = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env_steady, tspan, dt, B; solver=DiffEQ(), verbose=false, coupling=ThreeWay())
+# cchistory, dshistory, tvec = simulate(rvec, chordvec, twistvec, rhub, rtip, blade, env_steady, tspan, dt, B; solver=DiffEQ(), verbose=false, coupling=ThreeWay())
+
+x, dx, tvec = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, blade, env, tspan, dt, B; verbose=true)
+
+
 
 #=
 8/1/22 Adam Cardoza
@@ -148,29 +152,32 @@ Additionally, the initial solve is doing some interesting things... with the exa
 8/2/22 
 - Well bummer. I was checking to see if the Riso model is fine, and it appears to solve just fine. ARgh. Which is a pain. Well.... Maybe I revisit the tightly coupled aero-only solution and see if I can't get that going for Teagan. 
 
+8/4/22
+- I switched to a tight coupling between the dynamic stall and the bem. I wrote a DAE solver to solve. Problem is, it looks like the states blow up, which is a real bummer. It could be the DAE solver. It could be the method. A lot of possible problems. I'm switching to an indicial approach per the suggestion of Dr. Ning. 
+
 =#
 
 
 
 
-nt = length(tvec)
+# nt = length(tvec)
 
 
 
-dsstates = dshistory[1]
+# dsstates = dshistory[1]
 
-dsstate = dsstates[end]
+# dsstate = dsstates[end]
 
-alfa = collect(0:.1:14)
-alpha = alfa.*(pi/180)
-nalf = length(alfa)
+# alfa = collect(0:.1:14)
+# alpha = alfa.*(pi/180)
+# nalf = length(alfa)
 
 
-static = afeval.(Ref(aftypes[8]), alpha, Ref(0.0), Ref(0.0))
-dynamic = afeval.(Ref(dsstate), alpha, Ref(0.0), Ref(0.0))
+# static = afeval.(Ref(aftypes[8]), alpha, Ref(0.0), Ref(0.0))
+# dynamic = afeval.(Ref(dsstate), alpha, Ref(0.0), Ref(0.0))
 
-clstatic = [static[i][1] for i in 1:nalf]
-cldyn = [dynamic[i][1] for i in 1:nalf]
+# clstatic = [static[i][1] for i in 1:nalf]
+# cldyn = [dynamic[i][1] for i in 1:nalf]
 
 # dsclplt = plot(xaxis="Angle of Attack (deg)", yaxis="Coefficient of Lift")
 # plot!(alfa, clstatic, lab="Static")
