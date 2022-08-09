@@ -60,4 +60,8 @@ plot!(rvec_a, fymat[end,:], lab="Fy")
 display(forceplt)
 
 
+tipplt = plot(xaxis="Time (s)", yaxis="Distributed Load (N/m)", title="Tip Loads")
+plot!(tvec, fxmat[:,end-1], lab="Fx")
+plot!(tvec, fymat[:,end-1], lab="Fy")
+display(tipplt)
 

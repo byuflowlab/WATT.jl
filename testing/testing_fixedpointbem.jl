@@ -154,6 +154,8 @@ I wonder if my tolerance criteria is bad. But.... this is what it is converging 
     Ideas
     - I could compare induction velocities. 
 
+
+I had copied and pasted the residual code from Github for CCBlade, then I realized that Dr. Ning had changed things and so some of the corrections were different than what my current CCBlade version was using. 
 =#
 
 

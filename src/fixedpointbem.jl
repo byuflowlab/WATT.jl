@@ -79,7 +79,7 @@ function update_inflowangle(phi, Vx, Vy, state, r, chord, twist, airfoil, pitch,
 
     ### Calculate angle of attack
     alpha = (twist + pitch) - phi
-    
+
     # if turbine
     #     alpha = -((twist + pitch) - phi)
     # else
@@ -106,7 +106,9 @@ function update_inflowangle(phi, Vx, Vy, state, r, chord, twist, airfoil, pitch,
     wdot = 0.0
     cl, cd = afeval(stallmodel, alpha, alphadot, w, wdot, state, chord, airfoil)
 
-    cl *= -1
+    if turbine
+        cl *= -1
+    end
 
     ### Rotate loads
     cn = cl*cphi - cd*sphi

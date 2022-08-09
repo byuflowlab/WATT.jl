@@ -53,7 +53,7 @@ omega = vinf*tsr/rotorR
 frequency = 1.0
 amplitude = 0.0
 rho = 1.225
-mu = 18.13e-6
+mu = 1.464e-5 #18.13e-6
 a = 343.0
 shearexp = 0.0
 
