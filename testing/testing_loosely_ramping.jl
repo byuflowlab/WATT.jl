@@ -44,8 +44,8 @@ Tf = 3.0
 ## Turbine Control variables
 pitch = addriver.pitch[1]
 precone = addriver.precone*pi/180 #0.0 #2.5*pi/180 #TODO: !!!! I need to work in a way to include precone
-yaw = addriver.yaw[1]*(pi/180) # 0.0*pi/180
-tilt = addriver.shfttilt*(pi/180) #0.0 #5.0*pi/180
+yaw = addriver.yaw[1] # 0.0*pi/180
+tilt = addriver.shfttilt #0.0 #5.0*pi/180
 azimuth = 0.0
 
 ## Environmental variables
@@ -91,20 +91,47 @@ rR = rvec./rtip
 blade = Blade(rhub, rtip, rR, afs)
 
 
+function rampingU(rho, mu, a, vinf, Omega, ramptime)
+    function U(t)
+        if t<ramptime
+            return t*vinf/ramptime + 0.1
+        else
+            return vinf
+        end
+    end
 
-env = environment(rho, mu, a, vinf, omega, shearexp)
+    function dU(t)
+        if t<ramptime
+            return vinf/ramptime
+        else
+            return 0.0
+        end
+    end
+
+    ufun(t) = SVector(U(t), 0.0, 0.0)
+    omegafun(t) = SVector(0.0, 0.0, 0.0)
+    udotfun(t) = SVector(dU(t), 0.0, 0.0)
+    omegadotfun(t) = SVector(0.0, 0.0, 0.0)
+    Vinf(t) = U(t)
+    RS(t) = Omega
+    Vinfdot(t) = dU(t)
+    RSdot(t) = 0.0
+    return SimpleEnvironment(rho, mu, a, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
+end
+
+env = environment(rho, mu, a, vinf, omega)
 
 
 
 #### Define solution
-tspan = (0.0, addriver.tmax[1])
+tspan = (0.0, 4.0)
 dt = 0.01
 
 tvec = tspan[1]:dt:tspan[2]
 
+#simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodelinit::DSmodelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, azimuth0=0.0)
 
-
-loads, cchistory, xds = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, tvec; verbose=true) #1.234718 seconds (5.51 M allocations: 262.152 MiB, 4.71% gc time, 83.64% compilation time) It's the createrisoode function that's taking time I think. There is probably a better way to do that. 
+N, T, cchistory, xds = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, tvec; verbose=false) #1.234718 seconds (5.51 M allocations: 262.152 MiB, 4.71% gc time, 83.64% compilation time) It's the createrisoode function that's taking time I think. There is probably a better way to do that. 
 
 
 # Cl, Cd = parsesolution(xds, cchistory, tvec, rvec, chordvec, twistvec, pitch, blade, env)
@@ -144,22 +171,17 @@ for i = 1:na_o
 end
 
 
-@show loads.Fx[end, end]
-@show fxmat[end,end-1]
-println("")
-@show loads.Fy[end, end]
-@show fymat[end,end-1]
+
+
 
 ### Tip loading 
 # -> Simulation isn't running OpenFAST inputs
 
 tipplt = plot(xaxis="Time (s)", yaxis="Distributed Load (N/m)", ylims=(100, 7000))
-# plot!(tvec, loads.N[:,end], lab="Normal - Unsteady")
-# plot!(tvec, loads.T[:,end], lab="Tangent - Unsteady")
-# hline!([cchistory[1].Np[end]], lab="Normal - Steady")
-# hline!([cchistory[1].Tp[end]], lab="Tangent - Steady")
-plot!(tvec, loads.Fx[:,end], lab="Fx - Unsteady")
-plot!(tvec, loads.Fy[:,end], lab="Fy - Unsteady")
+plot!(tvec, N[:,end], lab="Normal - Unsteady")
+plot!(tvec, T[:,end], lab="Tangent - Unsteady")
+hline!([cchistory[1].Np[end]], lab="Normal - Steady")
+hline!([cchistory[1].Tp[end]], lab="Tangent - Steady")
 plot!(tvec_of, fxmat[:,end-1], markershape=:x, lab="Fx - OpenFAST")
 plot!(tvec_of, fymat[:,end-1], markershape=:x, lab="Fy - OpenFAST")
 display(tipplt)

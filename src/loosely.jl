@@ -101,11 +101,17 @@ function extractloads(x, ccout, t, rvec, chordvec, twistvec, pitch, blade::Blade
 end
 
 
-function simulate(rvec, chordvec, twistvec, blade::Blade, env::Environment, tvec, rhub, rtip, B, precone; turbine::Bool=true, dsmodelinit::DSmodelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false)
+function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodelinit::DSmodelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
 
     if verbose
         println("Rotors.jl initializing solution...")
     end
+
+    #TODO: I might put some checks in to help with problems caused by having rvec[i]~=rhub or rvec[i]~=rtip. 
+    #TODO: I might put some checks in to see if the airfoils are in degrees or radians. 
+    #TODO: I might put some checks in to see if twist or pitch is in degrees or radians. 
+    #TODO: I might put something in to make the solution run smoother when the dynamic stall states would get screwed up (i.e. at the root cylinders, when rvec[i]=rhub or rtip). 
+    #TODO: It might be a good idea to check rvec, chordvec, and twistvec to get the design variables to get the right types. 
 
     ### Initialization information
     na = length(rvec)
@@ -113,29 +119,44 @@ function simulate(rvec, chordvec, twistvec, blade::Blade, env::Environment, tvec
 
     t0 = tvec[1]
 
+    Vxvec = Array{eltype(chordvec)}(undef, na)
+    Vyvec = Array{eltype(chordvec)}(undef, na)
+
+    azimuth = Array{eltype(chordvec)}(undef, nt)
+
+
+
 
     ### Initialize BEM solution
+    azimuth[1] = azimuth0
+
     rotor = Rotor(rhub, rtip, B; precone, turbine)
     sections = [CCBlade.Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i = 1:na]
 
-    Vxvec = [env.Vinf(t0) for i in 1:na]
-    Vyvec = [env.RS(t0)*rvec[i]*cos(precone) for i in 1:na]
-    # @show Vxvec
-    # @show Vyvec
+    # Vxvec = [env.Vinf(t0) for i in 1:na]
+    # Vyvec = [env.RS(t0)*rvec[i]*cos(precone) for i in 1:na]
+
+    for i = 1:na
+        Vxvec[i], Vyvec[i] = get_aero_velocities(env, t0, rvec[i], azimuth[1], precone, tilt, yaw, hubht)
+    end
+    
     operatingpoints = [CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a) for i in 1:na]
 
     ccout = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
-    # @show ccout.phi
+
+
+
 
     ### Initialize DS solution
     risoode = createrisoode(blade)
 
-    Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i])^2) for i in 1:na]
+    Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #Todo: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. 
 
     p_ds = vcat(chordvec, twistvec, ccout.phi, ccout.W, Wdotvec, pitch) #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
 
-
     xds = initializeDSmodel(dsmodelinit, nt, na)
+
+
 
 
     ### Prepare data storage
@@ -150,21 +171,27 @@ function simulate(rvec, chordvec, twistvec, blade::Blade, env::Environment, tvec
     cchistory[1] = ccout
     N[1,:], T[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(xds[1,:], cchistory[1], t0, rvec, chordvec, twistvec, pitch, blade, env)
     
+    
+
 
     ### Iterate through time 
     for i = 2:nt
         t = tvec[i-1]
         dt = tvec[i] - tvec[i-1]
 
+        #update azimuthal position
+        azimuth[i] = env.RS(t)*dt + azimuth[i-1] #Euler step for azimuthal position. 
+
         ### Update BEM inputs
         for j = 1:na
-            Vxvec[j] = env.Vinf(t)
-            Vyvec[j] = env.RS(t)*rvec[j]*cos(precone)
+            # Vxvec[j] = env.Vinf(t)
+            # Vyvec[j] = env.RS(t)*rvec[j]*cos(precone)
+            Vxvec[j], Vyvec[j] = get_aero_velocities(env, t, rvec[j], azimuth[i], precone, tilt, yaw, hubht)
             operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
         end
 
         ### Solve BEM
-        cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
+        cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
 
 
         ### Update Dynamic Stall model inputs
@@ -183,12 +210,16 @@ function simulate(rvec, chordvec, twistvec, blade::Blade, env::Environment, tvec
 
 
         ### Extract loads
-        N[i,:], T[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(xds[i,:], cchistory[i], t, rvec, chordvec, twistvec, pitch, blade, env)
-        if verbose
+        N[i,:], T[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(xds[i,:], cchistory[i], t, rvec, chordvec, twistvec, pitch, blade, env) 
+        if verbose & (mod(i, speakiter)==0)
             println("Simulation time: ", t)
         end
     end
-    return N, T, cchistory, xds
+
+    Fx = N.*cos(precone) #TODO: The N and T might need some rotating for precone. I'm not sure that I'm doing this right.
+    Fy = T.*cos(precone) #I copied Dr. Ning's code to get the thrust and torque, but it seems odd that they are both multiplied by the cosine of precone. Which makes sense. 
+
+    return (N=N, T=T, Fx=Fx, Fy=Fy), cchistory, xds  
 end
 
 
