@@ -1,5 +1,12 @@
 using DifferentialEquations, FLOWMath, CCBlade, LinearAlgebra, Plots, StaticArrays, CurveFit, NLsolve, OpenFASTsr, DelimitedFiles
 
+
+#=
+Test the loose coupling (like how OpenFAST couples the BEM and dynamic stall models).
+
+Adam Cardoza 8/9/22
+=#
+
 path = dirname(@__FILE__)
 cd(path)
 
@@ -144,11 +151,11 @@ for i = 1:na_o
 end
 
 
-@show loads.Fx[end, end]
-@show fxmat[end,end-1]
-println("")
-@show loads.Fy[end, end]
-@show fymat[end,end-1]
+# @show loads.Fx[end, end]
+# @show fxmat[end,end-1]
+# println("")
+# @show loads.Fy[end, end]
+# @show fymat[end,end-1]
 
 ### Tip loading 
 # -> Simulation isn't running OpenFAST inputs

@@ -7,7 +7,7 @@ include("../src/bem.jl")
 # include("../src/bem-riso.jl")
 include("../src/gxbeam.jl")
 # include("../src/aerostructural.jl")
-include("../src/coupled.jl")
+# include("../src/coupled.jl")
 include("../src/static.jl")
 
 #=
@@ -115,7 +115,7 @@ end
 
 blade = Blade(rhub, rtip, rvec, afs)
 
-env = environment(rho, mu, a, vinf, omega)
+env = environment(rho, mu, a, vinf, omega, shearexp)
 
 
 

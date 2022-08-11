@@ -54,14 +54,28 @@ function createrisoode(blade)
     return risoODE
 end 
 
-abstract type DSmodelInit end
+abstract type DSmodelInit end #TODO: I'd like to generalize this to both the ds model and gxbeam (and anything else for that matter. )
 
 struct Hansen <: DSmodelInit
 end
 
-function initializeDSmodel(dsmodelinit::Hansen, nt, na)
+struct Steady <: DSmodelInit
+end
+
+function initializeDSmodel(dsmodelinit::Hansen, nt, na, p_ds, fun)
     xds = zeros(nt, 4*na) #Note: I thought about initializing this as an undefined array, but... the first vector needs to be mostly zeros, and I feel like this will be the easiest. 
     xds[1,4:4:4*na] .= 1
+    return xds
+end
+
+function initializeDSmodel(dsmodelinit::Steady, nt, na, p_ds, fun)
+    xds = zeros(nt, 4*na) #Note: I thought about initializing this as an undefined array, but... the first vector needs to be mostly zeros, and I feel like this will be the easiest. 
+    xds[1,4:4:4*na] .= 1
+
+    prob = SteadyStateProblem(fun, xds[1,:], p_ds)
+    sol = DifferentialEquations.solve(prob)
+    # @show sol.u #Todo: I'm not convinced with these solutions. 
+    xds[1,:] = sol.u
     return xds
 end
 
@@ -154,7 +168,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
     p_ds = vcat(chordvec, twistvec, ccout.phi, ccout.W, Wdotvec, pitch) #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
 
-    xds = initializeDSmodel(dsmodelinit, nt, na)
+    xds = initializeDSmodel(dsmodelinit, nt, na, p_ds, risoode)
 
 
 
