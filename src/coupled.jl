@@ -117,8 +117,8 @@ function interpolate_angle(ip, assembly, state) #Todo: I need to see if I should
 end
 
 
-function update_structural_forces!(distributed_loads, assembly, gxstate, N, T, env, rvec, rgx, t, b)
-    Fzfit = Akima(rvec, -N ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
+function update_structural_forces!(distributed_loads, assembly, gxstate, N, T, env, rvec, rgx, t, b, rhub, rtip)
+    Fzfit = Akima(vcat(rhub, rvec, rtip), vcat(0, -N, 0) ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
     Fyfit = Akima(rvec, T)
 
     f_follower = @SVector zeros(3)
@@ -134,6 +134,9 @@ function update_structural_forces!(distributed_loads, assembly, gxstate, N, T, e
         fx = -b*V[1]/L #structural damping in the x direction.
         fy = Fyfit(rgx[ielem]) - b*Vy/L #Aerodynamic load minus the damping #Dividing the damping force by length so that it is a distributed load. 
         fz = Fzfit(rgx[ielem]) - b*V[3]/L #Structural damping in the z direction. 
+        # if ielem==length(rgx)
+        #     println("y damping: ",  b*Vy/L)
+        # end
 
         f = SVector(fx, fy, fz)
         distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
@@ -147,11 +150,12 @@ function get_aerostructural_velocities(env::Environment, aeroV, t, r, azimuth, p
     vxenv, vyenv = get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
     ### Get the relative structural velocities
-    vxrel = -aeroV[3] #Todo: Check me. -> They're in the right general magnitude, but I don't know if the motion should be adding to or taking away from the velocity. 
-    vyrel = aeroV[2] + env.RS(t)*r #Todo: Check me. 
+    vxrel = aeroV[3] 
+    vyrel = aeroV[2] + env.RS(t)*r  
 
     ### Return the total x and y velocities (x and y in the aerodynamic frame)
-    return vxenv+vxrel, vyenv+vyrel
+    # If the structure is moving in the negative y direction, then the airfoil should see a faster velocity. 
+    return vxenv+vxrel, vyenv-vyrel
 end
 
 
@@ -239,7 +243,6 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
     cchistory[1] = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 
 
-    # @show Vxvec[end], Vyvec[end]
 
 
 
@@ -261,9 +264,9 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
 
-    ### Extract CCBlade Loads and create a distributed load
-    Fzfit = Akima(rvec, -N[1,:].*cos(precone) ) #Todo: I need to nail down the behavior outside the aerodynamic nodes. 
-    Fyfit = Akima(rvec, T[1,:].*cos(precone))
+    ### Extract CCBlade Loads and create a distributed load #TODO: I feel like there's probably a faster way to do this. Maybe have N include the hub and the tip and CCBlade just updates the nodes inbetween. -> Or maybe there is a better fit function where I get to declare the behavior outside the bounds. 
+    Fzfit = Akima(vcat(rhub, rvec, rtip), vcat(0, -N[1,:].*cos(precone), 0))  
+    Fyfit = Akima(vcat(rhub, rvec, rtip), vcat(0, T[1,:].*cos(precone), 0))
 
     nelem = length(assembly.elements)
     rgx = [assembly.elements[i].x[1] for i in 1:nelem]
@@ -307,6 +310,9 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
 
+    # @show Vxvec[end], Vyvec[end]
+    # @show maximum(N[1,:]), maximum(T[1,:])
+
 
     ### Iterate through time 
     for i = 2:nt
@@ -319,7 +325,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
         ### Update BEM inputs
         for j = 1:na
             ### Update sections with twist
-            twist_displaced = twistvec[j] - def_thetax[j]
+            twist_displaced = twistvec[j] #- def_thetax[j] #Todo: Is this correct? I think this is what I had in the fixed point solution. 
             sections[j] = CCBlade.Section(rvec[j], chordvec[j], twist_displaced, blade.airfoils[j]) #Not displacing rvec because CCBlade uses that to calculate the tip and hub corrections, and the value should be based on relative to the distance along the blade to the hub or tip. (Although in dynamic movement, the tip losses would change dramatically.)
 
             ### Update base inflow velocities
@@ -355,8 +361,8 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
 
-        ### Update GXBeam loads
-        update_structural_forces!(distributed_loads, assembly, gxhistory[i-1], cchistory[i], env, rvec, rgx, t, b)  
+        ### Update GXBeam loads 
+        update_structural_forces!(distributed_loads, assembly, gxhistory[i-1], N[i,:], T[i,:], env, rvec, rgx, t, b, rhub, rtip)  
 
         Omega = SVector(0.0, 0.0, -env.RS(t))
 
@@ -381,8 +387,10 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
         if verbose & (mod(i, speakiter)==0)
+            println("")
             println("Simulation time: ", t)
             # @show Vxvec[end], Vyvec[end]
+            # @show maximum(N[i,:]), maximum(T[i,:])
         end
     end
 

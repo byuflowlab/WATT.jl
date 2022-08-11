@@ -1,4 +1,4 @@
-using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, Plots, StaticArrays, CurveFit, NLsolve, OpenFASTsr, DelimitedFiles, Plots.PlotMeasures
+using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, Plots, StaticArrays, CurveFit, NLsolve, OpenFASTsr, DelimitedFiles
 
 include("../src/blades.jl")
 include("../src/environments.jl")
@@ -20,9 +20,6 @@ of = OpenFASTsr
 addriver = of.read_addriver("NREL5MW_ADdriver.inp", "./OpenFAST_NREL5MW")
 adfile = of.read_adfile("NREL5MW_ADfile.dat","./OpenFAST_NREL5MW/")
 adblade = of.read_adblade("NREL5MW_adblade.dat", "./OpenFAST_NREL5MW")
-edfile = of.read_edfile("NREL5MW_edfile.dat", ofpath)
-# bdfile = of.read_bdfile("NREL5MW_bdfile.dat", ofpath)
-bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
 
 
 #### Define variables. 
@@ -33,6 +30,7 @@ indices = 5:length(adblade.span)-1 #Skip the indices with cylinders cause that c
 rvec = adblade.span[indices] .+ rhub #[11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.49].+rhub
 chordvec = adblade.chord[indices] #[4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
 twistvec = (pi/180) .* adblade.twist[indices] #[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
+thickvec = chordvec.*0.08
 
 B = 3
 hubht = 90.0
@@ -101,47 +99,31 @@ blade = Blade(rhub, rtip, rR, afs)
 
 env = environment(rho, mu, a, vinf, omega, shearexp)
 
-assembly = of.make_assembly(edfile, bdblade)
-ne = length(assembly.elements)
-#Todo: Well, something exploded. -> Potentially have a positive feedback loop
 
-#=
-Okay, yeah it has what looks like a positive feedback loop. 
 
-What's interesting is that the tip appears to have 20+ degrees of deflection... which seems like a lot. 
+p_s, points, elements = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
+gxmodel = gxbeam(points, elements)
 
-It doesn't instantly shoot off, it shoots off after a period of time. So it could be due to a lack of numerical damping? 
 
-Okay, I found two things:
-     Todo: One, I have no rotational damping.
-     
-     Todo: Two, The thetas that GXBeam provides in the state are not actually the angle, but the components of a vector that the beam is rotating about. 
+## Create system indices  
+start = 1:gxmodel.ne
+stop = 2:gxmodel.np
 
-     I got rid of the deflection on twist in the meantime.
+## Create assembly
+assembly = create_gxbeam_assembly(gxmodel, p_s, start, stop) 
 
-     - with b = 100, the damping forces aren't very large. They do seem fairly erratic, but I can't tell for sure. They might be fairly smooth. 
 
-     - with b = 500, the solution blows up... so that's no bueno. That implies that the structural damping is actually kind of bad for numerical behaivor. 
-
-     - reverting b back to 0.01 makes the simulation blow up again. 
-
-     I gues that didn't fix the problem. So that tells us that the problem is in the model. I could push the step size smaller and see what happens. I could also try GXBeam with the new updates (we'd definitely want to test it before we put that into effect.)
-
-    - Maybe I need to return the velocities. (Taylor confirmed that they are returned in the inertial frame. )
-
-    - I wonder if part of it is the ode solver I'm using. 
-=#
 
 
 #### Define solution
 tspan = (0.0, addriver.tmax[1])
-dt = 0.005 #0.01
+dt = 0.01
 
 tvec = tspan[1]:dt:tspan[2]
 
 
 
-loads, cchistory, xds, gxhistory = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Steady(), b=0.1)
+loads, cchistory, xds, gxhistory = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Steady())
 
 #WorkLocation: 
 
@@ -213,25 +195,14 @@ function createdeflectionanimation()
         deflectiony = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
         deflectionz = [state.points[ipoint].u[3] for ipoint = 1:length(assembly.points)]
 
-        defthetax = [state.points[ipoint].theta[1] for ipoint = 1:length(assembly.points)].*(180/pi)
-        defthetay = [state.points[ipoint].theta[2] for ipoint = 1:length(assembly.points)].*(180/pi)
-        defthetaz = [state.points[ipoint].theta[3] for ipoint = 1:length(assembly.points)].*(180/pi)
-
-        plot(leg=:topleft, xaxis="Beam length (m)", yaxis="Deflection (m)", xlims=(-0.005, rtip*1.02), ylims=(-12, 4), right_margin=20mm) #
+        plot(leg=:topleft, xaxis="Beam length (m)", yaxis="Deflection (m)", xlims=(-0.005, rtip*1.02), ylims=(-0.05, 0.09))
         plot!(x, deflectionx, lab="X")
         plot!(x, deflectiony, lab="Y")
         plot!(x, deflectionz, lab="Z")
-        annotate!((20, 2.5, text("time = $t sec", :left)))
-
-        subplot = twinx()
-        plot!(subplot, leg=:bottomleft, xlims=(-0.005, rtip*1.02), ylims=(-15, 35), yaxis="Angular Deflection (deg)")
-        plot!(subplot, x, defthetax, lab="θx", linestyle=:dash)
-        plot!(subplot, x, defthetay, lab="θy", linestyle=:dashdot)
-        plot!(subplot, x, defthetaz, lab="θz", linestyle=:dot)
-    end every 10
-    gif(anim, "bodydeflections_looselycoupled_openfast_081122.gif", fps = framespersecond)
+        annotate!((5, 0.05, text("time = $t sec", :left)))
+    end #every 10
+    gif(anim, "bodydeflections_looselycoupled_stiff_081122.gif", fps = framespersecond)
 end
 
-# createdeflectionanimation()
 
-# nothing
+nothing
