@@ -4,7 +4,7 @@ Riso{TF} <: AbstractModel
 Aerodynamic model based on the Beddoes-Leishman (1989,1990) papers with state variables ``x_1,
 x_2, x_3, x_4, x_5, x_6, x_7, x_8, C'_N, f'', \\tau_v, C^v_N, f_m''``, inputs ``u, \\dot{u}, v, \\dot{v} \\omega, ,``, and parameters `` m, T_p, T_f, T_vl, T_v, eta``
 """
-struct Riso
+struct riso
 end
 
 
@@ -215,7 +215,7 @@ function create_risofun(twistvec, blade::Blade, env::Environment, frequency, amp
     return risofun
 end
 
-function differentialvars(model::Riso, n)
+function differentialvars(model::riso, n)
     return fill(true, 4*n)
 end
 
@@ -238,7 +238,76 @@ function create_risoODE(twistvec, blade::Blade, env::Environment, frequency, amp
     return risofun
 end
 
-function parsesolution(model::Riso, blade::Blade, env::Environment, p, sol, twistvec, frequency, amplitude)
+
+
+
+
+
+
+
+function createrisoode(blade)  
+    risoODE = function(x, p, t)
+        ### Unpack inputs. 
+        n = length(blade.airfoils)
+
+        #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
+        chordvec = view(p, 1:n)
+        twistvec = view(p, n+1:2*n)
+        phivec = view(p, 2n+1:3n)
+        Wvec = view(p, 3n+1:4n)
+        Wdotvec = view(p, 4n+1:5n)
+        pitch = p[end]
+
+
+        ### Iterate through the nodes and calculate the state rates. 
+        dx = zeros(4*n)
+
+        for i = 1:n
+            idx = 4*(i-1)
+            xs = x[1+idx:idx+4]
+
+            u = Wvec[i] 
+            v = 0 
+
+            udot = Wdotvec[i]  
+            vdot = 0.0
+
+            theta = -((twistvec[i] + pitch) - phivec[i]) 
+
+            # if i==n
+            #     @show theta, u, udot, t
+            # end
+
+            thetadot = 0.0 #Assuming that the airfoil isn't in the act of turning???? TODO: What are my other options?
+
+    
+            dx[1+idx:4+idx] = riso_states(xs, u, udot, v, vdot, theta, thetadot, chordvec[i], blade.airfoils[i])
+
+            if isnanvec(dx[1+idx:4+idx])
+                println("Riso State Rates: ", [dx[1+idx], dx[2+idx], dx[3+idx], dx[4+idx]])
+                error("Nan in Riso")
+            end
+
+        end
+        return dx
+    end
+    return risoODE
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+function parsesolution(model::riso, blade::Blade, env::Environment, p, sol, twistvec, frequency, amplitude)
     u = Array(sol)'
     t = sol.t
     m = length(t)

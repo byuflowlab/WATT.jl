@@ -92,19 +92,22 @@ function interpolate_velocity(ip, assembly, state) #Note: This is probably a ver
     ne = length(assembly.elements)
     np = ne + 1
 
-    V = state.elements[ip.pair[1]].V  #Get the velocity of the element 
-    Omega = state.elements[ip.pair[1]].Omega #Question: If I'm doing what I'm currently doing.... why don't I just calculate the distance from the element node to the aerodynamic node? 
-    p1 = assembly.points[ip.pair[1]] #TODO: Should I include the deflected point location? 
-    p2 = assembly.points[ip.pair[2]]
-    e = assembly.elements[ip.pair[1]].x
+    # V = state.elements[ip.pair[1]].V  #Get the velocity of the element 
+    # Omega = state.elements[ip.pair[1]].Omega #Question. If I'm doing what I'm currently doing.... why don't I just calculate the distance from the element node to the aerodynamic node? #Todo. This is probably not going to work, cause I'm going to guess that it has the same problem that the angular displacement has. -> I think I'lll update to the new version of GXBeam. I won't have to interpolate the velocities using Omega, and I'll be able to use GXBeam's internal damping. (Which should be a little more theoretically correct)
+    # p1 = assembly.points[ip.pair[1]] #TODO. Should I include the deflected point location? 
+    # p2 = assembly.points[ip.pair[2]]
+    # e = assembly.elements[ip.pair[1]].x
 
-    r1 = p1 - e #The position vector from the element point to the starting point
-    r2 = p2 - e #The position vector from the element point to the stopping point
+    # r1 = p1 - e #The position vector from the element point to the starting point
+    # r2 = p2 - e #The position vector from the element point to the stopping point
 
-    # ra = assembly.elements[ip.pair[1]].L*ip.percent + assembly.points[ip.pair[1]][1]
+    # # ra = assembly.elements[ip.pair[1]].L*ip.percent + assembly.points[ip.pair[1]][1]
     
-    v1 = V + cross(Omega, r1)
-    v2 = V + cross(Omega, r2)
+    # v1 = V + cross(Omega, r1)
+    # v2 = V + cross(Omega, r2)
+
+    v1 = state.points[ip.pair[1]].V
+    v2 = state.points[ip.pair[2]].V
 
     return (1-ip.percent)*v1 + ip.percent*v2
 end
@@ -126,19 +129,20 @@ function update_structural_forces!(distributed_loads, assembly, gxstate, N, T, e
     m_follower = @SVector zeros(3)
     
     for ielem = 1:length(rgx)
-        V = gxstate.elements[ielem].V
-        L = assembly.elements[ielem].L
-        r_deflected = rgx[ielem] + gxstate.elements[ielem].u[1]
-        Vy = V[2] + env.RS(t)*r_deflected #Need to take the rotation velocity out of the structural velocity.
+        # V = gxstate.elements[ielem].V
+        # L = assembly.elements[ielem].L
+        # r_deflected = rgx[ielem] + gxstate.elements[ielem].u[1]
+        # Vy = V[2] + env.RS(t)*r_deflected #Need to take the rotation velocity out of the structural velocity.
         
-        fx = -b*V[1]/L #structural damping in the x direction.
-        fy = Fyfit(rgx[ielem]) - b*Vy/L #Aerodynamic load minus the damping #Dividing the damping force by length so that it is a distributed load. 
-        fz = Fzfit(rgx[ielem]) - b*V[3]/L #Structural damping in the z direction. 
+        # fx = -b*V[1]/L #structural damping in the x direction.
+        # fy = Fyfit(rgx[ielem]) - b*Vy/L #Aerodynamic load minus the damping #Dividing the damping force by length so that it is a distributed load. 
+        # fz = Fzfit(rgx[ielem]) - b*V[3]/L #Structural damping in the z direction. 
         # if ielem==length(rgx)
         #     println("y damping: ",  b*Vy/L)
         # end
 
-        f = SVector(fx, fy, fz)
+        # f = SVector(fx, fy, fz)
+        f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem])) #Using GXBeam's internal damping
         distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end
 end
@@ -186,7 +190,7 @@ end
 #TODO: It might be a good idea to make a version that is completely in place. (Pass in data storage and riso ode.)
 
 #TODO: Function headers
-function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; turbine::Bool=true, dsmodelinit::DSmodelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, warnings::Bool=true, azimuth0=0.0, b=0.01)
+function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; turbine::Bool=true, dsmodel::DSmodel=Riso(), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, warnings::Bool=true, azimuth0=0.0, b=0.01, structural_damping::Bool=true, linear::Bool=false)
 
     if verbose
         println("Rotors.jl initializing solution...")
@@ -248,15 +252,16 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
     ### Initialize DS solution
-    risoode = createrisoode(blade)
+    # ode = initializeDSmodel(dsmodel, solver) 
 
     Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #TODO: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. 
 
     p_ds = vcat(chordvec, twistvec, cchistory[1].phi, cchistory[1].W, Wdotvec, pitch) #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
 
-    xds = initializeDSmodel(dsmodelinit, nt, na, p_ds, risoode)
+    # xds = initializeDSmodel(dsmodelinit, nt, na, p_ds, risoode)
+    ode, xds = initializeDSmodel(dsmodel, dsmodelinit, solver, nt, na, p_ds, tvec)
 
-
+    # @show getfieldnames(ode.dt)
 
 
     N[1,:], T[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(xds[1,:], cchistory[1], t0, rvec, chordvec, twistvec, pitch, blade, env)
@@ -329,7 +334,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
             sections[j] = CCBlade.Section(rvec[j], chordvec[j], twist_displaced, blade.airfoils[j]) #Not displacing rvec because CCBlade uses that to calculate the tip and hub corrections, and the value should be based on relative to the distance along the blade to the hub or tip. (Although in dynamic movement, the tip losses would change dramatically.)
 
             ### Update base inflow velocities
-            Vxvec[j], Vyvec[j] = get_aerostructural_velocities(env, aeroV[j], t, rvec[j], azimuth[i], precone, tilt, yaw, hubht)
+            Vxvec[j], Vyvec[j] = get_aerostructural_velocities(env, aeroV[j], t, rvec[j], azimuth[i], precone, tilt, yaw, hubht) #Todo: This should probably see the deflected radius. 
             operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
         end
 
@@ -348,7 +353,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
         ### Integrate Dynamic Stall model
-        xds[i,:] = solver(risoode, xds[i-1,:], p_ds, t, dt)
+        xds[i,:] = solver(ode, xds[i-1,:], p_ds, t, dt)
 
 
 
@@ -368,7 +373,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
         ### Solve GXBeam for time step
-        system, localhistory, converged = time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega, reset_state=false, initialize=false) #TODO: Add gravity. 
+        system, localhistory, converged = time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping) #TODO: Add gravity. 
 
 
 
@@ -389,7 +394,9 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
         if verbose & (mod(i, speakiter)==0)
             println("")
             println("Simulation time: ", t)
-            # @show Vxvec[end], Vyvec[end]
+            # @show Vxvec[end], Vyvec[end] 
+            # @show aeroV[end]
+            # @show azimuth[i], localhistory[end].elements[end].V
             # @show maximum(N[i,:]), maximum(T[i,:])
         end
     end

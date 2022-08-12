@@ -2,10 +2,10 @@ using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, Plots, St
 
 include("../src/blades.jl")
 include("../src/environments.jl")
-# include("../src/bem.jl")
+# include("../dev/bem.jl")
 include("../src/riso.jl")
-# include("../src/bem-riso.jl")
-include("../src/gxbeam.jl")
+# include("../dev/bem-riso.jl")
+include("../dev/gxbeam.jl")
 include("../src/solvers.jl")
 include("../src/loosely.jl")
 include("../src/coupled.jl")
@@ -14,7 +14,7 @@ include("../src/extra.jl")
 # include("../src/static.jl")
 
 of = OpenFASTsr
-
+ofpath = "./OpenFAST_NREL5MW" 
 
 ### Read in AeroDyn files
 addriver = of.read_addriver("NREL5MW_ADdriver.inp", "./OpenFAST_NREL5MW")
@@ -130,6 +130,11 @@ Okay, I found two things:
     - Maybe I need to return the velocities. (Taylor confirmed that they are returned in the inertial frame. )
 
     - I wonder if part of it is the ode solver I'm using. 
+    -> I figured out using callbacks to change the parameters.... Which is cool. So that's another method I can use for integration now. But it looks like the method is stalling out, at least it's probably the nonlinear solve that's bottomed out. So... that's a bummer. 
+
+    Oh, it looks like the ODE solver bottomed out... not the nonlinear solver... so that's a bummer. 
+
+    Yeah, I think it's a problem either with GXBeam going bonkers... or the velocities... or something. 
 =#
 
 
@@ -141,7 +146,7 @@ tvec = tspan[1]:dt:tspan[2]
 
 
 
-loads, cchistory, xds, gxhistory = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Steady(), b=0.1)
+loads, cchistory, xds, gxhistory = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Steady(), b=0.01, solver=RK4()) #DiffEQ(Tsit5())
 
 #WorkLocation: 
 
@@ -223,13 +228,13 @@ function createdeflectionanimation()
         plot!(x, deflectionz, lab="Z")
         annotate!((20, 2.5, text("time = $t sec", :left)))
 
-        subplot = twinx()
-        plot!(subplot, leg=:bottomleft, xlims=(-0.005, rtip*1.02), ylims=(-15, 35), yaxis="Angular Deflection (deg)")
-        plot!(subplot, x, defthetax, lab="θx", linestyle=:dash)
-        plot!(subplot, x, defthetay, lab="θy", linestyle=:dashdot)
-        plot!(subplot, x, defthetaz, lab="θz", linestyle=:dot)
+        # subplot = twinx()
+        # plot!(subplot, leg=:bottomleft, xlims=(-0.005, rtip*1.02), ylims=(-15, 35), yaxis="Angular Deflection (deg)")
+        # plot!(subplot, x, defthetax, lab="θx", linestyle=:dash)
+        # plot!(subplot, x, defthetay, lab="θy", linestyle=:dashdot)
+        # plot!(subplot, x, defthetaz, lab="θz", linestyle=:dot)
     end every 10
-    gif(anim, "bodydeflections_looselycoupled_openfast_081122.gif", fps = framespersecond)
+    gif(anim, "bodydeflections_looselycoupled_openfast_081222.gif", fps = framespersecond)
 end
 
 # createdeflectionanimation()

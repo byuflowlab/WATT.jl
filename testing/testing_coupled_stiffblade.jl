@@ -2,10 +2,10 @@ using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, Plots, St
 
 include("../src/blades.jl")
 include("../src/environments.jl")
-# include("../src/bem.jl")
+# include("../dev/bem.jl")
 include("../src/riso.jl")
-# include("../src/bem-riso.jl")
-include("../src/gxbeam.jl")
+# include("../dev/bem-riso.jl")
+include("../dev/gxbeam.jl")
 include("../src/solvers.jl")
 include("../src/loosely.jl")
 include("../src/coupled.jl")
@@ -14,6 +14,7 @@ include("../src/extra.jl")
 # include("../src/static.jl")
 
 of = OpenFASTsr
+ofpath = "./OpenFAST_NREL5MW" 
 
 
 ### Read in AeroDyn files
@@ -123,7 +124,7 @@ tvec = tspan[1]:dt:tspan[2]
 
 
 
-loads, cchistory, xds, gxhistory = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Steady())
+loads, cchistory, xds, gxhistory = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Steady(), solver=DiffEQ(Tsit5()))
 
 #WorkLocation: 
 

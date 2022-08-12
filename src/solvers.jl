@@ -61,14 +61,33 @@ function (s::BDF1)(fun, x, p, t, dt) #Takes about 2x the time of the RK4
     return xn.zero
 end
 
-struct DiffEQ <: Solver #TODO: This could probably be implemented a lot better. 
+struct DiffEQ <: Solver
+    algorithm
 end
 
-function (s::DiffEQ)(fun, x, p, t, dt) #Takes about the same amount of time as the BDF1. 
+#The idea behind this solver is to take advantage of the integrator/step approach and use a callback to update p. 
+function (s::DiffEQ)(fun, x, p, t, dt) #I think the integrator keeps track of x, t and what not. 
+    fun.p .= p
+    DifferentialEquations.step!(fun, dt, true)
+    return fun.u
+end
+
+struct DiffEQinit <: Solver #TODO: This could probably be implemented a lot better. 
+end
+
+function (s::DiffEQinit)(fun, x, p, t, dt) #Takes about the same amount of time as the BDF1. 
     prob = ODEProblem(fun, x, (t, t+dt), p)
     sol = DifferentialEquations.solve(prob)
     return sol(t+dt)
 end
+
+
+
+
+
+
+
+
 
 struct DBDF1!{TI} <: Solver
     diffvars::Array{TI, 1} #which variables are states

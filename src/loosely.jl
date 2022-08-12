@@ -4,80 +4,75 @@ Recreating what they do in AeroDyn, which is solve the BEM, feed the inflow angl
 
 Adam Cardoza 8/6/22
 =# 
+abstract type DSmodel end
 
-function createrisoode(blade)  
-    risoODE = function(x, p, t)
-        ### Unpack inputs. 
-        n = length(blade.airfoils)
-
-        #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
-        chordvec = view(p, 1:n)
-        twistvec = view(p, n+1:2*n)
-        phivec = view(p, 2n+1:3n)
-        Wvec = view(p, 3n+1:4n)
-        Wdotvec = view(p, 4n+1:5n)
-        pitch = p[end]
-
-
-        ### Iterate through the nodes and calculate the state rates. 
-        dx = zeros(4*n)
-
-        for i = 1:n
-            idx = 4*(i-1)
-            xs = x[1+idx:idx+4]
-
-            u = Wvec[i] 
-            v = 0 
-
-            udot = Wdotvec[i]  
-            vdot = 0.0
-
-            theta = -((twistvec[i] + pitch) - phivec[i]) 
-
-            # if i==n
-            #     @show theta, u, udot, t
-            # end
-
-            thetadot = 0.0 #Assuming that the airfoil isn't in the act of turning???? TODO: What are my other options?
-
-    
-            dx[1+idx:4+idx] = riso_states(xs, u, udot, v, vdot, theta, thetadot, chordvec[i], blade.airfoils[i])
-
-            if isnanvec(dx[1+idx:4+idx])
-                println("Riso State Rates: ", [dx[1+idx], dx[2+idx], dx[3+idx], dx[4+idx]])
-                error("Nan in Riso")
-            end
-
-        end
-        return dx
-    end
-    return risoODE
-end 
-
-abstract type DSmodelInit end #TODO: I'd like to generalize this to both the ds model and gxbeam (and anything else for that matter. )
-
-struct Hansen <: DSmodelInit
+struct Riso <: DSmodel
 end
 
-struct Steady <: DSmodelInit
+abstract type ModelInit end #TODO: I'd like to generalize this to both the ds model and gxbeam (and anything else for that matter. )
+
+struct Hansen <: ModelInit
 end
 
-function initializeDSmodel(dsmodelinit::Hansen, nt, na, p_ds, fun)
-    xds = zeros(nt, 4*na) #Note: I thought about initializing this as an undefined array, but... the first vector needs to be mostly zeros, and I feel like this will be the easiest. 
-    xds[1,4:4:4*na] .= 1
-    return xds
+struct Steady <: ModelInit
 end
 
-function initializeDSmodel(dsmodelinit::Steady, nt, na, p_ds, fun)
+#Question: I don't know if using this many structs will make my package take forever to compile... So it might be better to create a nest of if statements... but we'll see.
+
+#ode, xds = initializeDSmodel(dsmodel, dsmodelinit, solver, nt, na, p_ds, tvec)  
+function initializeDSmodel(dsmodel::Riso, dsmodelinit::Hansen, solver::RK4,  nt, na, p_ds, tvec) 
+    ode = createrisoode(blade)
+
     xds = zeros(nt, 4*na) #Note: I thought about initializing this as an undefined array, but... the first vector needs to be mostly zeros, and I feel like this will be the easiest. 
     xds[1,4:4:4*na] .= 1
 
-    prob = SteadyStateProblem(fun, xds[1,:], p_ds)
+    return ode, xds
+end
+
+function initializeDSmodel(dsmodel::Riso, dsmodelinit::Steady, solver::RK4,  nt, na, p_ds, tvec) 
+    ode = createrisoode(blade)
+
+    xds = zeros(nt, 4*na) 
+    xds[1,4:4:4*na] .= 1
+
+    prob = SteadyStateProblem(ode, xds[1,:], p_ds)
     sol = DifferentialEquations.solve(prob)
-    # @show sol.u #Todo: I'm not convinced with these solutions. 
+
     xds[1,:] = sol.u
-    return xds
+
+    return ode, xds
 end
+
+function initializeDSmodel(dsmodel::Riso, dsmodelinit::Hansen, solver::DiffEQ,  nt, na, p_ds, tvec) 
+    ode = createrisoode(blade)
+
+    xds = zeros(nt, 4*na)
+    xds[1,4:4:4*na] .= 1
+
+    prob = DifferentialEquations.ODEProblem(ode, xds[1,:], (tvec[1], tvec[end]), p_ds)
+    integrator = DifferentialEquations.ODEProblem(prob)
+
+    return integrator, xds
+end
+
+function initializeDSmodel(dsmodel::Riso, dsmodelinit::Steady, solver::DiffEQ,  nt, na, p_ds, tvec) 
+    ode = createrisoode(blade)
+
+    xds = zeros(nt, 4*na) 
+    xds[1,4:4:4*na] .= 1
+
+    prob = SteadyStateProblem(ode, xds[1,:], p_ds)
+    sol = DifferentialEquations.solve(prob)
+
+    xds[1,:] = sol.u
+
+    prob = DifferentialEquations.ODEProblem(ode, xds[1,:], (tvec[1], tvec[end]), p_ds)
+    integrator = DifferentialEquations.init(prob, solver.algorithm)
+
+    return integrator, xds
+end
+ 
+
 
 function extractloads(x, ccout, t, rvec, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. 
     n = length(blade.airfoils)
@@ -115,7 +110,7 @@ function extractloads(x, ccout, t, rvec, chordvec, twistvec, pitch, blade::Blade
 end
 
 
-function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodelinit::DSmodelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
+function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DSmodel=Riso(), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
 
     if verbose
         println("Rotors.jl initializing solution...")
@@ -162,13 +157,14 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
     ### Initialize DS solution
-    risoode = createrisoode(blade)
+     
 
     Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #Todo: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. 
 
     p_ds = vcat(chordvec, twistvec, ccout.phi, ccout.W, Wdotvec, pitch) #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
 
-    xds = initializeDSmodel(dsmodelinit, nt, na, p_ds, risoode)
+    # xds = initializeDSstates(dsmodelinit, nt, na, p_ds, risoode)
+    ode, xds = initializeDSmodel(dsmodel, dsmodelinit, solver, nt, na, p_ds, tvec)
 
 
 
@@ -219,7 +215,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
         ### Integrate Dynamic Stall model
-        xds[i,:] = solver(risoode, xds[i-1,:], p_ds, t, dt)
+        xds[i,:] = solver(ode, xds[i-1,:], p_ds, t, dt)
 
 
 
