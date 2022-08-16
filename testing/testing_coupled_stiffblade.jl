@@ -1,19 +1,14 @@
-using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, Plots, StaticArrays, CurveFit, NLsolve, OpenFASTsr, DelimitedFiles
+using Plots, OpenFASTsr, DelimitedFiles, Rotors, dynamicstallmodels, DifferentialEquations
 
-include("../src/blades.jl")
-include("../src/environments.jl")
-# include("../dev/bem.jl")
-include("../src/riso.jl")
-# include("../dev/bem-riso.jl")
-include("../dev/gxbeam.jl")
-include("../src/solvers.jl")
-include("../src/loosely.jl")
-include("../src/coupled.jl")
-
-include("../src/extra.jl")
-# include("../src/static.jl")
-
+DS = dynamicstallmodels
 of = OpenFASTsr
+
+
+path = dirname(@__FILE__)
+cd(path)
+
+
+
 ofpath = "./OpenFAST_NREL5MW" 
 
 
@@ -86,7 +81,7 @@ af_idx = adblade.afid[indices] #[3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 airfoils = aftypes[af_idx]
 
 n = length(rvec)
-afs = Array{Airfoil}(undef, n)
+afs = Array{DS.Airfoil}(undef, n)
 
 for i = 1:n
     localpolar = hcat(airfoils[i][:,1].*(pi/180), airfoils[i][:,2:end])
@@ -94,7 +89,7 @@ for i = 1:n
 end
 
 rR = rvec./rtip
-blade = Blade(rhub, rtip, rR, afs)
+blade = Rotors.Blade(rhub, rtip, rR, afs)
 
 
 
@@ -102,8 +97,8 @@ env = environment(rho, mu, a, vinf, omega, shearexp)
 
 
 
-p_s, points, elements = create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
-gxmodel = gxbeam(points, elements)
+p_s, points, elements = Rotors.create_simplebeam(rvec, chordvec, twistvec, rhub, rtip, thickvec)
+gxmodel = Rotors.gxbeam(points, elements)
 
 
 ## Create system indices  
@@ -111,7 +106,7 @@ start = 1:gxmodel.ne
 stop = 2:gxmodel.np
 
 ## Create assembly
-assembly = create_gxbeam_assembly(gxmodel, p_s, start, stop) 
+assembly = Rotors.create_gxbeam_assembly(gxmodel, p_s, start, stop) 
 
 
 
@@ -122,9 +117,12 @@ dt = 0.01
 
 tvec = tspan[1]:dt:tspan[2]
 
+dsmodelinit=Rotors.Steady()
+solver= Rotors.RK4() #Rotors.DiffEQ(Tsit5())
+verbose = true
+println("About to simulate. ")
 
-
-loads, cchistory, xds, gxhistory = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Steady(), solver=DiffEQ(Tsit5()))
+loads, cchistory, xds, gxhistory = Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose, dsmodelinit, solver)
 
 #WorkLocation: 
 

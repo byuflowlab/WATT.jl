@@ -1,4 +1,4 @@
-
+export environment
 
 struct Environment{TF, F<:Function, G<:Function, H<:Function, J<:Function, K<:Function, L<:Function, M<:Function, N<:Function}
     rho::TF #Fluid Density (kg/m^3)

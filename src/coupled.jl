@@ -46,7 +46,7 @@ end
 
 A struct to quickly interpolate the new radial location of an aerodynamic node. 
 """
-struct InterpolationPoint
+struct InterpolationPoint #Todo: Move to types
     pair::Tuple{Int64, Int64}
     percent::Float64
 end
@@ -190,8 +190,8 @@ end
 #TODO: It might be a good idea to make a version that is completely in place. (Pass in data storage and riso ode.)
 
 #TODO: Function headers
-function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; turbine::Bool=true, dsmodel::DSmodel=Riso(), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, warnings::Bool=true, azimuth0=0.0, b=0.01, structural_damping::Bool=true, linear::Bool=false)
-
+function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, warnings::Bool=true, azimuth0=0.0, b=0.01, structural_damping::Bool=true, linear::Bool=false)
+    
     if verbose
         println("Rotors.jl initializing solution...")
     end
@@ -234,7 +234,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
     ### Initialize BEM solution
     azimuth[1] = azimuth0
 
-    rotor = Rotor(rhub, rtip, B; precone, turbine)
+    rotor = CCBlade.Rotor(rhub, rtip, B; precone, turbine)
     sections = [CCBlade.Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i = 1:na]
 
 
@@ -259,12 +259,11 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
     p_ds = vcat(chordvec, twistvec, cchistory[1].phi, cchistory[1].W, Wdotvec, pitch) #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
 
     # xds = initializeDSmodel(dsmodelinit, nt, na, p_ds, risoode)
-    ode, xds = initializeDSmodel(dsmodel, dsmodelinit, solver, nt, na, p_ds, tvec)
+    ode, xds, p_ds = initializeDSmodel(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, cchistory[1].W, Wdotvec, chordvec, twistvec, cchistory[1].phi, pitch) 
 
     # @show getfieldnames(ode.dt)
-
-
-    N[1,:], T[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(xds[1,:], cchistory[1], t0, rvec, chordvec, twistvec, pitch, blade, env)
+    
+    N[1,:], T[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], t0, rvec, chordvec, twistvec, pitch, blade, env)
 
 
 
@@ -299,7 +298,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
     #TODO: Create a function to initialize the behavior. One for starting from no loading, one from steady state as below. Look at that, I wrote that down already. 
 
     ### GXBeam initial solution #TODO: I might make it an option to initialize from rest, or from steady state at the intial conditions (as current).
-    system, converged = steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega) 
+    system, converged = GXBeam.steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega) 
 
     gxhistory[1] = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
@@ -342,13 +341,9 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
         cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
 
 
-        ### Update Dynamic Stall model inputs #TODO: This can probably be made into a function. 
-        p_ds[2*na+1:3*na] = cchistory[i].phi #Update phi
-        p_ds[3*na+1:4*na] = cchistory[i].W #Update the inflow velocity
-        for j = 1:na
-            idx = 4*na + j
-            p_ds[idx] = sqrt(env.Vinfdot(t)^2 + (env.RSdot(t)*rvec[j])^2) #Update Wdotvec
-        end
+        ### Update Dynamic Stall model inputs 
+        update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i].W, cchistory[i].phi, twistvec, pitch, env, t)
+
 
 
 
@@ -357,8 +352,8 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
 
-        ### Extract loads
-        N[i,:], T[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(xds[i,:], cchistory[i], t, rvec, chordvec, twistvec, pitch, blade, env)
+        ### Extract loads 
+        N[i,:], T[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], t, rvec, chordvec, twistvec, pitch, blade, env)
         
         
 
@@ -373,7 +368,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
         ### Solve GXBeam for time step
-        system, localhistory, converged = time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping) #TODO: Add gravity. 
+        system, localhistory, converged = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping) #TODO: Add gravity. 
 
 
 

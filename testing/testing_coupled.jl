@@ -1,19 +1,14 @@
-using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, Plots, StaticArrays, CurveFit, NLsolve, OpenFASTsr, DelimitedFiles, Plots.PlotMeasures
+using DifferentialEquations, Plots, StaticArrays, OpenFASTsr, DelimitedFiles, dynamicstallmodels, Rotors, Plots.PlotMeasures
 
-include("../src/blades.jl")
-include("../src/environments.jl")
-# include("../dev/bem.jl")
-include("../src/riso.jl")
-# include("../dev/bem-riso.jl")
-include("../dev/gxbeam.jl")
-include("../src/solvers.jl")
-include("../src/loosely.jl")
-include("../src/coupled.jl")
-
-include("../src/extra.jl")
-# include("../src/static.jl")
-
+DS = dynamicstallmodels
 of = OpenFASTsr
+
+
+path = dirname(@__FILE__)
+cd(path)
+
+
+
 ofpath = "./OpenFAST_NREL5MW" 
 
 ### Read in AeroDyn files
@@ -87,7 +82,7 @@ af_idx = adblade.afid[indices] #[3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 airfoils = aftypes[af_idx]
 
 n = length(rvec)
-afs = Array{Airfoil}(undef, n)
+afs = Array{DS.Airfoil}(undef, n)
 
 for i = 1:n
     localpolar = hcat(airfoils[i][:,1].*(pi/180), airfoils[i][:,2:end])
@@ -95,11 +90,11 @@ for i = 1:n
 end
 
 rR = rvec./rtip
-blade = Blade(rhub, rtip, rR, afs)
+blade = Rotors.Blade(rhub, rtip, rR, afs)
 
 
 
-env = environment(rho, mu, a, vinf, omega, shearexp)
+env = Rotors.environment(rho, mu, a, vinf, omega, shearexp)
 
 assembly = of.make_assembly(edfile, bdblade)
 ne = length(assembly.elements)
@@ -146,7 +141,7 @@ tvec = tspan[1]:dt:tspan[2]
 
 
 
-loads, cchistory, xds, gxhistory = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Steady(), b=0.01, solver=RK4()) #DiffEQ(Tsit5())
+loads, cchistory, xds, gxhistory = Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Rotors.Steady(), b=0.01, solver=Rotors.RK4()) #DiffEQ(Tsit5())
 
 #WorkLocation: 
 

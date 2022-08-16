@@ -4,113 +4,15 @@ Recreating what they do in AeroDyn, which is solve the BEM, feed the inflow angl
 
 Adam Cardoza 8/6/22
 =# 
-abstract type DSmodel end
 
-struct Riso <: DSmodel
-end
-
-abstract type ModelInit end #TODO: I'd like to generalize this to both the ds model and gxbeam (and anything else for that matter. )
-
-struct Hansen <: ModelInit
-end
-
-struct Steady <: ModelInit
-end
+export simulate
 
 #Question: I don't know if using this many structs will make my package take forever to compile... So it might be better to create a nest of if statements... but we'll see.
 
-#ode, xds = initializeDSmodel(dsmodel, dsmodelinit, solver, nt, na, p_ds, tvec)  
-function initializeDSmodel(dsmodel::Riso, dsmodelinit::Hansen, solver::RK4,  nt, na, p_ds, tvec) 
-    ode = createrisoode(blade)
-
-    xds = zeros(nt, 4*na) #Note: I thought about initializing this as an undefined array, but... the first vector needs to be mostly zeros, and I feel like this will be the easiest. 
-    xds[1,4:4:4*na] .= 1
-
-    return ode, xds
-end
-
-function initializeDSmodel(dsmodel::Riso, dsmodelinit::Steady, solver::RK4,  nt, na, p_ds, tvec) 
-    ode = createrisoode(blade)
-
-    xds = zeros(nt, 4*na) 
-    xds[1,4:4:4*na] .= 1
-
-    prob = SteadyStateProblem(ode, xds[1,:], p_ds)
-    sol = DifferentialEquations.solve(prob)
-
-    xds[1,:] = sol.u
-
-    return ode, xds
-end
-
-function initializeDSmodel(dsmodel::Riso, dsmodelinit::Hansen, solver::DiffEQ,  nt, na, p_ds, tvec) 
-    ode = createrisoode(blade)
-
-    xds = zeros(nt, 4*na)
-    xds[1,4:4:4*na] .= 1
-
-    prob = DifferentialEquations.ODEProblem(ode, xds[1,:], (tvec[1], tvec[end]), p_ds)
-    integrator = DifferentialEquations.ODEProblem(prob)
-
-    return integrator, xds
-end
-
-function initializeDSmodel(dsmodel::Riso, dsmodelinit::Steady, solver::DiffEQ,  nt, na, p_ds, tvec) 
-    ode = createrisoode(blade)
-
-    xds = zeros(nt, 4*na) 
-    xds[1,4:4:4*na] .= 1
-
-    prob = SteadyStateProblem(ode, xds[1,:], p_ds)
-    sol = DifferentialEquations.solve(prob)
-
-    xds[1,:] = sol.u
-
-    prob = DifferentialEquations.ODEProblem(ode, xds[1,:], (tvec[1], tvec[end]), p_ds)
-    integrator = DifferentialEquations.init(prob, solver.algorithm)
-
-    return integrator, xds
-end
- 
 
 
-function extractloads(x, ccout, t, rvec, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. 
-    n = length(blade.airfoils)
 
-    Cl = Array{eltype(rvec)}(undef, n)
-    Cd = Array{eltype(rvec)}(undef, n)
-    Cn = Array{eltype(rvec)}(undef, n)
-    Ct = Array{eltype(rvec)}(undef, n)
-    N = Array{eltype(rvec)}(undef, n)
-    T = Array{eltype(rvec)}(undef, n)
-
-
-    for i = 1:n
-        idx = 4*(i-1)
-        xs = x[1+idx:idx+4]
-
-        u = ccout.W[i]
-        udot = sqrt(env.Vinfdot(t)^2 + (env.RSdot(t)*rvec[i])^2)
-        theta = -((twistvec[i] + pitch) - ccout.phi[i]) #TODO: Make this work for a turbine or a propeller. 
-
-        ys = [u, udot, 0.0, 0.0, theta, 0.0]
-    
-        Cl[i], Cd[i] = riso_coefs(xs, ys, chordvec[i], blade.airfoils[i])
-
-        cphi = cos(ccout.phi[i])
-        sphi = sin(ccout.phi[i])
-
-        Cn[i] = Cl[i]*cphi - Cd[i]*sphi
-        Ct[i] = Cl[i]*sphi + Cd[i]*cphi
-
-        N[i] = Cn[i]*0.5*env.rho*ccout.W[i]^2*chordvec[i]
-        T[i] = Ct[i]*0.5*env.rho*ccout.W[i]^2*chordvec[i]
-    end
-    return N, T, Cn, Ct, Cl, Cd
-end
-
-
-function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DSmodel=Riso(), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
+function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
 
     if verbose
         println("Rotors.jl initializing solution...")
@@ -161,10 +63,10 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
     Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #Todo: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. 
 
-    p_ds = vcat(chordvec, twistvec, ccout.phi, ccout.W, Wdotvec, pitch) #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
+    # p_ds = vcat(chordvec, twistvec, ccout.phi, ccout.W, Wdotvec, pitch) #p = [chordvec, twistvec, phivec, Wvec, Wdotvec, pitch]
 
     # xds = initializeDSstates(dsmodelinit, nt, na, p_ds, risoode)
-    ode, xds = initializeDSmodel(dsmodel, dsmodelinit, solver, nt, na, p_ds, tvec)
+    ode, xds, p_ds = initializeDSmodel(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, ccout.W, Wdotvec, chordvec, twistvec, ccout.phi, pitch) 
 
 
 
@@ -179,7 +81,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
     T = Array{eltype(rvec)}(undef,(nt, na))
 
     cchistory[1] = ccout
-    N[1,:], T[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(xds[1,:], cchistory[1], t0, rvec, chordvec, twistvec, pitch, blade, env)
+    N[1,:], T[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], t0, rvec, chordvec, twistvec, pitch, blade, env)
     
     
 
@@ -205,12 +107,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
         ### Update Dynamic Stall model inputs
-        p_ds[2*na+1:3*na] = cchistory[i].phi #Update phi
-        p_ds[3*na+1:4*na] = cchistory[i].W #Update the inflow velocity
-        for j = 1:na
-            idx = 4*na + j
-            p_ds[idx] = sqrt(env.Vinfdot(t)^2 + (env.RSdot(t)*rvec[j])^2) #Update Wdotvec
-        end
+        update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i].W, cchistory[i].phi, twistvec, pitch, env, t)
 
 
 
@@ -220,7 +117,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt,
 
 
         ### Extract loads
-        N[i,:], T[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(xds[i,:], cchistory[i], t, rvec, chordvec, twistvec, pitch, blade, env) 
+        N[i,:], T[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], t, rvec, chordvec, twistvec, pitch, blade, env) 
         if verbose & (mod(i, speakiter)==0)
             println("Simulation time: ", t)
         end
@@ -234,28 +131,3 @@ end
 
 
 
-function parsesolution(xds, cchistory, tvec, rvec, chordvec, twistvec, pitch, blade::Blade, env::Environment)
-    m = length(tvec)
-    n = length(blade.airfoils)
-
-    Cl = zeros(m, n)
-    Cd = zeros(m, n)
-
-    for j = 1:m
-        ut = xds[j,:]
-
-        for i = 1:n
-            idx = 4*(i-1)
-            xs = ut[1+idx:idx+4]
-
-            u = cchistory[j].W[i]
-            udot = sqrt(env.Vinfdot(tvec[j])^2 + (env.RSdot(tvec[j])*rvec[i])^2)
-            theta = -((twistvec[i] + pitch) - cchistory[j].phi[i]) 
-
-            ys = [u, udot, 0.0, 0.0, theta, 0.0]
-    
-            Cl[j, i], Cd[j, i] = riso_coefs(xs, ys, chordvec[i], blade.airfoils[i])
-        end
-    end
-    return Cl, Cd
-end

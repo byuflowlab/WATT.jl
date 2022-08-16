@@ -1,4 +1,4 @@
-using DifferentialEquations, FLOWMath, CCBlade, LinearAlgebra, Plots, StaticArrays, CurveFit, NLsolve, OpenFASTsr, DelimitedFiles
+using Plots, OpenFASTsr, DelimitedFiles, Rotors, dynamicstallmodels
 
 
 #=
@@ -11,13 +11,14 @@ path = dirname(@__FILE__)
 cd(path)
 
 of = OpenFASTsr
+DS = dynamicstallmodels
 
-include("../src/blades.jl")
-include("../src/environments.jl")
-include("../src/riso.jl")
-include("../src/solvers.jl")
-include("../src/extra.jl")
-include("../src/loosely.jl")
+# include("../src/blades.jl")
+# include("../src/environments.jl")
+# include("../src/riso.jl")
+# include("../src/solvers.jl")
+# include("../src/utils.jl")
+# include("../src/loosely.jl")
 
 
 
@@ -87,7 +88,7 @@ af_idx = adblade.afid[indices] #[3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 airfoils = aftypes[af_idx]
 
 n = length(rvec)
-afs = Array{Airfoil}(undef, n)
+afs = Array{DS.Airfoil}(undef, n)
 
 for i = 1:n
     localpolar = hcat(airfoils[i][:,1].*(pi/180), airfoils[i][:,2:end])
@@ -95,7 +96,7 @@ for i = 1:n
 end
 
 rR = rvec./rtip
-blade = Blade(rhub, rtip, rR, afs)
+blade = Rotors.Blade(rhub, rtip, rR, afs) #Todo: Weird that this won't export. 
 
 
 
@@ -111,7 +112,7 @@ tvec = tspan[1]:dt:tspan[2]
 
 
 
-loads, cchistory, xds = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, precone, tilt, yaw, blade, env, tvec; verbose=true) #1.234718 seconds (5.51 M allocations: 262.152 MiB, 4.71% gc time, 83.64% compilation time) It's the createrisoode function that's taking time I think. There is probably a better way to do that. 
+loads, cchistory, xds = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true) #1.234718 seconds (5.51 M allocations: 262.152 MiB, 4.71% gc time, 83.64% compilation time) It's the createrisoode function that's taking time I think. There is probably a better way to do that. 
 
 
 # Cl, Cd = parsesolution(xds, cchistory, tvec, rvec, chordvec, twistvec, pitch, blade, env)
