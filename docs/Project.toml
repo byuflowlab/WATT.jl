@@ -1,9 +1,5 @@
-name = "Rotors"
-uuid = "3f0b5dcd-76e8-4d37-b00e-98055191506f"
-authors = ["cardoza2 <adam@cardoza.one>"]
-version = "0.1.0"
-
 [deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 CCBlade = "e1828068-15df-11e9-03e4-ef195ea46fa4"
 CurveFit = "5a033b19-8c74-5913-a970-47c3779ef25c"
 DifferentialEquations = "0c46a032-eb83-5123-abaf-570d42b7fbaa"
@@ -13,3 +9,6 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NLsolve = "2774e3e8-f4cf-5e23-947b-6d7e65073b56"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[compat]
+Documenter = "0.27"
