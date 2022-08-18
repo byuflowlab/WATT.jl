@@ -1,6 +1,6 @@
 module Rotors
 
-using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, Plots, CurveFit, NLsolve, OpenFASTsr, dynamicstallmodels
+using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, Plots, CurveFit, NLsolve, dynamicstallmodels
 
 #Todo: Do I need OpenFASTsr? 
 
