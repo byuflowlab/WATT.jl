@@ -1,4 +1,4 @@
-using Plots, OpenFASTsr, DelimitedFiles, Rotors, dynamicstallmodels
+using Plots, OpenFASTsr, DelimitedFiles, Rotors, DynamicStallModels
 
 
 #=
@@ -11,7 +11,7 @@ path = dirname(@__FILE__)
 cd(path)
 
 of = OpenFASTsr
-DS = dynamicstallmodels
+DS = DynamicStallModels
 
 # include("../src/blades.jl")
 # include("../src/environments.jl")
@@ -92,7 +92,7 @@ afs = Array{DS.Airfoil}(undef, n)
 
 for i = 1:n
     localpolar = hcat(airfoils[i][:,1].*(pi/180), airfoils[i][:,2:end])
-    afs[i] = complexairfoil(localpolar; A=A)
+    afs[i] = airfoil(localpolar; A=A)
 end
 
 rR = rvec./rtip
@@ -101,7 +101,6 @@ blade = Rotors.Blade(rhub, rtip, rR, afs) #Todo: Weird that this won't export.
 
 
 env = environment(rho, mu, a, vinf, omega, shearexp)
-
 
 
 #### Define solution

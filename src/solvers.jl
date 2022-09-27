@@ -5,7 +5,7 @@ The plan for the future is either figure out how to use DifferentialEquations an
 - Adam Cardoza, 7/20/22
 
 =#
-
+#Todo: I might consider moving all of these methods over to DynamicStallModels. 
 
 """
     Solver
@@ -80,6 +80,11 @@ function (s::DiffEQinit)(fun, x, p, t, dt) #Takes about the same amount of time 
     sol = DifferentialEquations.solve(prob)
     return sol(t+dt)
 end
+
+# import DS.Indicial
+
+# function (s::DS.Indicial)(fun, x, p, t, dt)
+# end
 
 
 

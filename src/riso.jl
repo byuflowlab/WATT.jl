@@ -1,11 +1,11 @@
 #=
-
+Code to interact with the DynamicStallModels Package, specifically for the Risø model. 
 
 =#
 
 
 
-function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Hansen, solver::RK4, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch) 
+function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Hansen, solver::RK4, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
 
     if turbine
         thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] 
@@ -23,7 +23,7 @@ function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Hansen, solver::RK4, t
     return dsmodel, xds, pds
 end
 
-function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Steady, solver::RK4, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch) 
+function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Steady, solver::RK4, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
 
     if turbine
         thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] 
@@ -46,7 +46,7 @@ function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Steady, solver::RK4, t
     return dsmodel, xds, pds
 end
 
-function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Hansen, solver::DiffEQ, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch) 
+function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Hansen, solver::DiffEQ, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
 
     if turbine
         thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] 
@@ -68,7 +68,7 @@ function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Hansen, solver::DiffEQ
     return integrator, xds, pds
 end
 
-function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Steady, solver::DiffEQ, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch) 
+function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Steady, solver::DiffEQ, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
 
     if turbine
         thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] 
@@ -146,7 +146,7 @@ function extractloads(dsmodel::DS.Riso, x, ccout, t, rvec, chordvec, twistvec, p
 end
 
 
-function parsesolution(xds, W, phi, tvec, chordvec, twistvec, pitch, blade::Blade)
+function parsesolution(dsmodel::DS.Riso, xds, W, phi, tvec, chordvec, twistvec, pitch, blade::Blade)
     m = length(tvec)
     n = length(blade.airfoils)
 

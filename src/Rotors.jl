@@ -1,10 +1,8 @@
 module Rotors
 
-using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, Plots, CurveFit, NLsolve, dynamicstallmodels
+using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, Plots, CurveFit, NLsolve, DynamicStallModels
 
-#Todo: Do I need OpenFASTsr? 
-
-DS = dynamicstallmodels
+DS = DynamicStallModels
 DE = DifferentialEquations
 
 ### Structs, solvers, and whatnot. 
@@ -19,7 +17,10 @@ include("./environments.jl")
 
 
 ### Dynamic stall models. 
-include("./riso.jl") #Todo: Need to move relavent functions to this file, and main body functions to dynamicstallmodels.jl
+include("./riso.jl") 
+include("./beddoesleishman_aerodyn.jl")
+include("./beddoesleishman.jl")
+
 
 
 ### Structures
