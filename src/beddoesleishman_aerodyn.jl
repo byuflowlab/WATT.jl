@@ -16,11 +16,11 @@ function initializeBLA(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishman
     ns = DS.numberofstates(dsmodel)
     # @show ns #This looks correct. 
     xds = Array{eltype(chordvec), 2}(undef, nt, ns)
-    pds = Array{eltype(chordvec), 1}(undef, 24*na)
+    pds = Array{eltype(chordvec), 1}(undef, 18*na)
 
     for i = 1:na
         xidx = 22*(i-1)+1:i*22
-        pidx = 24*(i-1)+1:i*24
+        pidx = 18*(i-1)+1:i*18
         # @show xidx, pidx 
         xds[1,xidx], _, pds[pidx] = DS.initialize_ADO([Vxvec[i]], [thetavec[i]], tvec, dsmodel.airfoils[i], chordvec[i], a) #It appears that I'm inputing the correct p vector. 
     end
@@ -39,10 +39,10 @@ function initializeBLA(dsmodel::DS.BeddoesLeishman, dsmodelinit::Steady, solver:
     end
 
     xds = Array{eltype(chordvec), 2}(undef, nt, DS.numberofstates(dsmodel))
-    pds = Array{eltype(chordvec), 1}(undef, 24*na)
+    pds = Array{eltype(chordvec), 1}(undef, 18*na)
     for i = 1:na
         xidx = 22*(i-1)+1:i*22
-        pidx = 24*(i-1)+1:i*24
+        pidx = 18*(i-1)+1:i*18
         xds[1,xidx], _, pds[pidx] = DS.initialize_ADO([thetavec[i]], tvec, dsmodel.airfoils[i], chordvec[i], a)  #Todo: Broken. 
     end
 
@@ -55,11 +55,11 @@ end
 function update_BLA_parameters!(dsmodel::DS.BeddoesLeishman, turbine::Bool, pds, na, rvec, Wvec, phivec, twistvec, pitch, env, t)
         for j = 1:na
             ### Update inflow velocity
-            idx = 24*(j-1) + 23
+            idx = 18*(j-1) + 17 #TODO: There is a function is DSM that does most of what this function is doing, except calculate the angle of attack from the inflow angle... should I use that function here? 
             pds[idx] = Wvec[j]
 
             ### Update angle of attack. 
-            idx = 24*(j-1) + 24
+            idx = 18*(j-1) + 18
             pds[idx] = ((twistvec[j] + pitch) - phivec[j])
             if turbine
                 pds[idx] *= -1

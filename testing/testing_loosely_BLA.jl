@@ -113,11 +113,11 @@ dt = addriver.dt[1] #0.01
 tvec = tspan[1]:dt:tspan[2]
 
 
-# @show twistvec
+# @show twistvec #Todo: Take Pcopy out. 
 loads, cchistory, xds, pcopy = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit) #
 
 na = length(rvec)
-
+nt = length(tvec)
 
 #### Read in the OpenFAST solution (Must be run seperately)
 filename = "./OpenFAST_NREL5MW/NREL5MW_aeroonly.1.out"
@@ -401,19 +401,19 @@ Options for why the inflow angle is off:
 
 
 
-# state = 22 #1:22
-# index = 11 #1:14
+state = 15 #1:22
+index = 1 #1:14 #States 1-3 are experience separation. 
 
-# states = Array{Float64}(undef, nt, na)
+states = Array{Float64}(undef, nt, na)
 
-# for i = 1:na
-#     idx = 22*(i-1) + state
-#     states[:, i] = xds[:,idx]
-# end
+for i = 1:na
+    idx = 22*(i-1) + state
+    states[:, i] = xds[:,idx]
+end
 
 
 
-# sp1 = plot(tvec, states[:,index], lab="Rotors", title="State $state, Index $index", xaxis="Time (s)")
+sp1 = plot(tvec, states[:,index], lab="Rotors", title="State $state, Index $index", xaxis="Time (s)", markershape=:x)
 # display(sp1)
 
 #=
