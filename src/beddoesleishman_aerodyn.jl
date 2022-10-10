@@ -18,6 +18,8 @@ function initializeBLA(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishman
     xds = Array{eltype(chordvec), 2}(undef, nt, ns)
     pds = Array{eltype(chordvec), 1}(undef, 18*na)
 
+    println("Initializing BLA BL init")
+
     for i = 1:na
         xidx = 22*(i-1)+1:i*22
         pidx = 18*(i-1)+1:i*18
@@ -86,7 +88,7 @@ function extractloads_BLA(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chordv
         xs = x[1+idx:idx+22] 
         af = dsmodel.airfoils[i]
 
-        u = ccout.W[i]
+        u = ccout.W[i] 
         # alpha = -((twistvec[i] + pitch) - ccout.phi[i]) #TODO: Make this work for a turbine or a propeller. 
         # if i==2
         #     @show alpha #This appears to be slightly off. -> It could be off cause I might be starting from a different azimuthal angle. 
@@ -98,7 +100,7 @@ function extractloads_BLA(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chordv
         #     @show u, alpha, Cn[i], Ct[i]
         # end
 
-        N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo: Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? 
+        N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo: Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? -> yes. yes it is. And ccout.W isn't the actual inflow velocity, it is just the sum of the.... wait.... it is... Line 304 of CCBlade.jl calculates the actual inflow velocity. 
         T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
     end
     return N, T, Cn, Ct, Cl, Cd

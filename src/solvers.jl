@@ -195,3 +195,71 @@ function (s::DBDF2!)(fun!, outs, x, dx, p, t, dt)
 
     return residuals.zero[1:s.n], residuals.zero[s.n+1:end]
 end
+
+
+function fixedpointbem(rotor::CCBlade.Rotor, section::CCBlade.Section, op::CCBlade.OperatingPoint, phi0; atol=1e-8, maxiter::Int=500)
+
+    phistar = phi0 
+    converged = false
+    iter = 0
+    while !converged
+        # println(phistar)
+        r, out = CCBlade.residual(phistar, rotor, section, op) 
+        # println(r)
+
+        if rotor.turbine
+            phistar = atan(op.Vx*(1-out.a), op.Vy*(1+out.ap))
+        else
+            phistar = atan(op.Vx*(1+out.a), op.Vy*(1-out.ap))
+        end
+        # println(phistar)
+        iter += 1
+
+        if r<=atol
+            converged = true
+        elseif iter>=maxiter #I'm not convinced that this is converging. Can it not hit the level of tolerance? 
+            # @warn("Maximum number of iterations hit.") #It's hitting 500 iterations... like alot. 
+            break
+        end
+
+        # phistar = phinew
+
+    end
+    _, out = CCBlade.residual(phistar, rotor, section, op)
+    return out
+end
+
+
+function secant(fun, x0, x1; atol=1e-8, rtol=4*eps(), maxiter=100)
+
+    # if isapprox(x0, x1; atol) #Todo: The method will break if the inputs are the same... which... I wanted to put the two previous inflow angles in... which would break this. 
+    #     error("secant() can't have x0 and x1 be the same argument.")
+    # end
+
+    r0 = fun(x0)
+    r1 = fun(x1)
+    converged = false
+    iter = 1
+    while !converged
+
+        top = r1*(x0-x1)
+        bot = r0 - r1
+        x2 = x1 - top/bot
+
+        r2 = fun(x2)
+        if r2<atol
+            converged = true
+        elseif abs(r2-r1)<rtol
+            converged = true
+        end
+
+        r0 = r1
+        r1 = r2
+
+        x0 = x1
+        x1 = x2
+        iter += 1
+    end
+
+    return x2
+end

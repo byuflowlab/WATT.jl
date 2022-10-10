@@ -19,12 +19,13 @@ include("./environments.jl")
 ### Dynamic stall models. 
 include("./riso.jl") 
 include("./beddoesleishman_aerodyn.jl")
+include("./beddoesleishman_gonzalez.jl")
 include("./beddoesleishman.jl")
 
 
 
 ### Structures
-include("../dev/gxbeam.jl") #Todo: Need to get the relavent functions out. Then remove the file. 
+include("../dev/gxbeam.jl") #Todo: Need to get the relavent functions out. Then remove the file. -> Or just simplify the file. 
 
 
 ### Couplings

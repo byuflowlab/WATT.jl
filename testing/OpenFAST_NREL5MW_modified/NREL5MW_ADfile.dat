@@ -45,14 +45,14 @@ true          FLookup            - Flag to indicate whether a lookup for f' will
           4   InCol_Cm           - The column in the airfoil tables that contains the pitching-moment coefficient; use zero if there is no Cm column (-)
           0   InCol_Cpmin        - The column in the airfoil tables that contains the Cpmin coefficient; use zero if there is no Cpmin column (-)
           8   NumAFfiles         - Number of airfoil files used (-)
-"Airfoils/Cylinder1.dat"   AFNames            - Airfoil file names (NumAFfiles lines) (quoted strings)
-"Airfoils/Cylinder2.dat"
-"Airfoils/DU40_A17.dat"
-"Airfoils/DU35_A17.dat"
-"Airfoils/DU30_A17.dat"
-"Airfoils/DU25_A17.dat"
-"Airfoils/DU21_A17.dat"
-"Airfoils/NACA64_A17.dat"
+"ccbladeairfoils/Cylinder1.dat"   AFNames            - Airfoil file names (NumAFfiles lines) (quoted strings)
+"ccbladeairfoils/Cylinder2.dat"
+"ccbladeairfoils/DU40_A17.dat"
+"ccbladeairfoils/DU35_A17.dat"
+"ccbladeairfoils/DU30_A17.dat"
+"ccbladeairfoils/DU25_A17.dat"
+"ccbladeairfoils/DU21_A17.dat"
+"ccbladeairfoils/NACA64_A17.dat"
 ======  Rotor/Blade Properties  =====================================================================
 false          UseBlCm            - Include aerodynamic pitching moment in calculations?  (flag)
 "NREL5MW_adblade.dat"   ADBlFile(1)        - Name of file containing distributed aerodynamic properties for Blade #1 (-)
@@ -82,6 +82,7 @@ true          SumPrint            - Generate a summary file listing input option
         1.0,        2.0,        6.0   TwOutNd             - Tower nodes whose values will be output  (-)
                    OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
 "RtAeroFxh"
+"RtAeroMxh"
 "B1Azimuth"
 "B2Azimuth"
 "B3Azimuth"

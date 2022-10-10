@@ -33,7 +33,7 @@ end
 
 
 
-abstract type Tipcorrection end #TODO: CamelCase this when I've made this into a package for good style. (Currently avoiding conflict with CCBlade.)
+abstract type Tipcorrection end #TODO: CamelCase this when I've made this into a package for good style. (Currently avoiding conflict with CCBlade.) -> Why not just use the stuff from CCBlade? 
 
 struct Prandtltiphub <: Tipcorrection #TODO: Are there things I can move into this struct? I don't think Dr. Ning did. 
 end

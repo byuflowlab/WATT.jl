@@ -255,6 +255,7 @@ function simulate_indicial(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch
 
         ### Solve BEM
         cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
+        # cchistory[i] = fixedpointbem.(Ref(rotor), sections, operatingpoints, cchistory[i-1].phi)
 
         
         ### Update Dynamic Stall model inputs
@@ -291,6 +292,51 @@ function simulate_indicial(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch
     Fx = N.*cos(precone) #TODO: The N and T might need some rotating for precone. I'm not sure that I'm doing this right.
     Fy = T.*cos(precone) #I copied Dr. Ning's code to get the thrust and torque, but it seems odd that they are both multiplied by the cosine of precone. Which makes sense. 
 
-    return (N=N, T=T, Fx=Fx, Fy=Fy), cchistory, xds, Pcopy
+    return (N=N, T=T, Fx=Fx, Fy=Fy), cchistory, xds, azimuth, Pcopy
 end
 
+
+export rotorloads
+
+function rotorloads(loads, rhub, rtip, rvec, B)
+
+    nt, _ = size(loads.N)
+
+    thrust = Array{eltype(loads.N)}(undef, nt)
+    torque = Array{eltype(loads.N)}(undef, nt)
+
+    rfull = [rhub; rvec; rtip]
+    
+    for i = 1:nt
+        Fxfull = [0.0; loads.Fx[i,:]; 0.0]
+        Fyfull = [0.0; loads.Fy[i,:]; 0.0]
+
+        thrust[i] = B*FLOWMath.trapz(rfull, Fxfull)
+        torque[i] = B*FLOWMath.trapz(rfull, Fyfull.*rfull)
+    end
+
+    return thrust, torque
+end
+
+
+function rotorloads(rhub, rtip, rvec, loads...)
+
+    nt, _ = size(loads[1].N)
+
+    thrust = Array{eltype(loads[1].N)}(undef, nt)
+    torque = Array{eltype(loads[1].N)}(undef, nt)
+
+    rfull = [rhub; rvec; rtip]
+    
+    for i = 1:nt
+        for j = 1:length(loads)
+            Fxfull = [0.0; loads[j].Fx[i,:]; 0.0]
+            Fyfull = [0.0; loads[j].Fy[i,:]; 0.0]
+
+            thrust[i] += FLOWMath.trapz(rfull, Fxfull)
+            torque[i] += FLOWMath.trapz(rfull, Fyfull.*rfull)
+        end
+    end
+
+    return thrust, torque
+end
