@@ -54,7 +54,7 @@ function update_aero_parameters!(dsmodel::DS.BeddoesLeishman, turbine::Bool, pds
 end
 
 
-function extractloads(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. 
+function extractloads(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. 
     if isa(dsmodel.detype, DS.Functional)
         error("The Beddoes-Leishman functional form isn't ready yet. ")
     elseif isa(dsmodel.detype, DS.Iterative)
@@ -63,10 +63,10 @@ function extractloads(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chordvec, 
         if dsmodel.version==1 #Original implementation
             error("Original Beddoes-Leishman model not yet ready.")
         elseif dsmodel.version==2 #AeroDyn Original
-            return extractloads_BLA(dsmodel, x, ccout, t, rvec, chordvec, twistvec, pitch, blade, env)
+            return extractloads_BLA(dsmodel, x, ccout, chordvec, twistvec, pitch, blade, env) #TODO: If I'm doing name functions here, then I don't need to have all of the variables used for multiple dispatch passed to each function. 
         elseif dsmodel.version==3 #AeroDyn Gonzalez
             # error("The AreoDyn Gonzalez implementation isn't ready yet.")
-            return extractloads_BLAG(dsmodel, x, ccout, t, rvec, chordvec, twistvec, pitch, blade, env)
+            return extractloads_BLAG(dsmodel, x, ccout, chordvec, twistvec, pitch, blade, env)
         elseif dsmodel.version==4 #AeroDyn Minema
             error("The AeroDyn Minema implementation needs work. Try a different model.")
         end

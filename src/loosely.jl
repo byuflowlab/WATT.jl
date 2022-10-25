@@ -226,14 +226,21 @@ function simulate_indicial(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch
     Cd = Array{eltype(rvec)}(undef,(nt, na))
     Cn = Array{eltype(rvec)}(undef,(nt, na))
     Ct = Array{eltype(rvec)}(undef,(nt, na))
+    Cx = Array{eltype(rvec)}(undef,(nt, na))
+    Cy = Array{eltype(rvec)}(undef,(nt, na))
+
     N = Array{eltype(rvec)}(undef,(nt, na))
     T = Array{eltype(rvec)}(undef,(nt, na))
-    Pcopy = Array{eltype(rvec)}(undef, (nt, length(p_ds)))
-    Pcopy[1,:] = deepcopy(p_ds)
+    Fx = Array{eltype(rvec)}(undef,(nt, na))
+    Fy = Array{eltype(rvec)}(undef,(nt, na))
+    # Pcopy = Array{eltype(rvec)}(undef, (nt, length(p_ds)))
+    # Pcopy[1,:] = deepcopy(p_ds)
 
     cchistory[1] = ccout
-    N[1,:], T[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], t0, rvec, chordvec, twistvec, pitch, blade, env)
+    Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env)
     
+
+    ### Dimensionalize
     
 
 
@@ -253,6 +260,9 @@ function simulate_indicial(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch
             operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
         end
 
+        # @show Vyvec
+        # @show @. sqrt(Vxvec^2 + Vyvec^2)
+
         ### Solve BEM
         cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
         # cchistory[i] = fixedpointbem.(Ref(rotor), sections, operatingpoints, cchistory[i-1].phi)
@@ -263,7 +273,7 @@ function simulate_indicial(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch
         # @show p_ds[end-1:end]
         update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i].W, cchistory[i].phi, twistvec, pitch, env, t)
         # @show p_ds[end-1:end] #Looks like it's updating every iteration. 
-        Pcopy[i, :] = deepcopy(p_ds)
+        # Pcopy[i, :] = deepcopy(p_ds)
 
 
         ### Integrate Dynamic Stall model
@@ -282,17 +292,32 @@ function simulate_indicial(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch
 
 
 
-        ### Extract loads
-        N[i,:], T[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], t, rvec, chordvec, twistvec, pitch, blade, env) 
+        ### Extract loads #TODO: I don't think that I need to keep all of this data. I can probably define a function that calculates all the different loads. 
+        Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env) 
+
+
+
+        ### Dimensionalize
+        for j = 1:na
+            u_i = cchistory[i].W[j]
+            N[i,j] = Cn[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
+            T[i,j] = Ct[i,j]*0.5*env.rho*u_i^2*chordvec[j]
+            Fx[i,j] = Cx[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
+            Fy[i,j] = Cy[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
+        end
+
+
+
         if verbose & (mod(i, speakiter)==0)
             println("Simulation time: ", t)
         end
     end
 
-    Fx = N.*cos(precone) #TODO: The N and T might need some rotating for precone. I'm not sure that I'm doing this right.
-    Fy = T.*cos(precone) #I copied Dr. Ning's code to get the thrust and torque, but it seems odd that they are both multiplied by the cosine of precone. Which makes sense. 
 
-    return (N=N, T=T, Fx=Fx, Fy=Fy), cchistory, xds, azimuth, Pcopy
+    # Fx = N.*cos(precone) #TODO. The N and T might need some rotating for precone. I'm not sure that I'm doing this right.
+    # Fy = T #.*cos(precone) #I copied Dr. Ning's code to get the thrust and torque, but it seems odd that they are both multiplied by the cosine of precone. Which makes sense. -> What on earth am I saying here? It seems odd then I turn around and say it makes sense..... thinking more about it... I'm not sure that it makes any sense whatsoever. After thinking through it, a precone should create deflection in the XZ plane, which means that the tangential force in the Y direction shouldn't get deflected (displaced, but not deflected). 
+
+    return (N=N, T=T, Fx=Fx, Fy=Fy), (Cx=Cx, Cy=Cy, Cn=Cn, Ct=Ct, Cl=Cl, Cd=Cd), cchistory, xds, azimuth #, Pcopy
 end
 
 

@@ -73,17 +73,19 @@ function update_BLAG_parameters!(dsmodel::DS.BeddoesLeishman, turbine::Bool, pds
 end
 
 
-function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. #TODO: The blade seems like it has repetitive data, the airfoils and radial node locations.... So I either need to rely on it more, or just get rid of it. 
+function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. #TODO: The blade seems like it has repetitive data, the airfoils and radial node locations.... So I either need to rely on it more, or just get rid of it. 
     n = dsmodel.n
 
     # println("Using BLA extract loads")
 
-    Cl = Array{eltype(chordvec)}(undef, n)
+    Cl = Array{eltype(chordvec)}(undef, n) #TODO: This needs to be changed to an inplace function. 
     Cd = Array{eltype(chordvec)}(undef, n)
     Cn = Array{eltype(chordvec)}(undef, n)
     Ct = Array{eltype(chordvec)}(undef, n)
-    N = Array{eltype(chordvec)}(undef, n)
-    T = Array{eltype(chordvec)}(undef, n)
+    Cx = Array{eltype(chordvec)}(undef, n)
+    Cy = Array{eltype(chordvec)}(undef, n)
+    # N = Array{eltype(chordvec)}(undef, n)
+    # T = Array{eltype(chordvec)}(undef, n)
 
     # @show x
     for i = 1:n
@@ -102,11 +104,15 @@ function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chord
         # if i==n
         #     @show u, alpha, Cn[i], Ct[i]
         # end
+        cphi = cos(ccout.phi[i])
+        sphi = sin(ccout.phi[i])
+        Cx[i] = Cl[i]*cphi + Cd[i]*sphi
+        Cy[i] = Cl[i]*sphi - Cd[i]*cphi
 
-        N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo: Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? 
-        T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
+        # N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo. Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? -> Yes this is dimensionoalized by the total inflow velocity (both CCBlade and OpenFAST do that.)
+        # T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
     end
-    return N, T, Cn, Ct, Cl, Cd
+    return Cx, Cy, Cn, Ct, Cl, Cd
 end
 
 

@@ -116,12 +116,12 @@ dt = addriver.dt[1] #0.01
 tvec = tspan[1]:dt:tspan[2]
 
 
-# @show twistvec #Todo: Take Pcopy out. 
-loads, cchistory, xds, azi_time, pcopy = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=0, tipcorrection=nothing) #
+# @show twistvec #Todo. Take Pcopy out. 
+loads, coefs, cchistory, xds, azi_time = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=0, tipcorrection=nothing) #
 
-loads2, cchistory2, xds2, azi_time2, pcopy2 = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=2*pi/3, tipcorrection=nothing)
+loads2, coefs2, cchistory2, xds2, azi_time2 = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=2*pi/3, tipcorrection=nothing)
 
-loads3, cchistory3, xds3, azi_time3, pcopy3 = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=4*pi/3, tipcorrection=nothing)
+loads3, coefs3, cchistory3, xds3, azi_time3 = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=4*pi/3, tipcorrection=nothing)
 
 na = length(rvec)
 nt = length(tvec)
@@ -147,6 +147,8 @@ fymat = zeros(nt_o, na_o)
 phimat = zeros(nt_o, na_o)
 alphamat = zeros(nt_o, na_o)
 Wmat = zeros(nt_o, na_o)
+cnmat = zero(fxmat)
+ccmat = zero(fymat)
 
 for i = 1:na_o
     if i<10
@@ -163,12 +165,16 @@ for i = 1:na_o
     namealpha = "AB1N"*number*"Alpha"
     nameVx = "AB1N"*number*"Vx"
     nameVy = "AB1N"*number*"Vy"
+    namecn = "AB1N"*number*"Cn"
+    namect = "AB1N"*number*"Ct"
 
     fxmat[:,i] = outs[namex]
     fymat[:,i] = outs[namey]
     phimat[:,i] = outs[namephi]
     alphamat[:,i] = outs[namealpha]
     Wmat[:,i] = @. sqrt(outs[nameVx]^2 + outs[nameVy]^2)
+    cnmat[:,i] = outs[namecn]
+    ccmat[:,i] = outs[namect]
 end
 
 
@@ -373,7 +379,7 @@ Options for why the inflow angle is off:
 # # @show Vx, Vy #Todo. Aha! I found the culprit! Why are the Vy values so different? Psych... it's the same... I was using the wrong indices. 
 # @show Vxof, Vyof
 
-# rof = adblade.span .+ rhub
+rof = adblade.span .+ rhub
 # alpharotmat = Array{Float64}(undef, nt, na)
 # Wrotmat = Array{Float64}(undef, nt, na)
 
@@ -386,7 +392,7 @@ Options for why the inflow angle is off:
 # end
 
 
-tix = 100
+tix = 50
 
 ### Check the inflow angle. 
 phitplt = plot(rvec, cchistory[tix].phi.*(180/pi), lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Inflow angle (deg)", title="Time Step $tix")
@@ -478,8 +484,6 @@ Well... I should probably just consider the error of what's going on... Then go 
 
 
 
-
-
 errfun(x, xt) = 100*(x - xt)/xt
 absavg(xvec) = sum(abs.(xvec))/length(xvec)
 
@@ -487,7 +491,7 @@ absavg(xvec) = sum(abs.(xvec))/length(xvec)
 # tix = 30
 rof = adblade.span .+ rhub
 fxblade = cchistory[tix].Np.*cos(precone)
-fyblade = cchistory[tix].Tp.*cos(precone)
+fyblade = cchistory[tix].Tp
 
 
 loadplt = plot(xaxis="Radius (m)", yaxis="Distributed Load", leg=:topleft, title="Time Step $tix")
@@ -497,8 +501,15 @@ plot!(rof, fxmat[tix,:], markershape=:x, lab="Fx - OpenFAST")
 plot!(rof, fymat[tix,:], markershape=:x, lab="Fy - OpenFAST")
 plot!(rvec, fxblade, lab="Fx - CCBlade", markershape=:cross)
 plot!(rvec, fyblade, lab="Fy - CCBlade", markershape=:cross)
-# display(loadplt)
+display(loadplt)
 
+
+coefplt = plot(xaxis="Radius (m)", yaxis="Load Coefficient", leg=:topright, title="Time Step $tix")
+plot!(rvec, coefs.Cn[tix,:], lab=L"$C_n$ - Rotors") #, markershape=:circle)
+plot!(rvec, coefs.Ct[tix,:], lab=L"$C_t$ - Rotors") #, markershape=:circle)
+plot!(rof, cnmat[tix,:], markershape=:x, lab=L"$C_n$ - OpenFAST")
+plot!(rof, ccmat[tix,:], markershape=:x, lab=L"$C_t$ - OpenFAST")
+display(coefplt)
 
 
 
@@ -531,6 +542,7 @@ for i = 1:nt-1
 end
 
 
+
 thrustplt = plot(xaxis="Time (s)", yaxis="Thrust (N)")
 plot!(tvec, T, lab="Rotors")
 plot!(tvec, Tcc, lab="CCBlade")
@@ -538,7 +550,7 @@ plot!(tvec_of, outs["RtAeroFxh"], lab="OpenFAST")
 # display(thrustplt)   
 
 
-torqueplt = plot(xaxis="Time (s)", yaxis=L"Torque $\left(m\cdot N\right)$")
+torqueplt = plot(xaxis="Time (s)", yaxis=L"Torque $\left(N\cdot m\right)$")
 plot!(tvec, Q, lab="Rotors")
 plot!(tvec, Qcc, lab="CCBlade")
 plot!(tvec_of, outs["RtAeroMxh"], lab="OpenFAST")

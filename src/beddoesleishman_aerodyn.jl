@@ -70,7 +70,7 @@ function update_BLA_parameters!(dsmodel::DS.BeddoesLeishman, turbine::Bool, pds,
 end
 
 
-function extractloads_BLA(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. #TODO: The blade seems like it has repetitive data, the airfoils and radial node locations.... So I either need to rely on it more, or just get rid of it. 
+function extractloads_BLA(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. #TODO: The blade seems like it has repetitive data, the airfoils and radial node locations.... So I either need to rely on it more, or just get rid of it. 
     n = dsmodel.n
 
     # println("Using BLA extract loads")
@@ -79,8 +79,8 @@ function extractloads_BLA(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chordv
     Cd = Array{eltype(chordvec)}(undef, n)
     Cn = Array{eltype(chordvec)}(undef, n)
     Ct = Array{eltype(chordvec)}(undef, n)
-    N = Array{eltype(chordvec)}(undef, n)
-    T = Array{eltype(chordvec)}(undef, n)
+    Cx = Array{eltype(chordvec)}(undef, n)
+    Cy = Array{eltype(chordvec)}(undef, n)
 
     # @show x
     for i = 1:n
@@ -100,10 +100,15 @@ function extractloads_BLA(dsmodel::DS.BeddoesLeishman, x, ccout, t, rvec, chordv
         #     @show u, alpha, Cn[i], Ct[i]
         # end
 
-        N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo: Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? -> yes. yes it is. And ccout.W isn't the actual inflow velocity, it is just the sum of the.... wait.... it is... Line 304 of CCBlade.jl calculates the actual inflow velocity. 
-        T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
+        cphi = cos(ccout.phi[i])
+        sphi = sin(ccout.phi[i])
+        Cx[i] = Cl[i]*cphi + Cd[i]*sphi
+        Cy[i] = Cl[i]*sphi - Cd[i]*cphi
+
+        # N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo. Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? -> yes. yes it is. And ccout.W isn't the actual inflow velocity, it is just the sum of the.... wait.... it is... Line 304 of CCBlade.jl calculates the actual inflow velocity. 
+        # T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
     end
-    return N, T, Cn, Ct, Cl, Cd
+    return Cx, Cy, Cn, Ct, Cl, Cd
 end
 
 

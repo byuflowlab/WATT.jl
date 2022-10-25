@@ -109,15 +109,15 @@ function update_aero_parameters!(dsmodel::DS.Riso, turbine::Bool, pds, na, rvec,
 end
 
 
-function extractloads(dsmodel::DS.Riso, x, ccout, t, rvec, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. 
+function extractloads(dsmodel::DS.Riso, x, ccout, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. 
     n = length(blade.airfoils)
 
     Cl = Array{eltype(chordvec)}(undef, n)
     Cd = Array{eltype(chordvec)}(undef, n)
     Cn = Array{eltype(chordvec)}(undef, n)
     Ct = Array{eltype(chordvec)}(undef, n)
-    N = Array{eltype(chordvec)}(undef, n)
-    T = Array{eltype(chordvec)}(undef, n)
+    Cx = Array{eltype(chordvec)}(undef, n)
+    Cy = Array{eltype(chordvec)}(undef, n)
 
 
     for i = 1:n
@@ -131,18 +131,21 @@ function extractloads(dsmodel::DS.Riso, x, ccout, t, rvec, chordvec, twistvec, p
 
         # ys = [u, udot, 0.0, 0.0, theta, 0.0]
     
-        Cl[i], Cd[i] = DS.riso_coefficients(xs, u, alpha, alphadot, chordvec[i], blade.airfoils[i])
+        Cl[i], Cd[i] = DS.riso_coefficients(xs, u, alpha, alphadot, chordvec[i], blade.airfoils[i]) #Todo: Should the output of this be Cl and Cd, or Cn and Ct? 
 
         cphi = cos(ccout.phi[i])
         sphi = sin(ccout.phi[i])
 
-        Cn[i] = Cl[i]*cphi - Cd[i]*sphi
+        Cn[i] = Cl[i]*cphi - Cd[i]*sphi #Todo: This is similar to, but not the same as OpenFAST's rotation from Cl and Cd to Cx and Cy. I'm not 100% sure that this is correct. 
         Ct[i] = Cl[i]*sphi + Cd[i]*cphi
 
-        N[i] = Cn[i]*0.5*env.rho*ccout.W[i]^2*chordvec[i]
-        T[i] = Ct[i]*0.5*env.rho*ccout.W[i]^2*chordvec[i]
+        Cx[i] = Cl[i]*cphi + Cd[i]*sphi
+        Cy[i] = Cl[i]*sphi - Cd[i]*cphi
+
+        # N[i] = Cn[i]*0.5*env.rho*ccout.W[i]^2*chordvec[i]
+        # T[i] = Ct[i]*0.5*env.rho*ccout.W[i]^2*chordvec[i]
     end
-    return N, T, Cn, Ct, Cl, Cd
+    return Cx, Cy, Cn, Ct, Cl, Cd
 end
 
 
