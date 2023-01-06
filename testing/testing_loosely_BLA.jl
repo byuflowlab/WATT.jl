@@ -23,7 +23,7 @@ DS = DynamicStallModels
 
 
 ### Read in AeroDyn files
-addriver = of.read_addriver("NREL5MW_ADdriver.inp", "./OpenFAST_NREL5MW")
+addriver = of.read_addriver("NREL5MW_ADdriver.dvr", "./OpenFAST_NREL5MW")
 adfile = of.read_adfile("NREL5MW_ADfile.dat","./OpenFAST_NREL5MW/")
 adblade = of.read_adblade("NREL5MW_adblade.dat", "./OpenFAST_NREL5MW")
 
@@ -102,7 +102,7 @@ env = environment(rho, mu, a, vinf, omega, shearexp)
 # Tsh = 0.19 #Strouhal Frequency
 # eta = 1 #Recovery factor
 # constants = [zeta, A5, b5, Tsh, eta]
-constants[1]= -3 #Todo: AeroDyn's default value is 20?????
+constants[1]= -3 #Todo: AeroDyn's default value is 20????? Todo: I need to figure out what is going on here. -> It appears this negative three remains fairly constant. So what is the default of 20??? 
 dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 2, constants)
 dsmodelinit = Rotors.BeddoesLeishman()
 
@@ -113,8 +113,8 @@ dt = addriver.dt[1] #0.01
 tvec = tspan[1]:dt:tspan[2]
 
 
-# @show twistvec #Todo: Take Pcopy out. 
-loads, cchistory, xds, pcopy = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit) #
+# @show twistvec 
+loads, coefs, cchistory, xds, azimuthal = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit) #
 
 na = length(rvec)
 nt = length(tvec)

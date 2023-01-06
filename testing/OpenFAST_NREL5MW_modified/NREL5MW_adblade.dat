@@ -1,7 +1,7 @@
 ------- AERODYN v15.00.* BLADE DEFINITION INPUT FILE -------------------------------------
 NREL 5.0 MW offshore baseline aerodynamic blade input properties; note that we need to add the aerodynamic center to this file
 ======  Blade Properties =================================================================
-         19   NumBlNds           - Number of blade nodes used in the analysis (-)
+   19               NumBlNds           - Number of blade nodes used in the analysis (-)
   BlSpn        BlCrvAC        BlSwpAC        BlCrvAng       BlTwist        BlChord          BlAFID
    (m)           (m)            (m)            (deg)         (deg)           (m)              (-)
 0.0000000E+00  0.0000000E+00  0.0000000E+00 0.0000000E+00  1.3308000E+01  3.5420000E+00        3

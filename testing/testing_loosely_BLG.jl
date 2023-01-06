@@ -23,48 +23,48 @@ DS = DynamicStallModels
 
 
 ### Read in AeroDyn files
-addriver = of.read_addriver("NREL5MW_ADdriver.inp", "./OpenFAST_NREL5MW_modified")
+addriver = of.read_addriver("NREL5MW_ADdriver.dvr", "./OpenFAST_NREL5MW_modified")
 adfile = of.read_adfile("NREL5MW_ADfile.dat","./OpenFAST_NREL5MW_modified/")
 adblade = of.read_adblade("NREL5MW_adblade.dat", "./OpenFAST_NREL5MW_modified")
 
 
 #### Define variables. 
-rhub = addriver.hubrad
-rtip = addriver.hubrad + adblade.span[end]
+rhub = addriver["HubRad(1)"]
+rtip = rhub + adblade["BlSpn"][end]
 
-indices = 1:length(adblade.span) # 5:length(adblade.span)-1 #Skip the indices with cylinders cause that causes problems with the dynamic stall model. #Note: For some odd reason the final point was giving me crap... oh yeah, the tip correction drives things to zero....  
-rvec = adblade.span[indices] .+ rhub #[11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.49].+rhub
-chordvec = adblade.chord[indices] #[4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
-twistvec = (pi/180) .* adblade.twist[indices] #[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
+indices = 1:length(adblade["BlSpn"]) # 5:length(adblade.span)-1 #Skip the indices with cylinders cause that causes problems with the dynamic stall model. #Note: For some odd reason the final point was giving me crap... oh yeah, the tip correction drives things to zero....  
+rvec = adblade["BlSpn"][indices] .+ rhub #[11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.49].+rhub
+chordvec = adblade["BlChord"][indices] #[4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
+twistvec = (pi/180) .* adblade["BlTwist"][indices] #[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
 
 rvec[1] += 0.001
 rvec[end] -= 0.001
 
-B = addriver.numblades
-hubht = addriver.hubht
+B = addriver["NumBlades(1)"]
+hubht = addriver["HubHt(1)"]
 
 
 ## Airfoil Constants
  
 
 ## Turbine Control variables
-pitch = addriver.pitch[1]
-precone = addriver.precone*pi/180 #0.0 #2.5*pi/180 #TODO: !!!! I need to work in a way to include precone
-yaw = addriver.yaw[1]*(pi/180) # 0.0*pi/180
-tilt = addriver.shfttilt*(pi/180) #0.0 #5.0*pi/180
+pitch = addriver["Pitch"][1]
+precone = addriver["Precone(1)"]*pi/180 #0.0 #2.5*pi/180 #TODO: !!!! I need to work in a way to include precone
+yaw = addriver["Yaw"][1]*(pi/180) # 0.0*pi/180
+tilt = addriver["ShftTilt(1)"]*(pi/180) #0.0 #5.0*pi/180
 azimuth = 0.0
 
 ## Environmental variables
-vinf = addriver.windspeed[1] #10.0
+vinf = addriver["HWndSpeed"][1] #10.0
 # tsr = 7.55
 # rotorR = rtip*cos(precone)
-rpm = addriver.rpm[1]
+rpm = addriver["RotSpd"][1]
 omega = rpm*(2*pi)/60 #vinf*tsr/rotorR
 
-rho = adfile.airdens #1.225
-mu = adfile.kinvisc #1.464e-5 #18.13e-6
-a = adfile.spdsound #343.0
-shearexp = addriver.shearexp[1] #0.0
+rho = addriver["FldDens"] #1.225
+mu = addriver["KinVisc"] #1.464e-5 #18.13e-6
+a = addriver["SpdSound"] #343.0
+shearexp = addriver["PLExp"][1] #0.0
 
 
 ### Prep the ASD rotor and operating conditions 
@@ -79,7 +79,7 @@ aftypes[7] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/DU21_A17
 aftypes[8] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/NACA64_A17.dat") # readdlm("./OpenFAST_NREL5MW_modified/Airfoils/NACA64_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/NACA64_A17.dat", radians=false)
 
 # indices correspond to which airfoil is used at which station
-af_idx = adblade.afid[indices] #[3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
+af_idx = Int.(adblade["BlAFID"][indices]) #[3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 
 
 # create airfoil array
@@ -87,9 +87,8 @@ afs = aftypes[af_idx]
 
 n = length(rvec)
 airfoils = Vector{DS.Airfoil}(undef, n)
-constants = zeros(5)
 for i = 1:n
-    airfoils[i], constants[:] = make_dsairfoil(afs[i])
+    airfoils[i] = make_dsairfoil(afs[i])
 end
 
 rR = rvec./rtip
@@ -97,21 +96,20 @@ blade = Rotors.Blade(rhub, rtip, rR, airfoils) #TODO: Weird that this won't expo
 
 
 
+
+
 env = environment(rho, mu, a, vinf, omega, shearexp)
 
-# zeta = -3 #Low-pass-filter frequency cutoff
-# A5 = 1
-# b5 = 5
-# Tsh = 0.19 #Strouhal Frequency
-# eta = 1 #Recovery factor
-# constants = [zeta, A5, b5, Tsh, eta]
-constants[1]= -3 #Todo: AeroDyn's default value is 20?????
-dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3, constants)
+dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
 dsmodelinit = Rotors.BeddoesLeishman()
 
+
+
+
+
 #### Define solution
-tspan = (0.0, addriver.tmax[1]) #(0.0, 0.02) #
-dt = addriver.dt[1] #0.01
+tspan = (0.0, addriver["Tmax"][1]) #(0.0, 0.02) #
+dt = addriver["dT"][1] #0.01
 
 tvec = tspan[1]:dt:tspan[2]
 
@@ -127,7 +125,7 @@ na = length(rvec)
 nt = length(tvec)
 
 #### Read in the OpenFAST solution (Must be run seperately)
-filename = "./OpenFAST_NREL5MW_modified/NREL5MW_aeroonly.1.out"
+filename = "./OpenFAST_NREL5MW_modified/NREL5MW_ADdriver.1.out"
 
 fullout = readdlm(filename; skipstart=6)
 
@@ -139,7 +137,7 @@ outs = Dict(names[i] => data[:,i] for i in 1:length(names))
 tvec_of = outs["Time"]
 
 nt_o = length(tvec_of)
-na_o = length(adblade.span)
+na_o = length(adblade["BlSpn"])
 
 
 fxmat = zeros(nt_o, na_o)
@@ -149,6 +147,8 @@ alphamat = zeros(nt_o, na_o)
 Wmat = zeros(nt_o, na_o)
 cnmat = zero(fxmat)
 ccmat = zero(fymat)
+Wdmat = zeros(nt_o, na_o)
+Vrelmat = zeros(nt_o, na_o)
 
 for i = 1:na_o
     if i<10
@@ -167,6 +167,9 @@ for i = 1:na_o
     nameVy = "AB1N"*number*"Vy"
     namecn = "AB1N"*number*"Cn"
     namect = "AB1N"*number*"Ct"
+    nameVdx = "AB1N"*number*"VDisx"
+    nameVdy = "AB1N"*number*"VDisy"
+    nameVrel = "AB1N"*number*"VRel"
 
     fxmat[:,i] = outs[namex]
     fymat[:,i] = outs[namey]
@@ -175,6 +178,8 @@ for i = 1:na_o
     Wmat[:,i] = @. sqrt(outs[nameVx]^2 + outs[nameVy]^2)
     cnmat[:,i] = outs[namecn]
     ccmat[:,i] = outs[namect]
+    Wdmat[:,i] = @. sqrt(outs[nameVdx]^2 + outs[nameVdy]^2)
+    Vrelmat[:,i] = outs[nameVrel]
 end
 
 
@@ -268,8 +273,8 @@ tipplt = plot(xloadplt, yloadplt, layout=(2,1))
 
 
 
-index = 8
-ofidx = index + 4
+index = 3
+ofidx = index #+ 4 #Currently they are the same indices. 
 nt = length(tvec)
 
 phi = [cchistory[i].phi[index]*180/pi for i = 1:nt]  
@@ -289,41 +294,22 @@ plot!(tvec, phi, lab="CCBlade", markershape=:x)
 plot!(tvec_of, phiof, lab="OpenFAST")
 # display(phiplt)
 
-alpha1 = phi[1]*pi/180 - twistvec[index]
-alpha2 = phiof[1]*pi/180 - twistvec[index]
+
+
+
+
+
+tix_local = 25
+
+alpha1 = phi[tix_local]*pi/180 - twistvec[index]
+alpha2 = phiof[tix_local]*pi/180 - twistvec[index]
 
 cl1 = airfoils[index].cl(alpha1)
 cl2 = airfoils[index].cl(alpha2)
 
-# @show cl1, cl2, (cl1-cl2)/cl2 #-> Wow, the coefficient of lift is off by like 17.4%. That's a huge amount. 
-
-#=
-Indices of inflow angles that are not correct [1, 2, 3] ... it looks like they are all going to be off. 
-
-Options for why the inflow angle is off:
-    - Different models. 
-        - I wonder if the precone, yaw, and tilt are screwing up the comparison with OpenFAST. ... Well turing those off made things worse, so that's good. They are off by like half a degree. 
-    - Different corrections
-    - Different polars
-        - I'm using the polars from OpenFAST. 
-        - What if an input get's changed in the process. 
-    - Different inputs
-        - Rhub and rtip have been checked
-        - Radial locations have been checked
-        - Twist distribution has bee checked
-        - I'm using the polars from OpenFAST
-    - Inputs are in wrong units. 
-
-    - Running it as steady didn't doing anything. 
-    - It looks like we start off with 3% error (on the inflow angle), and stay around there. 3% is pretty good, but I expect the inflow angles to be exactly the same (since we are using the exact same method). 
-        - What if it's our tip corrections? 
-
-    The tip error appears to drop to a .01% error. 
+# @show cl1, cl2, (cl1-cl2)/cl2 
 
 
-    #Todo: Note that currently AeroDyn is using a f look up method and I can't use S since they are all zero, and I don't think that I have those values :| So the dynamic stall model needs that input. 
-    #Todo: Also note that the original BL model in OpenFAST doesn't work and only the Gonzalez and Minema corrections work. 
-=#
 
 # println("")
 # # phicc = ccout.phi[ofidx]*180/pi
@@ -369,7 +355,7 @@ Options for why the inflow angle is off:
 
 # Tof = outs["RtAeroFxh"][1]
 
-# @show T, Tof, (Tof-T)/Tof    #Could the difference be the number of nodes I'm including? That doesn't make sense if it is. It shouldn't be that big of a difference. No, it's not that. But now that I've compared the CCBlade outputs to my outputs, I know that it is a difference in either how I'm running AeroDyn, or in an input. But what that difference is... who knows. I thought that AeroDyn uses the same algorithm as CCBlade. 
+
 
 # Vx = op[ofidx].Vx
 # Vy = op[ofidx].Vy
@@ -379,9 +365,9 @@ Options for why the inflow angle is off:
 # # @show Vx, Vy #Todo. Aha! I found the culprit! Why are the Vy values so different? Psych... it's the same... I was using the wrong indices. 
 # @show Vxof, Vyof
 
-rof = adblade.span .+ rhub
-# alpharotmat = Array{Float64}(undef, nt, na)
-# Wrotmat = Array{Float64}(undef, nt, na)
+rof = adblade["BlSpn"] .+ rhub
+alpharotmat = Array{Float64}(undef, nt, na)
+Wrotmat = Array{Float64}(undef, nt, na)
 
 # for i = 1:na
 #     idx = 24*(i-1) + 24
@@ -391,19 +377,22 @@ rof = adblade.span .+ rhub
 #     Wrotmat[:,i] = pcopy[:,idx]
 # end
 
+for i = 1:nt
+    alpharotmat[i, :] = cchistory[i].alpha
+    Wrotmat[i,:] = cchistory[i].W
+end
+
 
 tix = 50
 
 ### Check the inflow angle. 
 phitplt = plot(rvec, cchistory[tix].phi.*(180/pi), lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Inflow angle (deg)", title="Time Step $tix")
-plot!(adblade.span .+ rhub, phimat[tix,:], lab="OpenFAST")
+plot!(rof, phimat[tix,:], lab="OpenFAST")
 # display(phitplt)
 
 #So interestingly, the blade Azimuth is recorded as changing in OpenFAST. So I can't compare against that. Well we aren't currently testing azimuthal changes, so it shouldn't be a problem. 
 
-#Todo. I'm not sure that I'm plotting the same time. 
-# @show tvec[tix], tvec_of[tix] #-> Nevermind. They are the exact same. 
- 
+
 
 ### Check the angle of attack. 
 # alphatplt = plot(rvec, cchistory[tix].alpha.*(180/pi), lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Angle of Attack (deg)", title="Time Step $tix")
@@ -411,17 +400,18 @@ plot!(adblade.span .+ rhub, phimat[tix,:], lab="OpenFAST")
 # plot!(rvec, alpharotmat[tix,:].*(180/pi), lab="Rotors")
 # display(alphatplt)
 
-# Alright the angle of attack that we're using isn't off. It's the exact same as CCBlade, which is what we want for this stage of development. -> Alright, I suppose the velocities could be off. Wait... just a half pint of a second.... velocities.... No... I think I'm safe. I was going to say: Am I not including the fact that there are two velocities. But the angle of attack from the inflow angle includes that. So the velocity should be the total inflow velocity.  
+W0 = @. sqrt(vinf^2 + (rvec*omega)^2)
 
 
-# velocitytplt = plot(rvec, cchistory[tix].W, lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Inflow Velocity (m/s)", title="Time Step $tix", leg=:bottomright)
-# plot!(rof, Wmat[tix,:], lab="OpenFAST", markershape=:circle, markeralpha=0.2)
-# plot!(rvec, Wrotmat[tix,:], lab="Rotors", markershape=:cross)
+velocitytplt = plot(rvec, cchistory[tix].W, lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Inflow Velocity (m/s)", title="Time Step $tix", leg=:bottomright)
+# plot!(rof, Wmat[tix,:], lab="OpenFAST", markershape=:circle, markeralpha=0.2) #I think this is the rotational and freestream, affected by windshear, with no induced velocity. 
+# plot!(rof, Wdmat[tix,:], lab="OF dis", markershape=:utriangle, markeralpha=0.2) # I think this is the inflow affected by windshear, but no induced velocity. 
+plot!(rof, Vrelmat[tix,:], lab="OpenFAST", markershape=:rect, markeralpha=0.2)
+plot!(rvec, Wrotmat[tix,:], lab="Rotors", markershape=:cross)
+# plot!(rvec, W0, lab="W0")
 # display(velocitytplt)
 
-#The inflow velocities seem to match.... perfectly.... soo now at this point, I'm not sure what could possibly off. 
 
-### Well... I guess this means that either my states are going haywire, which... shouldn't be so... because the solver seemed to be fine with what was going on when I tested the DS model on the angle of attack and the inflow velocity. The other option is tha tmy extract loads function is screwing up. Let's take a look at the states real quick. There's like 22 states... which is annoying... That makes plotting all the states more difficult. 
 
 
 
@@ -441,23 +431,7 @@ end
 sp1 = plot(tvec, states[:,index], lab="Rotors", title="State $state, Index $index", xaxis="Time (s)", markershape=:x)
 # display(sp1)
 
-#=
-index = 1
-alphaf moved. 
-Dp is large and moved
-cpotn is large
-TESF triggered
-=#
 
-#Question: I wonder if some of the parameters are getting passed in as one value, but aren't making it into DSM.
-
-#TODO: Another thing that I could compare against is plot the states from the DSM validation where I read in the angles of attack. -> Okay... the states are very very off... Like super mega off. 
-
-    # One difference is that the time step for OpenFAST is 0.1, rather than 0.01. I wonder if 0.1 is too small? Remember, when the time step was small, we had all sorts of issues with pitch rate? -> Wait, wasn't that for Rotors? I can't remember if we have that same trend using just DSM. 
-    #-> Well... that didn't seem to fix the problem. 
-
-
-# tix = 100
 
 fxblade = cchistory[tix].Np.*cos(precone)
 fyblade = cchistory[tix].Tp.*cos(precone)
@@ -475,11 +449,6 @@ plot!(rvec, fyblade, lab="Fy - CCBlade", markershape=:cross)
 
 
 
-#=
-Well... I should probably just consider the error of what's going on... Then go from there. I need to probably consider some more cases to validate my solver. 
-
-=#
-
 
 
 
@@ -489,7 +458,7 @@ absavg(xvec) = sum(abs.(xvec))/length(xvec)
 
 
 # tix = 30
-rof = adblade.span .+ rhub
+rof = adblade["BlSpn"] .+ rhub
 fxblade = cchistory[tix].Np.*cos(precone)
 fyblade = cchistory[tix].Tp
 
@@ -501,7 +470,7 @@ plot!(rof, fxmat[tix,:], markershape=:x, lab="Fx - OpenFAST")
 plot!(rof, fymat[tix,:], markershape=:x, lab="Fy - OpenFAST")
 plot!(rvec, fxblade, lab="Fx - CCBlade", markershape=:cross)
 plot!(rvec, fyblade, lab="Fy - CCBlade", markershape=:cross)
-display(loadplt)
+# display(loadplt)
 
 
 coefplt = plot(xaxis="Radius (m)", yaxis="Load Coefficient", leg=:topright, title="Time Step $tix")
@@ -509,7 +478,8 @@ plot!(rvec, coefs.Cn[tix,:], lab=L"$C_n$ - Rotors") #, markershape=:circle)
 plot!(rvec, coefs.Ct[tix,:], lab=L"$C_t$ - Rotors") #, markershape=:circle)
 plot!(rof, cnmat[tix,:], markershape=:x, lab=L"$C_n$ - OpenFAST")
 plot!(rof, ccmat[tix,:], markershape=:x, lab=L"$C_t$ - OpenFAST")
-display(coefplt)
+# display(coefplt)
+# savefig(coefplt, "radialloads_timestep$tix.png")
 
 
 
@@ -533,8 +503,8 @@ for i = 1:nt
     Tcc[i], Qcc[i] = thrusttorque(rotor, sections, cchistory[i])
 end
 
-Terr = zeros(nt-1) #7.88 average absolute error on Thrust..
-Qerr = zeros(nt-1)
+Terr = zeros(nt-1) #ends with 0.15% error on thrust
+Qerr = zeros(nt-1) #ends with -0.10% error on torque
 
 for i = 1:nt-1
     Terr[i] = errfun(T[i], outs["RtAeroFxh"][i])
@@ -547,7 +517,8 @@ thrustplt = plot(xaxis="Time (s)", yaxis="Thrust (N)")
 plot!(tvec, T, lab="Rotors")
 plot!(tvec, Tcc, lab="CCBlade")
 plot!(tvec_of, outs["RtAeroFxh"], lab="OpenFAST")
-# display(thrustplt)   
+display(thrustplt)  
+# savefig(thrustplt, "thrust_loosely_BLADG_010623.png") 
 
 
 torqueplt = plot(xaxis="Time (s)", yaxis=L"Torque $\left(N\cdot m\right)$")
@@ -555,12 +526,11 @@ plot!(tvec, Q, lab="Rotors")
 plot!(tvec, Qcc, lab="CCBlade")
 plot!(tvec_of, outs["RtAeroMxh"], lab="OpenFAST")
 display(torqueplt) 
+# savefig(torqueplt, "torque_loosely_BLADG_010623.png")
 
-#=
-Todo. Well that's problematic. It could be due to how I'm calculating thrust. -> I think that I need to use the combination of the blade history at 3 different azimuthal positions. 
 
-=#
 
-##### Checking the airfoil
+
+
 
 nothing

@@ -14,16 +14,19 @@ function initializeBLAG(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishma
     end
 
     ns = DS.numberofstates(dsmodel)
-    # @show ns #This looks correct. 
-    xds = Array{eltype(chordvec), 2}(undef, nt, ns)
-    pds = Array{eltype(chordvec), 1}(undef, 18*na)
+    np = DS.numberofparams(dsmodel)
+    nst = DS.numberofstates_total(dsmodel)
+
+    # @show nst #This looks correct. 
+    xds = Array{eltype(chordvec), 2}(undef, nt, nst)
+    pds = Array{eltype(chordvec), 1}(undef, np*na)
 
     # println("Initializing BLAG BL init. ")
     # @show ns
 
     for i = 1:na
-        xidx = 24*(i-1)+1:i*24
-        pidx = 18*(i-1)+1:i*18
+        xidx = ns*(i-1)+1:i*ns
+        pidx = np*(i-1)+1:i*np
         # @show xidx, pidx 
         xds[1,xidx], _, pds[pidx] = DS.initialize_ADG([Vxvec[i]], [thetavec[i]], tvec, dsmodel.airfoils[i], chordvec[i], a) #It appears that I'm inputing the correct p vector. 
     end
@@ -43,11 +46,15 @@ function initializeBLAG(dsmodel::DS.BeddoesLeishman, dsmodelinit::Steady, solver
 
     # println("Initializing BLAG steady init. ")
 
-    xds = Array{eltype(chordvec), 2}(undef, nt, DS.numberofstates(dsmodel))
+    ns = DS.numberofstates(dsmodel)
+    np = DS.numberofparams(dsmodel)
+    nst = DS.numberofstates_total(dsmodel)
+
+    xds = Array{eltype(chordvec), 2}(undef, nt, nst)
     pds = Array{eltype(chordvec), 1}(undef, 18*na)
     for i = 1:na
-        xidx = 24*(i-1)+1:i*24
-        pidx = 18*(i-1)+1:i*18
+        xidx = ns*(i-1)+1:i*ns
+        pidx = np*(i-1)+1:i*np
         xds[1,xidx], _, pds[pidx] = DS.initialize_ADG([thetavec[i]], tvec, dsmodel.airfoils[i], chordvec[i], a)  #Todo: Broken. 
     end
 
@@ -58,13 +65,14 @@ end
 
 
 function update_BLAG_parameters!(dsmodel::DS.BeddoesLeishman, turbine::Bool, pds, na, rvec, Wvec, phivec, twistvec, pitch, env, t) #Todo: This appears to be the same... so I could just call the AeroDyn original one. 
+    np = DS.numberofparams(dsmodel)
         for j = 1:na
             ### Update inflow velocity
-            idx = 18*(j-1) + 17 #TODO: There is a function is DSM that does most of what this function is doing, except calculate the angle of attack from the inflow angle... should I use that function here? 
+            idx = np*(j-1) + np - 1 #TODO: There is a function is DSM that does most of what this function is doing, except calculate the angle of attack from the inflow angle... should I use that function here? 
             pds[idx] = Wvec[j]
 
             ### Update angle of attack. 
-            idx = 18*(j-1) + 18
+            idx = np*(j-1) + np
             pds[idx] = ((twistvec[j] + pitch) - phivec[j])
             if turbine
                 pds[idx] *= -1
@@ -87,10 +95,14 @@ function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twis
     # N = Array{eltype(chordvec)}(undef, n)
     # T = Array{eltype(chordvec)}(undef, n)
 
+    ns = DS.numberofstates(dsmodel) #Todo: If I'm generalizing like this, I wonder if I just need a single function, not one for each coupling? 
+    np = DS.numberofparams(dsmodel)
+    # nst = DS.numberofstates_total(dsmodel)
+
     # @show x
     for i = 1:n
-        idx = 24*(i-1)
-        xs = x[1+idx:idx+24] 
+        idx = ns*(i-1)
+        xs = x[1+idx:idx+ns] 
         af = dsmodel.airfoils[i]
 
         u = ccout.W[i]
