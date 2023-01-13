@@ -223,7 +223,7 @@ sections = Section.(rcc, ccc, tcc, afscc)
 
 op = windturbine_op.(vinf, omega, pitch, rcc, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-ccout = solve.(Ref(rotor), sections, op)
+ccout = CCBlade.solve.(Ref(rotor), sections, op)
 
 # op = windturbine_op.(vinf, omega, pitch, rcc[5], precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 # ccout = solve(rotor, sections[5], op)

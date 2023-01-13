@@ -875,3 +875,10 @@ function initializegravityloads(gxmodel, env, p; g=9.817)
 
     return convert_assemblystate(state, assembly)
 end
+
+
+function WMPtoangle(c)
+    # @show c
+    R = GXBeam.wiener_milenkovic(c)'
+    return [atan(R[3,2], R[3,3]), asin(-R[3,1]), atan(R[2,1], R[1,1])]
+end

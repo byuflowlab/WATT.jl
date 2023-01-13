@@ -1,6 +1,8 @@
-using DifferentialEquations, Plots, StaticArrays, OpenFASTsr, DelimitedFiles, dynamicstallmodels, Rotors, Plots.PlotMeasures
+using Plots, StaticArrays, OpenFASTsr, DelimitedFiles, DynamicStallModels, Rotors
 
-DS = dynamicstallmodels
+# println("Finished loading packages.")
+
+DS = DynamicStallModels
 of = OpenFASTsr
 
 
@@ -9,25 +11,29 @@ cd(path)
 
 
 
-ofpath = "./OpenFAST_NREL5MW" 
+ofpath = "./OpenFAST_NREL5MW_modified" 
 
-### Read in AeroDyn files
-addriver = of.read_addriver("NREL5MW_ADdriver.inp", "./OpenFAST_NREL5MW")
-adfile = of.read_adfile("NREL5MW_ADfile.dat","./OpenFAST_NREL5MW/")
-adblade = of.read_adblade("NREL5MW_adblade.dat", "./OpenFAST_NREL5MW")
+### Read in OpenFAST files
+inputfile = of.read_inputfile("NREL5MW_input.fst", ofpath)
+inflowwind = of.read_inflowwind("NREL5MW_inflowwind.dat", ofpath)
+adfile = of.read_adfile("NREL5MW_ADfile.dat", ofpath)
+adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
 edfile = of.read_edfile("NREL5MW_edfile.dat", ofpath)
 # bdfile = of.read_bdfile("NREL5MW_bdfile.dat", ofpath)
 bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
 
 
 #### Define variables. 
-rhub = addriver.hubrad
-rtip = addriver.hubrad + adblade.span[end]
+rhub = edfile["HubRad"]
+rtip = rhub + adblade["BlSpn"][end]
 
-indices = 5:length(adblade.span)-1 #Skip the indices with cylinders cause that causes problems with the dynamic stall model. #Note: For some odd reason the final point was giving me crap... oh yeah, the tip correction drives things to zero. 
-rvec = adblade.span[indices] .+ rhub #[11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.49].+rhub
-chordvec = adblade.chord[indices] #[4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
-twistvec = (pi/180) .* adblade.twist[indices] #[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
+indices = 1:length(adblade["BlSpn"]) # 5:length(adblade.span)-1 #Skip the indices with cylinders cause that causes problems with the dynamic stall model. #Note: For some odd reason the final point was giving me crap... oh yeah, the tip correction drives things to zero....  
+rvec = adblade["BlSpn"][indices] .+ rhub #[11.7500, 15.8500, 19.9500, 24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500, 56.1667, 58.9000, 61.49].+rhub
+chordvec = adblade["BlChord"][indices] #[4.557, 4.652, 4.458, 4.249, 4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
+twistvec = (pi/180) .* adblade["BlTwist"][indices] #[13.308, 11.480, 10.162, 9.011, 7.795, 6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
+
+rvec[1] += 0.001
+rvec[end] -= 0.001
 
 B = 3
 hubht = 90.0
@@ -44,53 +50,51 @@ Tf = 3.0
 
 
 ## Turbine Control variables
-pitch = addriver.pitch[1]
-precone = addriver.precone*pi/180 #0.0 #2.5*pi/180 #TODO: !!!! I need to work in a way to include precone
-yaw = addriver.yaw[1]*(pi/180) # 0.0*pi/180
-tilt = addriver.shfttilt*(pi/180) #0.0 #5.0*pi/180
+pitch = edfile["BlPitch(1)"]
+precone = edfile["PreCone(1)"]*pi/180 #0.0 #2.5*pi/180 #TODO: !!!! I need to work in a way to include precone
+yaw = edfile["NacYaw"]*(pi/180) # 0.0*pi/180
+tilt = edfile["ShftTilt"]*(pi/180) #0.0 #5.0*pi/180
 azimuth = 0.0
 
 ## Environmental variables
-vinf = addriver.windspeed[1] #10.0
+vinf = inflowwind["HWindSpeed"] #10.0
 # tsr = 7.55
 # rotorR = rtip*cos(precone)
-rpm = addriver.rpm[1]
+rpm = edfile["RotSpeed"]
 omega = rpm*(2*pi)/60 #vinf*tsr/rotorR
 
-rho = adfile.airdens #1.225
-mu = adfile.kinvisc #1.464e-5 #18.13e-6
-a = adfile.spdsound #343.0
-shearexp = addriver.shearexp[1] #0.0
+rho = inputfile["AirDens"] #1.225
+mu = inputfile["KinVisc"] #1.464e-5 #18.13e-6
+a = inputfile["SpdSound"] #343.0
+shearexp = inflowwind["PLexp"] #0.0
 
 
 ### Prep the ASD rotor and operating conditions 
-aftypes = Array{Array{Float64, 2}}(undef, 8)
-aftypes[1] = readdlm("./OpenFAST_NREL5MW/Airfoils/Cylinder1.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/Cylinder1.dat", radians=false)
-aftypes[2] = readdlm("./OpenFAST_NREL5MW/Airfoils/Cylinder2.dat", skipstart=55) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/Cylinder2.dat", radians=false)
-aftypes[3] = readdlm("./OpenFAST_NREL5MW/Airfoils/DU21_A17.dat", skipstart=54) # AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU40_A17.dat", radians=false)
-aftypes[4] = readdlm("./OpenFAST_NREL5MW/Airfoils/DU25_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU35_A17.dat", radians=false)
-aftypes[5] = readdlm("./OpenFAST_NREL5MW/Airfoils/DU30_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU30_A17.dat", radians=false)
-aftypes[6] = readdlm("./OpenFAST_NREL5MW/Airfoils/DU35_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU25_A17.dat", radians=false)
-aftypes[7] = readdlm("./OpenFAST_NREL5MW/Airfoils/DU40_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU21_A17.dat", radians=false)
-aftypes[8] = readdlm("./OpenFAST_NREL5MW/Airfoils/NACA64_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/NACA64_A17.dat", radians=false)
+aftypes = Array{of.AirfoilInput}(undef, 8)
+aftypes[1] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/Cylinder1.dat") #readdlm("./OpenFAST_NREL5MW_modified/Airfoils/Cylinder1.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/Cylinder1.dat", radians=false)
+aftypes[2] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/Cylinder2.dat") # readdlm("./OpenFAST_NREL5MW_modified/Airfoils/Cylinder2.dat", skipstart=55) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/Cylinder2.dat", radians=false)
+aftypes[3] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/DU40_A17.dat") # readdlm("./OpenFAST_NREL5MW_modified/Airfoils/DU21_A17.dat", skipstart=54) # AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU40_A17.dat", radians=false)
+aftypes[4] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/DU35_A17.dat") # readdlm("./OpenFAST_NREL5MW_modified/Airfoils/DU25_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU35_A17.dat", radians=false)
+aftypes[5] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/DU30_A17.dat") # readdlm("./OpenFAST_NREL5MW_modified/Airfoils/DU30_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU30_A17.dat", radians=false)
+aftypes[6] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/DU25_A17.dat") # readdlm("./OpenFAST_NREL5MW_modified/Airfoils/DU35_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU25_A17.dat", radians=false)
+aftypes[7] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/DU21_A17.dat") # readdlm("./OpenFAST_NREL5MW_modified/Airfoils/DU40_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/DU21_A17.dat", radians=false)
+aftypes[8] = of.read_airfoilinput("./OpenFAST_NREL5MW_modified/Airfoils/NACA64_A17.dat") # readdlm("./OpenFAST_NREL5MW_modified/Airfoils/NACA64_A17.dat", skipstart=54) #AlphaAF("/Users/adamcardoza/.julia/dev/CCBlade/data/NACA64_A17.dat", radians=false)
 
 # indices correspond to which airfoil is used at which station
-af_idx = adblade.afid[indices] #[3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
+af_idx = Int.(adblade["BlAFID"][indices]) #[3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 
 
 # create airfoil array
-airfoils = aftypes[af_idx]
+afs = aftypes[af_idx]
 
 n = length(rvec)
-afs = Array{DS.Airfoil}(undef, n)
-
+airfoils = Vector{DS.Airfoil}(undef, n)
 for i = 1:n
-    localpolar = hcat(airfoils[i][:,1].*(pi/180), airfoils[i][:,2:end])
-    afs[i] = complexairfoil(localpolar; A=A)
+    airfoils[i] = make_dsairfoil(afs[i])
 end
 
 rR = rvec./rtip
-blade = Rotors.Blade(rhub, rtip, rR, afs)
+blade = Rotors.Blade(rhub, rtip, rR, airfoils)
 
 
 
@@ -98,78 +102,43 @@ env = Rotors.environment(rho, mu, a, vinf, omega, shearexp)
 
 assembly = of.make_assembly(edfile, bdblade)
 ne = length(assembly.elements)
-#Todo: Well, something exploded. -> Potentially have a positive feedback loop
 
-#=
-Okay, yeah it has what looks like a positive feedback loop. 
 
-What's interesting is that the tip appears to have 20+ degrees of deflection... which seems like a lot. 
 
-It doesn't instantly shoot off, it shoots off after a period of time. So it could be due to a lack of numerical damping? 
-
-Okay, I found two things:
-     Todo: One, I have no rotational damping.
-     
-     Todo: Two, The thetas that GXBeam provides in the state are not actually the angle, but the components of a vector that the beam is rotating about. 
-
-     I got rid of the deflection on twist in the meantime.
-
-     - with b = 100, the damping forces aren't very large. They do seem fairly erratic, but I can't tell for sure. They might be fairly smooth. 
-
-     - with b = 500, the solution blows up... so that's no bueno. That implies that the structural damping is actually kind of bad for numerical behaivor. 
-
-     - reverting b back to 0.01 makes the simulation blow up again. 
-
-     I gues that didn't fix the problem. So that tells us that the problem is in the model. I could push the step size smaller and see what happens. I could also try GXBeam with the new updates (we'd definitely want to test it before we put that into effect.)
-
-    - Maybe I need to return the velocities. (Taylor confirmed that they are returned in the inertial frame. )
-
-    - I wonder if part of it is the ode solver I'm using. 
-    -> I figured out using callbacks to change the parameters.... Which is cool. So that's another method I can use for integration now. But it looks like the method is stalling out, at least it's probably the nonlinear solve that's bottomed out. So... that's a bummer. 
-
-    Oh, it looks like the ODE solver bottomed out... not the nonlinear solver... so that's a bummer. 
-
-    Yeah, I think it's a problem either with GXBeam going bonkers... or the velocities... or something. 
-=#
+dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
+dsmodelinit = Rotors.BeddoesLeishman()
 
 
 #### Define solution
-tspan = (0.0, addriver.tmax[1])
-dt = 0.005 #0.01
+tspan = (0.0, inputfile["TMax"]) #(0.0, 4.6)
+dt = inputfile["DT"][1] #0.01
 
 tvec = tspan[1]:dt:tspan[2]
 
+# println("Got to the simulation.")
+
+loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodel, dsmodelinit, b=0.01, solver=Rotors.RK4(), speakiter=1000) #DiffEQ(Tsit5())
 
 
-loads, cchistory, xds, gxhistory = Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodelinit=Rotors.Steady(), b=0.01, solver=Rotors.RK4()) #DiffEQ(Tsit5())
-
-#WorkLocation: 
-
-#=
-Todo.  I need to check that the motion of the deflections matches up with increases and decreases in the velocities that the blade sees. -> I'm not sure if it matches. -> I realized I needed to pull the precone, pitch, tilt, and shear differences out to see the motion differences. And it looks like it's correct. 
-
-Todo: I need to compare the deflections of Rotors.jl to OpenFAST -> Need to test a more flexible blade.
-
-TODO: I'd like to make a function that creates assemblies for the end user. 
-=#
 
 nt = length(tvec)
 
 
 #### Read in the OpenFAST solution (Must be run seperately)
-filename = "./OpenFAST_NREL5MW/NREL5MW_aeroonly.1.out"
+filename = "./OpenFAST_NREL5MW_modified/NREL5MW_aeroonly.1.out"
+filename = "./OpenFAST_NREL5MW_modified/NREL5MW_input.out"
 
 fullout = readdlm(filename; skipstart=6)
 
 names = fullout[1,:]
 data = Float64.(fullout[3:end,:])
 
-outs = Dict(names[i] => data[:,i] for i in 1:length(names))
+outs = Dict(names[i] => data[:,i] for i in eachindex(names))
 
 tvec_of = outs["Time"]
 
 nt_o = length(tvec_of)
-na_o = length(adblade.span)
+na_o = length(adblade["BlSpn"])
 
 
 fxmat = zeros(nt_o, na_o)
@@ -193,45 +162,59 @@ end
 
 
 ### Tip loading 
-tipplt = plot(xaxis="Time (s)", yaxis="Distributed Load (N/m)", leg=:bottomright) #, ylims=(100, 7000)
+tipplt = plot(xaxis="Time (s)", yaxis="Tip Load (N/m)", leg=:topright) #, ylims=(100, 7000)
 plot!(tvec, loads.Fx[:,end], lab="Fx - Unsteady")
 plot!(tvec, loads.Fy[:,end], lab="Fy - Unsteady")
-plot!(tvec_of, fxmat[:,end-1], markershape=:x, lab="Fx - OpenFAST")
-plot!(tvec_of, fymat[:,end-1], markershape=:x, lab="Fy - OpenFAST")
+plot!(tvec_of, fxmat[:,end], lab="Fx - OpenFAST")
+plot!(tvec_of, fymat[:,end], lab="Fy - OpenFAST")
 display(tipplt)
+
+#=
+- The current difference could be due to the fact that I'm not including angular deflection in the loop.
+
+-> well, I added it in. I'm not sure that I added it in correctly. But that's just not trusting what I did in the past. Additionally, I've added some extra bugs from changing how I iterate through time. So I need to get those fixed. The solution was crazy unstable. 
+
+-> I don't know if this makes me feel any better, but I went and tried to run the OpenFAST and it isn't able to handle it either... which is confusing. Because I'm pretty sure I ran this previously. So... that's grand. I'll have to see if the original files will run. 
+
+-> Well.... the original models are turning off unsteady aerodynamics... so... that's great. I wonder if there is a different model that I can use. 
+
+-> Well the trick to handling the instability was decreasing the timestep on the aero solver for OpenFAST, and that did the trick here as well. Now the main difference is the fact that OpenFAST accounts for moment loads and gravity, while mine doesn't. 
+
+=#
+
 
 timeelapsed = tspan[2]-tspan[1]
 framespersecond = round(Int, nt/timeelapsed)*10
 
-function createdeflectionanimation()
-    anim = @animate for i in 1:nt
-        t = tvec[i]
-        state = gxhistory[i]
-        x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+# function createdeflectionanimation()
+#     anim = @animate for i in 1:nt
+#         t = tvec[i]
+#         state = gxhistory[i]
+#         x = [assembly.points[ipoint][1] + state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
     
-        deflectionx = [state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
-        deflectiony = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
-        deflectionz = [state.points[ipoint].u[3] for ipoint = 1:length(assembly.points)]
+#         deflectionx = [state.points[ipoint].u[1] for ipoint = 1:length(assembly.points)]
+#         deflectiony = [state.points[ipoint].u[2] for ipoint = 1:length(assembly.points)]
+#         deflectionz = [state.points[ipoint].u[3] for ipoint = 1:length(assembly.points)]
 
-        defthetax = [state.points[ipoint].theta[1] for ipoint = 1:length(assembly.points)].*(180/pi)
-        defthetay = [state.points[ipoint].theta[2] for ipoint = 1:length(assembly.points)].*(180/pi)
-        defthetaz = [state.points[ipoint].theta[3] for ipoint = 1:length(assembly.points)].*(180/pi)
+#         defthetax = [state.points[ipoint].theta[1] for ipoint = 1:length(assembly.points)].*(180/pi)
+#         defthetay = [state.points[ipoint].theta[2] for ipoint = 1:length(assembly.points)].*(180/pi)
+#         defthetaz = [state.points[ipoint].theta[3] for ipoint = 1:length(assembly.points)].*(180/pi)
 
-        plot(leg=:topleft, xaxis="Beam length (m)", yaxis="Deflection (m)", xlims=(-0.005, rtip*1.02), ylims=(-12, 4), right_margin=20mm) #
-        plot!(x, deflectionx, lab="X")
-        plot!(x, deflectiony, lab="Y")
-        plot!(x, deflectionz, lab="Z")
-        annotate!((20, 2.5, text("time = $t sec", :left)))
+#         plot(leg=:topleft, xaxis="Beam length (m)", yaxis="Deflection (m)", xlims=(-0.005, rtip*1.02), ylims=(-12, 4), right_margin=20mm) #
+#         plot!(x, deflectionx, lab="X")
+#         plot!(x, deflectiony, lab="Y")
+#         plot!(x, deflectionz, lab="Z")
+#         annotate!((20, 2.5, text("time = $t sec", :left)))
 
-        # subplot = twinx()
-        # plot!(subplot, leg=:bottomleft, xlims=(-0.005, rtip*1.02), ylims=(-15, 35), yaxis="Angular Deflection (deg)")
-        # plot!(subplot, x, defthetax, lab="θx", linestyle=:dash)
-        # plot!(subplot, x, defthetay, lab="θy", linestyle=:dashdot)
-        # plot!(subplot, x, defthetaz, lab="θz", linestyle=:dot)
-    end every 10
-    gif(anim, "bodydeflections_looselycoupled_openfast_081222.gif", fps = framespersecond)
-end
+#         # subplot = twinx()
+#         # plot!(subplot, leg=:bottomleft, xlims=(-0.005, rtip*1.02), ylims=(-15, 35), yaxis="Angular Deflection (deg)")
+#         # plot!(subplot, x, defthetax, lab="θx", linestyle=:dash)
+#         # plot!(subplot, x, defthetay, lab="θy", linestyle=:dashdot)
+#         # plot!(subplot, x, defthetaz, lab="θz", linestyle=:dot)
+#     end every 10
+#     gif(anim, "bodydeflections_looselycoupled_openfast_081222.gif", fps = framespersecond)
+# end
 
 # createdeflectionanimation()
 
-# nothing
+nothing

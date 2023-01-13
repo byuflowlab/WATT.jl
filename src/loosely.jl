@@ -219,7 +219,7 @@ function rotorloads(rhub, rtip, rvec, loads...)
     rfull = [rhub; rvec; rtip]
     
     for i = 1:nt
-        for j = 1:length(loads)
+        for j = eachindex(loads)
             Fxfull = [0.0; loads[j].Fx[i,:]; 0.0]
             Fyfull = [0.0; loads[j].Fy[i,:]; 0.0]
 

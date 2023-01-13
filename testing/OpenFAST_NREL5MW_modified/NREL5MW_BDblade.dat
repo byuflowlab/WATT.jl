@@ -1,4 +1,4 @@
-   ------- BEAMDYN V1.00.* INDIVIDUAL BLADE INPUT FILE --------------------------
+------- BEAMDYN V1.00.* INDIVIDUAL BLADE INPUT FILE --------------------------
  Test Format 1
  ---------------------- BLADE PARAMETERS --------------------------------------
 49   station_total    - Number of blade input stations (-)

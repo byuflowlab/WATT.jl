@@ -3,4 +3,5 @@
 *.outb
 *.sum
 *.ech
+*.sum.yaml
 docs/build/
