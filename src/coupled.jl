@@ -125,12 +125,13 @@ function interpolate_angle(ip, assembly, state) #Todo: I need to see if I should
 end
 
 
-function update_structural_forces!(distributed_loads, assembly, gxstate, N, T, env, rvec, rgx, t, b, rhub, rtip)
+function update_structural_forces!(distributed_loads, assembly, gxstate, N, T, Mx, env, rvec, rgx, t, b, rhub, rtip)
     Fzfit = Akima(vcat(rhub, rvec, rtip), vcat(0, -N, 0) ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
-    Fyfit = Akima(rvec, T)
+    Fyfit = Akima(vcat(rhub, rvec, rtip), vcat(0, T, 0))
+    Mxfit = Akima(vcat(rhub, rvec, rtip), vcat(0, Mx, 0))
 
     f_follower = @SVector zeros(3)
-    m = @SVector zeros(3)
+    # m = @SVector zeros(3)
     m_follower = @SVector zeros(3)
     
     for ielem = eachindex(rgx)
@@ -148,6 +149,7 @@ function update_structural_forces!(distributed_loads, assembly, gxstate, N, T, e
 
         # f = SVector(fx, fy, fz)
         f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem])) #Using GXBeam's internal damping
+        m = SVector(0.0, 0.0, Mxfit(rgx[ielem]))
         distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end
 end
@@ -160,7 +162,7 @@ function get_aerostructural_velocities(env::Environment, aeroV, t, r, azimuth, p
 
     ### Get the relative structural velocities
     vxrel = aeroV[3] 
-    vyrel = aeroV[2] + env.RS(t)*r  
+    vyrel = aeroV[2] + env.RS(t)*r  #Todo. Why do I add the rotational velocity into the structural? -> Oh, that's right, the rotational velocities are included in the GXBeam output velocity. So to get the relative velocities, I need to subtract out the rotational component. But the rotational component is negative in the structural frame, so subtract a negative is add the rotational velocity back in. 
 
     ### Return the total x and y velocities (x and y in the aerodynamic frame)
     # If the structure is moving in the negative y direction, then the airfoil should see a faster velocity. 
@@ -195,7 +197,7 @@ end
 #TODO: It might be a good idea to make a version that is completely in place. (Pass in data storage and riso ode.)
 
 #TODO: Function headers
-function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, warnings::Bool=true, azimuth0=0.0, b=0.01, structural_damping::Bool=true, linear::Bool=false)
+function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, warnings::Bool=true, azimuth0=0.0, b=0.01, structural_damping::Bool=true, linear::Bool=false, g=9.81)
     # println("Why isn't it printing inside the function.")
     if verbose
         println("Rotors.jl initializing solution...")
@@ -227,10 +229,13 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
     Cd = Array{eltype(rvec)}(undef,(nt, na))
     Cn = Array{eltype(rvec)}(undef,(nt, na))
     Ct = Array{eltype(rvec)}(undef,(nt, na))
+    Cm = Array{eltype(rvec)}(undef,(nt, na))
+
     N = Array{eltype(rvec)}(undef,(nt, na))
     T = Array{eltype(rvec)}(undef,(nt, na))
     Fx = Array{eltype(rvec)}(undef,(nt, na))
     Fy = Array{eltype(rvec)}(undef,(nt, na))
+    Mx = Array{eltype(rvec)}(undef,(nt, na)) #Moment about the aero Z axis is the moment about the structural X axis. 
 
     cchistory = Array{Array{CCBlade.Outputs{eltype(rvec)}, 1}, 1}(undef, nt) #[cchistory[1] for i = 1:nt]
     gxhistory = Array{GXBeam.AssemblyState{eltype(rvec), Vector{GXBeam.PointState{eltype(rvec)}}, Vector{GXBeam.ElementState{eltype(rvec)}}}}(undef, nt)
@@ -271,35 +276,39 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
     # @show getfieldnames(ode.dt)
     # Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env)
-    Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env)
+    Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:], Cm[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env) #Todo: I might need to individual rotations for the stations. 
     
     ### Dimensionalize
     for j = 1:na
         u_1 = cchistory[1].W[j]
-        N[1,j] = Cn[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
-        T[1,j] = Ct[1,j]*0.5*env.rho*u_1^2*chordvec[j]
-        Fx[1,j] = Cx[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
-        Fy[1,j] = Cy[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
+        qinf_1 = 0.5*env.rho*u_1^2
+        N[1,j] = Cn[1,j]*qinf_1*chordvec[j] 
+        T[1,j] = Ct[1,j]*qinf_1*chordvec[j]
+        Fx[1,j] = Cx[1,j]*qinf_1*chordvec[j] 
+        Fy[1,j] = Cy[1,j]*qinf_1*chordvec[j] 
+        Mx[1,j] = Cm[1,j]*qinf_1*chordvec[j]^2 #The coefficient of moment is positive about the negative Z aero axis, so we need the negative of this to move it to the structural X axis. 
     end
 
 
 
     ### Extract CCBlade Loads and create a distributed load #TODO: I feel like there's probably a faster way to do this. Maybe have N include the hub and the tip and CCBlade just updates the nodes inbetween. -> Or maybe there is a better fit function where I get to declare the behavior outside the bounds. 
-    Fzfit = Akima(vcat(rhub, rvec, rtip), vcat(0, -N[1,:].*cos(precone), 0)) 
+    Fzfit = Akima(vcat(rhub, rvec, rtip), vcat(0, -N[1,:].*cos(precone), 0)) #Todo: Why not just use the Fx and Fy forces? 
     Fyfit = Akima(vcat(rhub, rvec, rtip), vcat(0, T[1,:].*cos(precone), 0))  #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? 
+    Mxfit = Akima(vcat(rhub, rvec, rtip), vcat(0, Mx[1,:], 0))
 
     nelem = length(assembly.elements)
     rgx = [assembly.elements[i].x[1] for i in 1:nelem]
 
     distributed_loads = Dict{Int64, GXBeam.DistributedLoads{eltype(rvec)}}()
     f_follower = @SVector zeros(3)
-    m = @SVector zeros(3)
+    # m = @SVector zeros(3)
     m_follower = @SVector zeros(3)
 
-    #Todo: I'm not including gravitational loads here.
-    #Todo: I need to add moment loads.  
+    #Todo. I'm not including gravitational loads here.
+    #Todo. I need to add moment loads.  
     for ielem = 1:nelem #Iterate through the elements and apply the distributed load at every element.  
-        f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem])) 
+        f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem]))
+        m = SVector(0.0, 0.0, Mxfit(rgx[ielem])) 
         distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
     end 
 
@@ -307,6 +316,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
     ### Prepare GXBeam inputs  
     Omega = SVector(0.0, 0.0, -env.RS(t0))
+    gravity0 = SVector(g*sin(azimuth0), -g*cos(azimuth0), 0.0)
     prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed
 
 
@@ -316,7 +326,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
     #TODO: Create a function to initialize the behavior. One for starting from no loading, one from steady state as below. Look at that, I wrote that down already. 
 
     ### GXBeam initial solution #TODO: I might make it an option to initialize from rest, or from steady state at the intial conditions (as current).
-    system, converged = GXBeam.steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega) 
+    system, converged = GXBeam.steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega, gravity=gravity0) 
 
     gxhistory[1] = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
@@ -347,11 +357,11 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
         ### Update BEM inputs
         for j = 1:na
             ### Update sections with twist
-            twist_displaced = twistvec[j] + def_thetax[j] #Todo: Is this correct? I think this is what I had in the fixed point solution. 
+            twist_displaced = twistvec[j] + def_thetax[j] #Todo: Is this correct? I think this is what I had in the fixed point solution. -> A negative smooths the output. 
             sections[j] = CCBlade.Section(rvec[j], chordvec[j], twist_displaced, blade.airfoils[j]) #Not displacing rvec because CCBlade uses that to calculate the tip and hub corrections, and the value should be based on relative to the distance along the blade to the hub or tip. (Although in dynamic movement, the tip losses would change dramatically.)
 
             ### Update base inflow velocities
-            Vxvec[j], Vyvec[j] = get_aerostructural_velocities(env, aeroV[j], t, rvec[j], azimuth[i], precone, tilt, yaw, hubht) #Todo: This should probably see the deflected radius. 
+            Vxvec[j], Vyvec[j] = get_aerostructural_velocities(env, aeroV[j], t, rvec[j], azimuth[i], precone, tilt, yaw, hubht) #Todo: This should probably see the deflected radius. -> Or I could not subtract out the angular portion of the structural velocity.... then it would automatically see the deflected radius. 
             operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
         end
 
@@ -375,29 +385,34 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
 
         ### Extract loads 
-        Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env)
+        Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:], Cm[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env)
         
         ### Dimensionalize
         for j = 1:na
             u_i = cchistory[i].W[j] #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
-            N[i,j] = Cn[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
-            T[i,j] = Ct[i,j]*0.5*env.rho*u_i^2*chordvec[j]
-            Fx[i,j] = Cx[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
-            Fy[i,j] = Cy[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
+            qinf = 0.5*env.rho*u_i^2
+            N[i,j] = Cn[i,j]*qinf*chordvec[j] 
+            T[i,j] = Ct[i,j]*qinf*chordvec[j]
+            Fx[i,j] = Cx[i,j]*qinf*chordvec[j] 
+            Fy[i,j] = Cy[i,j]*qinf*chordvec[j] 
+            Mx[i,j] = Cm[i,j]*qinf*chordvec[j]^2
         end
 
 
 
 
 
-        ### Update GXBeam loads #Todo: This is also not accounting for gravitational loads. Does GXBeam account for actual angular movement when keeping the states and what not? Does it integrate and find the new position? 
-        update_structural_forces!(distributed_loads, assembly, gxhistory[i-1], N[i-1,:], T[i-1,:], env, rvec, rgx, t, b, rhub, rtip)  
+        ### Update GXBeam loads #Todo. This is also not accounting for gravitational loads. 
+        ##Todo: Does GXBeam account for actual angular movement when keeping the states and what not? Does it integrate and find the new position? -> i.e. changing the gravity. 
+        #Todo: Not accounting for precone in this version of update_structural_forces!()
+        update_structural_forces!(distributed_loads, assembly, gxhistory[i-1], N[i-1,:], T[i-1,:], Mx[i-1,:], env, rvec, rgx, t, b, rhub, rtip)  
 
         Omega = SVector(0.0, 0.0, -env.RS(t))
+        gravity = SVector(g*sin(azimuth[i-1]), -g*cos(azimuth[i-1]), 0.0)
 
 
         ### Solve GXBeam for time step
-        system, localhistory, converged = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping) #TODO: Add gravity. 
+        system, localhistory, converged = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity) #TODO: Add gravity. 
 
 
 
@@ -428,5 +443,5 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
     # Fx = N.*cos(precone) #TODO: The N and T might need some rotating for precone. I'm not sure that I'm doing this right.
     # Fy = T.*cos(precone) #I copied Dr. Ning's code to get the thrust and torque, but it seems odd that they are both multiplied by the cosine of precone. Which makes sense. 
 
-    return (N=N, T=T, Fx=Fx, Fy=Fy), cchistory, xds, gxhistory, def_thetax
+    return (N=N, T=T, Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, def_thetax
 end

@@ -1,4 +1,4 @@
-using Plots, StaticArrays, OpenFASTsr, DelimitedFiles, DynamicStallModels, Rotors
+using Plots, StaticArrays, OpenFASTsr, DelimitedFiles, DynamicStallModels, Rotors, LaTeXStrings
 
 # println("Finished loading packages.")
 
@@ -19,7 +19,7 @@ inflowwind = of.read_inflowwind("NREL5MW_inflowwind.dat", ofpath)
 adfile = of.read_adfile("NREL5MW_ADfile.dat", ofpath)
 adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
 edfile = of.read_edfile("NREL5MW_edfile.dat", ofpath)
-# bdfile = of.read_bdfile("NREL5MW_bdfile.dat", ofpath)
+bdfile = of.read_bdfile("NREL5MW_bdfile.dat", ofpath)
 bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
 
 
@@ -100,7 +100,7 @@ blade = Rotors.Blade(rhub, rtip, rR, airfoils)
 
 env = Rotors.environment(rho, mu, a, vinf, omega, shearexp)
 
-assembly = of.make_assembly(edfile, bdblade)
+assembly = of.make_assembly(edfile, bdfile, bdblade)
 ne = length(assembly.elements)
 
 
@@ -125,7 +125,7 @@ nt = length(tvec)
 
 
 #### Read in the OpenFAST solution (Must be run seperately)
-filename = "./OpenFAST_NREL5MW_modified/NREL5MW_aeroonly.1.out"
+# filename = "./OpenFAST_NREL5MW_modified/NREL5MW_aeroonly.1.out"
 filename = "./OpenFAST_NREL5MW_modified/NREL5MW_input.out"
 
 fullout = readdlm(filename; skipstart=6)
@@ -143,6 +143,7 @@ na_o = length(adblade["BlSpn"])
 
 fxmat = zeros(nt_o, na_o)
 fymat = zeros(nt_o, na_o)
+Mmat = zeros(nt_o, na_o)
 
 for i = 1:na_o
     if i<10
@@ -154,20 +155,25 @@ for i = 1:na_o
     end
     namex = "AB1N"*number*"Fx"
     namey = "AB1N"*number*"Fy"
+    namem = "AB1N"*number*"Mm"
     fxmat[:,i] = outs[namex]
     fymat[:,i] = outs[namey]
+    Mmat[:,i] = outs[namem]
 end
 
 
 
 
 ### Tip loading 
-tipplt = plot(xaxis="Time (s)", yaxis="Tip Load (N/m)", leg=:topright) #, ylims=(100, 7000)
-plot!(tvec, loads.Fx[:,end], lab="Fx - Unsteady")
-plot!(tvec, loads.Fy[:,end], lab="Fy - Unsteady")
-plot!(tvec_of, fxmat[:,end], lab="Fx - OpenFAST")
-plot!(tvec_of, fymat[:,end], lab="Fy - OpenFAST")
+tipplt = plot(xaxis="Time (s)", yaxis="Distributed Load - Tip", leg=:topright) #, ylims=(100, 7000)
+plot!(tvec, loads.Fx[:,end], lab=L"$F_x$ - Rotors")
+plot!(tvec, loads.Fy[:,end], lab=L"$F_y$ - Rotors")
+plot!(tvec, loads.Mx[:,end], lab=L"$M_x$ - Rotors")
+plot!(tvec_of, fxmat[:,end], lab=L"$F_x$ - OpenFAST", linestyle=:dash)
+plot!(tvec_of, fymat[:,end], lab=L"$F_y$ - OpenFAST", linestyle=:dash)
+plot!(tvec_of, Mmat[:,end], lab=L"$M_x$ - OpenFAST", linestyle=:dash)
 display(tipplt)
+# savefig("NREL5MW_tiploads_aerostructural_BLADG_011823.png")
 
 #=
 - The current difference could be due to the fact that I'm not including angular deflection in the loop.
@@ -179,6 +185,8 @@ display(tipplt)
 -> Well.... the original models are turning off unsteady aerodynamics... so... that's great. I wonder if there is a different model that I can use. 
 
 -> Well the trick to handling the instability was decreasing the timestep on the aero solver for OpenFAST, and that did the trick here as well. Now the main difference is the fact that OpenFAST accounts for moment loads and gravity, while mine doesn't. 
+
+-> Well I added moment and gravity... and it didn't really do that much. Which suggests one of two things to me, that either I put the wrong stiffnesses in the wrong spot... or some of my loads or deflections are applied such that it's damping out the oscillations. The loads are in the correct regions... so I should take a look at the deflections across time.  
 
 =#
 

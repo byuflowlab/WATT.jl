@@ -593,89 +593,7 @@ function initialize_gxbeam2(gxmodel, p, distributedload) #Todo: Need to add kwar
     return convert_assemblystate(state, assembly)
 end
 
-function plotpoints(points; xdim = true, ydim = true, zdim=true)
-    n = length(points)
-    x = [points[i][1] for i in 1:n]
-    y = [points[i][2] for i in 1:n]
-    z = [points[i][3] for i in 1:n]
 
-    if iszero(x)
-        xdim = false
-        xplt = y
-        yplt = z
-        xlab = "Y distance"
-        ylab = "Z distance"
-    elseif iszero(y)
-        ydim = false
-        xplt = x
-        yplt = z
-        xlab = "X distance"
-        ylab = "Z distance"
-    elseif iszero(z)
-        zdim = false
-        xplt = x
-        yplt = y
-        xlab = "X distance"
-        ylab = "Y distance"
-    end
-
-    if xdim&&ydim&&zdim #Check if the plot is 3 dimensional
-        plt = scatter(x, y, z, xaxis="X distance", yaxis="Y distance", zaxis="Z distance", legend=false, aspectratio=:equal)
-    else
-        plt = scatter(xplt, yplt, xaxis=xlab, yaxis=ylab, legend=false, aspectratio=:equal)
-    end
-    return plt
-end
-
-function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
-    points = cat(assembly.points...,dims=2)'
-
-    ### Get element points
-    elements = zeros(length(assembly.elements), 3)
-    for i = 1:length(assembly.elements)
-        elements[i,:] = assembly.elements[i].x
-    end
-    
-    if iszero(points[:,1]) #X direction is zero
-        xdim = false
-        xplt = points[:,2]
-        yplt = points[:,3]
-        xlab = "Y distance"
-        ylab = "Z distance"
-        xmplt = elements[:,2]
-        ymplt = elements[:,3]
-    elseif iszero(points[:,2]) #Y direction is zero
-        ydim = false
-        xplt = points[:,1]
-        yplt = points[:,3]
-        xlab = "X distance"
-        ylab = "Z distance"
-        xmplt = elements[:,1]
-        ymplt = elements[:,3]
-    elseif iszero(points[:,3]) #Z direction is zero
-        zdim = false
-        xplt = points[:,1]
-        yplt = points[:,2]
-        xlab = "X distance"
-        ylab = "Y distance"
-        xmplt = elements[:,1]
-        ymplt = elements[:,2]
-    end
-
-
-
-    if xdim&&ydim&&zdim #Check if the plot is 3 dimensional
-        plt = plot(points[:,1], points[:,2], points[:,3], linewidth=4, linecolor=:black, xaxis="X distance", yaxis="Y distance", zaxis="Z distance", legend=false, aspectratio=:equal)
-        scatter!(points[:,1], points[:,2], points[:,3])
-        scatter!(elements[:,1], elements[:,2], elments[:,3], markershape=:cross)
-    else
-        plt = plot(xplt, yplt, linewidth=4, linecolor=:black, xaxis=xlab, yaxis=ylab, legend=false, aspectratio=:equal)
-        scatter!(xplt, yplt, markersize=6)
-        scatter!(xmplt, ymplt, markershape=:diamond, markersize=4)
-    end
-    return plt
-
-end
 
 # function parsesolution(sol, gxmodel::gxbeam) #Todo: This isn't complete/working
 #     t = sol.t
@@ -877,8 +795,3 @@ function initializegravityloads(gxmodel, env, p; g=9.817)
 end
 
 
-function WMPtoangle(c)
-    # @show c
-    R = GXBeam.wiener_milenkovic(c)'
-    return [atan(R[3,2], R[3,3]), asin(-R[3,1]), atan(R[2,1], R[1,1])]
-end

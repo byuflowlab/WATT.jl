@@ -92,6 +92,7 @@ function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twis
     Ct = Array{eltype(chordvec)}(undef, n)
     Cx = Array{eltype(chordvec)}(undef, n)
     Cy = Array{eltype(chordvec)}(undef, n)
+    Cm = Array{eltype(chordvec)}(undef, n)
     # N = Array{eltype(chordvec)}(undef, n)
     # T = Array{eltype(chordvec)}(undef, n)
 
@@ -111,7 +112,7 @@ function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twis
         #     @show alpha #This appears to be slightly off. -> It could be off cause I might be starting from a different azimuthal angle. 
         # end
 
-        Cn[i], Ct[i], Cl[i], Cd[i], _ = DS.BLADG_coefficients(dsmodel, xs, u, chordvec[i], af, env.a) #TODO: I might be able to use multiple dispatch here. 
+        Cn[i], Ct[i], Cl[i], Cd[i], Cm[i] = DS.BLADG_coefficients(dsmodel, xs, u, chordvec[i], af, env.a) #TODO: I might be able to use multiple dispatch here. 
 
         # if i==n
         #     @show u, alpha, Cn[i], Ct[i]
@@ -124,7 +125,7 @@ function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twis
         # N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo. Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? -> Yes this is dimensionoalized by the total inflow velocity (both CCBlade and OpenFAST do that.)
         # T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
     end
-    return Cx, Cy, Cn, Ct, Cl, Cd
+    return Cx, Cy, Cn, Ct, Cl, Cd, Cm
 end
 
 

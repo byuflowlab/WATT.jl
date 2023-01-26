@@ -108,7 +108,7 @@ function update_aero_parameters!(dsmodel::DS.Riso, turbine::Bool, pds, na, rvec,
         end
 end
 
-
+#Todo: Add a moment placehoolder. 
 function extractloads(dsmodel::DS.Riso, x, ccout, chordvec, twistvec, pitch, blade::Blade, env::Environment) #TODO: This should probably be an inplace function. 
     n = length(blade.airfoils)
 

@@ -25,12 +25,15 @@ include("./beddoesleishman.jl")
 
 
 ### Structures
-include("../dev/gxbeam.jl") #Todo: Need to get the relavent functions out. Then remove the file. -> Or just simplify the file. 
+# include("../dev/gxbeam.jl") #Todo: Need to get the relavent functions out. Then remove the file. -> Or just simplify the file. 
+include("./gxbeam.jl")
 
 
 ### Couplings
 include("./loosely.jl")
 include("./coupled.jl")
+
+# include("../dev/indicialgxbeam.jl")
 
 include("./static.jl") #Todo: Need to update to not use BEM struct and Riso struct and the like. 
 

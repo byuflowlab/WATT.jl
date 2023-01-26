@@ -98,6 +98,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
     Ct = Array{eltype(rvec)}(undef,(nt, na))
     Cx = Array{eltype(rvec)}(undef,(nt, na))
     Cy = Array{eltype(rvec)}(undef,(nt, na))
+    Cm = Array{eltype(rvec)}(undef,(nt, na))
 
     N = Array{eltype(rvec)}(undef,(nt, na))
     T = Array{eltype(rvec)}(undef,(nt, na))
@@ -106,7 +107,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
 
     cchistory[1] = ccout
-    Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env)
+    Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:], Cm[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env)
     
 
     ### Dimensionalize
@@ -161,7 +162,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
 
         ### Extract loads #TODO: I don't think that I need to keep all of this data. I can probably define a function that calculates all the different loads. -> If my vectors are predefined, it shouldn't matter how many I keep. 
-        Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env) 
+        Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:], Cm[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env) 
 
 
 
@@ -182,7 +183,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
     end
 
 
-    return (N=N, T=T, Fx=Fx, Fy=Fy), (Cx=Cx, Cy=Cy, Cn=Cn, Ct=Ct, Cl=Cl, Cd=Cd), cchistory, xds, azimuth 
+    return (N=N, T=T, Fx=Fx, Fy=Fy), (Cx=Cx, Cy=Cy, Cn=Cn, Ct=Ct, Cl=Cl, Cd=Cd, Cm=Cm), cchistory, xds, azimuth 
 end
 
 

@@ -99,6 +99,7 @@ END of OutList section (the word "END" must appear in the first 3 columns of the
                   OutList             - The next line(s) contains a list of output parameters.  See OutListParameters.xlsx for a listing of available output channels, (-)
 "Fx"
 "Fy"
+"Mm"
 "Vx"
 "Vy"
 "Vindx"
