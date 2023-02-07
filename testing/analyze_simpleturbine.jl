@@ -2,106 +2,173 @@ using OpenFASTsr, DelimitedFiles, GXBeam, Rotors, LinearAlgebra
 
 of = OpenFASTsr
 
+localpath = @__DIR__
+cd(localpath)
+
 
 ### Read in OpenFAST files
-ofpath = "./simpleturbine/" 
-inputfile = of.read_inputfile("simple_input.fst", ofpath)
-inflowwind = of.read_inflowwind("simple_inflowwind.dat", ofpath)
-addriver = of.read_addriver("simple_ADdriver.dvr", ofpath)
-adfile = of.read_adfile("simple_ADfile.dat", ofpath)
-adblade = of.read_adblade("simple_ADblade.dat", ofpath)
-edfile = of.read_edfile("simple_edfile.dat", ofpath)
-bdfile = of.read_bdfile("simple_bdfile.dat", ofpath)
-bdblade = of.read_bdblade("simple_bdblade.dat", ofpath)
+ofpath = "./simpleNREL/" 
+inputfile = of.read_inputfile("sn5_input.fst", ofpath)
+inflowwind = of.read_inflowwind("sn5_inflowwind.dat", ofpath)
+# addriver = of.read_addriver("sn5_ADdriver.dvr", ofpath)
+adfile = of.read_adfile("sn5_ADfile.dat", ofpath)
+adblade = of.read_adblade("sn5_ADblade.dat", ofpath)
+edfile = of.read_edfile("sn5_edfile.dat", ofpath)
+bdfile = of.read_bdfile("sn5_bdfile.dat", ofpath)
+bdblade = of.read_bdblade("sn5_bdblade.dat", ofpath)
 
-rhub = addriver["HubRad(1)"]
+rhub = edfile["HubRad"]
 rvec = adblade["BlSpn"] .+ rhub
 rtip = rvec[end]
+rfrac = bdblade["rfrac"]
 
 rho = inputfile["AirDens"]
 mu = inputfile["KinVisc"]
 vinf = inflowwind["HWindSpeed"]
 a = inputfile["SpdSound"]
-omega = edfile["RotSpeed"]
+omega = edfile["RotSpeed"]*2*pi/60
 shearexp = inflowwind["PLexp"]
+tsr = omega*rtip/vinf
 
 env = Rotors.environment(rho, mu, a, vinf, omega, shearexp)
 
 
 
 n = length(adblade["BlSpn"])
+ne = Int(bdblade["station_total"])
 
-# fullouts = readdlm("./simpleturbine/simple_ADdriver.1.out", skipstart=6)
-fullouts = readdlm("./simpleturbine/simple_input.out", skipstart=6)
-
-names = fullouts[1,:]
-
-# data = readdlm("./simpleturbine/simple_ADdriver.1.out", skipstart=8)
-data = readdlm("./simpleturbine/simple_input.out", skipstart=8)
-
-outs = Dict(names[i] => data[:,i] for i in eachindex(names))
-
-tvec = outs["Time"]
-
-
-nt = length(tvec)
-
-fxmat = zeros(nt, n)
-fymat = zeros(nt, n)
-Mmat = zeros(nt, n)
-dxmat = zeros(nt, n)
-dymat = zeros(nt, n)
-dzmat = zeros(nt, n)
-
-for i = 1:n
-    if i<10
-        number = "00$i"
-    elseif i<100
-        number = "0$i"
-    else
-        number = "$i"
-    end
-    namex = "AB1N"*number*"Fx"
-    namey = "AB1N"*number*"Fy"
-    namem = "AB1N"*number*"Mm"
-    namedx = "B1N"*number*"_TDxr"
-    namedy = "B1N"*number*"_TDyr"
-    namedz = "B1N"*number*"_TDzr"
-
-    fxmat[:,i] = outs[namex]
-    fymat[:,i] = outs[namey]
-    Mmat[:,i] = outs[namem]
-    dxmat[:,i] = outs[namedx]
-    dymat[:,i] = outs[namedy]
-    dzmat[:,i] = outs[namedz]
+if !@isdefined(readflag)
+    readflag = true
 end
 
-azimuth = outs["B1Azimuth"]
+if readflag
+    # fullouts = readdlm("./simpleNREL/sn5_ADdriver.1.out", skipstart=6)
+    fullouts = readdlm("./simpleNREL/sn5_input.out", skipstart=6)
+
+    names = fullouts[1,:]
+
+    # data = readdlm("./simpleNREL/sn5_ADdriver.1.out", skipstart=8)
+    data = readdlm("./simpleNREL/sn5_input.out", skipstart=8)
+
+    outs = Dict(names[i] => data[:,i] for i in eachindex(names))
+
+    tvec = outs["Time"]
+
+
+    nt = length(tvec)
+
+
+    global fxmat = zeros(nt, n)
+    global fymat = zeros(nt, n)
+    global Mmat = zeros(nt, n)
+    # global alphamat = zeros(nt, n)
+
+    for i = 1:n
+        if i<10
+            number = "00$i"
+        elseif i<100
+            number = "0$i"
+        else
+            number = "$i"
+        end
+        namex = "AB1N"*number*"Fx"
+        namey = "AB1N"*number*"Fy"
+        namem = "AB1N"*number*"Mm"
+        
+        # namealpha = "AB1N"*number*"Alpha"
+
+        fxmat[:,i] = outs[namex]
+        fymat[:,i] = outs[namey]
+        # Mmat[:,i] = outs[namem]
+        # alphamat[:,i] = outs[namealpha]
+    end
+
+    global dxmat = zeros(nt, ne)
+    global dymat = zeros(nt, ne)
+    global dzmat = zeros(nt, ne)
+    # global Dxmat = zeros(nt, ne)
+    # global Dymat = zeros(nt, ne)
+    # global Dzmat = zeros(nt, ne)
+    global Vxmat = zeros(nt, ne)
+    global Vymat = zeros(nt, ne)
+    global Vzmat = zeros(nt, ne)
+    global Wxmat = zeros(nt, ne)
+    global Wymat = zeros(nt, ne)
+    global Wzmat = zeros(nt, ne)
+
+    for i = 1:ne
+        if i<10
+            number = "00$i"
+        elseif i<100
+            number = "0$i"
+        else
+            number = "$i"
+        end
+
+        namedx = "B1N"*number*"_TDxr"
+        namedy = "B1N"*number*"_TDyr"
+        namedz = "B1N"*number*"_TDzr"
+        # namebx = "B1N"*number*"_FxR"
+        # nameby = "B1N"*number*"_FyR"
+        # namebz = "B1N"*number*"_FzR"
+        namevx = "B1N"*number*"_TVxr"
+        namevy = "B1N"*number*"_TVyr"
+        namevz = "B1N"*number*"_TVzr"
+        namewx = "B1N"*number*"_RVxr"
+        namewy = "B1N"*number*"_RVyr"
+        namewz = "B1N"*number*"_RVzr"
+
+        dxmat[:,i] = outs[namedx]
+        dymat[:,i] = outs[namedy]
+        dzmat[:,i] = outs[namedz]
+        # Dxmat[:,i] = outs[namebx]
+        # Dymat[:,i] = outs[nameby]
+        # Dzmat[:,i] = outs[namebz]
+        Vxmat[:,i] = outs[namevx]
+        Vymat[:,i] = outs[namevy]
+        Vzmat[:,i] = outs[namevz]
+        Wxmat[:,i] = outs[namewx]
+        Wymat[:,i] = outs[namewy]
+        Wzmat[:,i] = outs[namewz]
+
+    end
+    readflag = false
+end
+
+azimuth = outs["B1Azimuth"].*(pi/180)
 
 
 assembly = of.make_assembly(edfile, bdfile, bdblade)
 
-E = 1.1e9 #6.83e10 #Young's Modulus
-nu = 0.3 #Poisson's Ratio
-m = 500 #2700.0 #kg/m^3 -> Decreasing the weight decreases the frequency of oscillation
-h = 1.5 # Thickness (meters)
-w = 1.5 # Width (meters)
-mu = 0.01 #Damping ratio
+# E = 1.1e9 #6.83e10 #Young's Modulus
+# nu = 0.3 #Poisson's Ratio
+# m = 500 #2700.0 #kg/m^3 -> Decreasing the weight decreases the frequency of oscillation
+# h = 1.5 # Thickness (meters)
+# w = 1.5 # Width (meters)
+# mu = 0.01 #Damping ratio
 
-G = E/(2*(1+nu))
+# G = E/(2*(1+nu))
 
-A = h*w
-Ay = A
-Az = A
-Iyy = w*h^3/12
-Izz = w^3*h/12
-J = Iyy + Izz
+# A = h*w
+# Ay = A
+# Az = A
+# Iyy = w*h^3/12
+# Izz = w^3*h/12
+# J = Iyy + Izz
 
-compliance = Diagonal([1/(E*A), 1/(G*Ay), 1/(G*Az), 1/(G*J), 1/(E*Iyy), 1/(E*Izz)])
+# compliance = Diagonal([1/(E*A), 1/(G*Ay), 1/(G*Az), 1/(G*J), 1/(E*Iyy), 1/(E*Izz)])
 
-newassembly = Rotors.update_assembly(assembly; compliance=compliance)
+# newassembly = Rotors.update_assembly(assembly; compliance=compliance)
 
-gxhistory = Rotors.simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, fxmat, fymat, Mmat, env, newassembly; verbose=true, speakiter=100, structural_damping=true, linear=false, g=inputfile["Gravity"])
+# Mmat = zero(fymat)
+if !@isdefined(runflag)
+    runflag = true
+end
+
+if runflag
+    gxhistory = Rotors.simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, fxmat, fymat, Mmat, env, assembly; verbose=true, speakiter=100, structural_damping=true, linear=false, g=inputfile["Gravity"])
+    runflag = false
+end
 
     
 
@@ -111,8 +178,9 @@ tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec)]
 tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec)]
 
 
-
-
+Vx1 = [gxhistory[1].points[i].V[1] for i in eachindex(assembly.points)]
+Vy1 = [gxhistory[1].points[i].V[2] for i in eachindex(assembly.points)]
+Vz1 = [gxhistory[1].points[i].V[3] for i in eachindex(assembly.points)]
 
 
 
@@ -127,24 +195,55 @@ using Plots, LaTeXStrings
 
 
 loadplt = plot(xaxis="Radius (m)", yaxis="Distributed Load (N/m)")
-plot!(rvec, fxmat[1,:], lab=L"F_x")
-plot!(rvec, fymat[1,:], lab=L"F_y")
+plot!(rvec, fxmat[end,:], lab=L"F_x")
+plot!(rvec, fymat[end,:], lab=L"F_y")
 # display(loadplt)
 
 
-tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)")
-plot!(tvec, fxmat[:,end], lab=L"F_x")
-plot!(tvec, fymat[:,end], lab=L"F_y")
-plot!(tvec, Mmat[:,end], lab=L"M")
-# display(tiploads)
 
-tipdefs = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", ylims=(-0.1, 0.1))
+tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)")
+plot!(tvec, fxmat[:,end], lab=L"F_x", seriescolor=:blue)
+plot!(tvec, fymat[:,end], lab=L"F_y", seriescolor=:red)
+plot!(tvec, Mmat[:,end], lab=L"M_z", seriescolor=:green)
+# plot!(tvec, Dxmat[:,end], lab=L"D_x", linestyle=:dash)
+# plot!(tvec, Dymat[:,end], lab=L"D_y", linestyle=:dash)
+# plot!(tvec, Dzmat[:,end], lab=L"D_z", linestyle=:dash)
+display(tiploads)
+# savefig("/Users/adamcardoza/Desktop/SimpleTurbineTipLoads.png")
+
+
+tipdefs = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)") #
+plot!(tvec, dxmat[:,end], lab=L"\delta x - OF", linestyle=:dash, seriescolor=:blue)
+plot!(tvec, dymat[:,end], lab=L"\delta y - OF", linestyle=:dash, seriescolor=:red)
+plot!(tvec, dzmat[:,end], lab=L"\delta z - OF", linestyle=:dash, seriescolor=:green)
+# display(tipdefs)
+# savefig("/Users/adamcardoza/Desktop/SimpleTurbineTipDeflections.png")
+
+
+tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)") #
 plot!(tvec, dxmat[:,end], lab=L"\delta x - OF", linestyle=:dash)
 plot!(tvec, dymat[:,end], lab=L"\delta y - OF", linestyle=:dash)
 plot!(tvec, dzmat[:,end], lab=L"\delta z - OF", linestyle=:dash)
-plot!(tvec, -tipdef_x, lab=L"\delta x - GX")
+plot!(tvec, -tipdef_z, lab=L"\delta x - GX")
 plot!(tvec, tipdef_y, lab=L"\delta y - GX")
-plot!(tvec, tipdef_z, lab=L"\delta z - GX")
-display(tipdefs)
+plot!(tvec, tipdef_x, lab=L"\delta z - GX")
+display(tipdefs2)
+
+
+
+# airfoil = readdlm("./simpleturbine/Airfoils/NACA64_A17_coords.txt", skipstart=8)
+
+# chordvec = adblade["BlChord"]
+
+# sections = zeros(3, size(airfoil, 1), length(assembly.points))
+# for ip = eachindex(assembly.points)
+#     chord = chordvec[ip]
+#     sections[1, :, ip] .= 0
+#     sections[2, :, ip] .= chord .* (airfoil[:,1] .- 0.5)
+#     sections[3, :, ip] .= chord .* airfoil[:,2]
+# end
+
+# mkpath("simpleturbine/viz/simpleturbine-simulation")
+# write_vtk("simpleturbine/viz/simpleturbine-simulation/wind-turbine-blade-simulation", assembly, gxhistory[1:2500], tvec[1:2500]; sections = sections)
 
 nothing

@@ -2,9 +2,9 @@
 NREL 5.0 MW offshore baseline aerodynamic input properties.
 ======  General Options  ============================================================================
 false         Echo               - Echo the input to "<rootname>.AD.ech"?  (flag)
-"Default"     DTAero             - Time interval for aerodynamic calculations {or "default"} (s)
-          2   WakeMod            - Type of wake/induction model (switch) {0=none, 1=BEMT, 2=DBEMT} [WakeMod cannot be 2 when linearizing]
-          2   AFAeroMod          - Type of blade airfoil aerodynamics model (switch) {1=steady model, 2=Beddoes-Leishman unsteady model} [AFAeroMod must be 1 when linearizing]
+  "Default"   DTAero             - Time interval for aerodynamic calculations {or "default"} (s)
+          1   WakeMod            - Type of wake/induction model (switch) {0=none, 1=BEMT, 2=DBEMT} [WakeMod cannot be 2 when linearizing]
+          1   AFAeroMod          - Type of blade airfoil aerodynamics model (switch) {1=steady model, 2=Beddoes-Leishman unsteady model} [AFAeroMod must be 1 when linearizing]
           0   TwrPotent          - Type tower influence on wind based on potential flow around the tower (switch) {0=none, 1=baseline potential flow, 2=potential flow with Bak correction}
           0   TwrShadow          - Calculate tower influence on wind based on downstream tower shadow? (flag)
 false         TwrAero            - Calculate tower aerodynamic loads? (flag)
@@ -21,19 +21,19 @@ false         CompAA             - Flag to compute AeroAcoustics calculation [on
      1700.0   Pvap               - Vapour pressure of fluid (Pa) [used only when CavitCheck=True]
 ======  Blade-Element/Momentum Theory Options  ======================================================
           1   SkewMod            - Type of skewed-wake correction model (switch) {1=uncoupled, 2=Pitt/Peters, 3=coupled} [unused when WakeMod=0]
-"Default"     SkewModFactor      - Constant used in Pitt/Peters skewed wake model {or "default" is 15/32*pi} (-) [used only when SkewMod=2; unused when WakeMod=0]
-false          TipLoss            - Use the Prandtl tip-loss model? (flag) [unused when WakeMod=0]
-false          HubLoss            - Use the Prandtl hub-loss model? (flag) [unused when WakeMod=0]
+  "Default"   SkewModFactor      - Constant used in Pitt/Peters skewed wake model {or "default" is 15/32*pi} (-) [used only when SkewMod=2; unused when WakeMod=0]
+false         TipLoss            - Use the Prandtl tip-loss model? (flag) [unused when WakeMod=0]
+false         HubLoss            - Use the Prandtl hub-loss model? (flag) [unused when WakeMod=0]
 true          TanInd             - Include tangential induction in BEMT calculations? (flag) [unused when WakeMod=0]
 true          AIDrag             - Include the drag term in the axial-induction calculation? (flag) [unused when WakeMod=0]
 true          TIDrag             - Include the drag term in the tangential-induction calculation? (flag) [unused when WakeMod=0 or TanInd=FALSE]
-"Default"     IndToler           - Convergence tolerance for BEMT nonlinear solve residual equation {or "default"} (-) [unused when WakeMod=0]
+  "Default"   IndToler           - Convergence tolerance for BEMT nonlinear solve residual equation {or "default"} (-) [unused when WakeMod=0]
         400   MaxIter            - Maximum number of iteration steps (-) [unused when WakeMod=0]
 ======  Dynamic Blade-Element/Momentum Theory Options  ==============================================
           1   DBEMT_Mod          - Type of dynamic BEMT (DBEMT) model {1=constant tau1, 2=time-dependent tau1} (-) [used only when WakeMod=2]
-        4.0   tau1_const         - Time constant for DBEMT (s) [used only when WakeMod=2 and DBEMT_Mod=1]
+          4   tau1_const         - Time constant for DBEMT (s) [used only when WakeMod=2 and DBEMT_Mod=1]
 ======   OLAF -- cOnvecting LAgrangian Filaments (Free Vortex Wake) Theory Options==============================================
-"unused"      OLAFInputFileName  - Aeroacoustics input file
+"unused"      OLAFInputFileName - Input file for OLAF [used only when WakeMod=3]
 ======  Beddoes-Leishman Unsteady Airfoil Aerodynamics Options  =====================================
           2   UAMod              - Unsteady Aero Model Switch (switch) {1=Baseline model (Original), 2=Gonzalez's variant (changes in Cn,Cc,Cm), 3=Minemma/Pierce variant (changes in Cc and Cm)} [used only when AFAeroMod=2]
 true          FLookup            - Flag to indicate whether a lookup for f' will be calculated (TRUE) or whether best-fit exponential equations will be used (FALSE); if FALSE S1-S4 must be provided in airfoil input files (flag) [used only when AFAeroMod=2]
@@ -48,18 +48,18 @@ true          FLookup            - Flag to indicate whether a lookup for f' will
           0   InCol_Cpmin        - The column in the airfoil tables that contains the Cpmin coefficient; use zero if there is no Cpmin column (-)
           8   NumAFfiles         - Number of airfoil files used (-)
 "Airfoils/Cylinder1.dat"   AFNames            - Airfoil file names (NumAFfiles lines) (quoted strings)
-"Airfoils/Cylinder2.dat"
-"Airfoils/DU40_A17.dat"
-"Airfoils/DU35_A17.dat"
-"Airfoils/DU30_A17.dat"
-"Airfoils/DU25_A17.dat"
-"Airfoils/DU21_A17.dat"
-"Airfoils/NACA64_A17.dat"
+"Airfoils/Cylinder2.dat"   
+"Airfoils/DU40_A17.dat"   
+"Airfoils/DU35_A17.dat"   
+"Airfoils/DU30_A17.dat"   
+"Airfoils/DU25_A17.dat"   
+"Airfoils/DU21_A17.dat"   
+"Airfoils/NACA64_A17.dat"   
 ======  Rotor/Blade Properties  =====================================================================
-false          UseBlCm            - Include aerodynamic pitching moment in calculations?  (flag)
-"NREL5MW_adblade.dat"   ADBlFile(1)        - Name of file containing distributed aerodynamic properties for Blade #1 (-)
-"NREL5MW_adblade.dat"   ADBlFile(2)        - Name of file containing distributed aerodynamic properties for Blade #2 (-)
-"NREL5MW_adblade.dat"   ADBlFile(3)        - Name of file containing distributed aerodynamic properties for Blade #3 (-)
+false         UseBlCm            - Include aerodynamic pitching moment in calculations?  (flag)
+"sn5_ADblade.dat"   ADBlFile(1)        - Name of file containing distributed aerodynamic properties for Blade #1 (-)
+"sn5_ADblade.dat"   ADBlFile(2)        - Name of file containing distributed aerodynamic properties for Blade #2 (-)
+"sn5_ADblade.dat"   ADBlFile(3)        - Name of file containing distributed aerodynamic properties for Blade #3 (-)
 ======  Hub Properties  =====================================================================
 0.0           VolHub             - Hub volume (m^3)
 0.0           HubCenBx           - Hub center of buoyancy x direction offset (m)
@@ -87,7 +87,7 @@ true          SumPrint            - Generate a summary file listing input option
           0   NBlOuts             - Number of blade node outputs [0 - 9] (-)
            1   BlOutNd             - Blade nodes whose values will be output  (-)
           0   NTwOuts             - Number of tower node outputs [0 - 9]  (-)
-        1.0,        2.0,        6.0   TwOutNd             - Tower nodes whose values will be output  (-)
+          1,          2,          6   TwOutNd             - Tower nodes whose values will be output  (-)
                    OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
 "B1Azimuth"
 "B2Azimuth"
@@ -95,7 +95,7 @@ true          SumPrint            - Generate a summary file listing input option
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)
 ---------------------- NODE OUTPUTS --------------------------------------------
           1   BldNd_BladesOut  - Blades to output
-         99   BldNd_BlOutNd    - Blade nodes on each blade (currently unused)
+"99.0"         BldNd_BlOutNd       - Future feature will allow selecting a portion of the nodes to output.  Not implemented yet. (-)
                    OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
 "Fx"
 "Fy"

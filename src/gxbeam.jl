@@ -49,6 +49,98 @@ function update_assembly(assembly; compliance=nothing, stiffness=nothing)
 
 end
 
+"""
+    interpolate_matrix_symmetric(f1, f2, Kmat)
+Interpolate a set of symmetric matrices from one vector of fractions to any number of new fractions.
+
+### Inputs
+- f1::Vector{Float64}: The fractional locations of the original stiffness matrices.
+- f2::Vector{Float64}: The fractional locations of the new stiffness matrices.
+- Kmat::Array{Float64, 3}: The stiffness matrices at the original locations.
+
+### Outputs
+- Kfit::Array{Float64, 3}: The stiffness matrices at the new locations.
+"""
+function interpolate_matrix_symmetric(f1, f2, Kmat; fit=Linear)
+    if length(f1)!=size(Kmat, 3)
+        error("interpolate_stiffness(): The number of f1 points and stiffness matrices must be the same.")
+    end
+
+    K11fit = fit(f1, Kmat[1,1,:])
+    K12fit = fit(f1, Kmat[1,2,:])
+    K13fit = fit(f1, Kmat[1,3,:])
+    K14fit = fit(f1, Kmat[1,4,:])
+    K15fit = fit(f1, Kmat[1,5,:])
+    K16fit = fit(f1, Kmat[1,6,:])
+
+    K22fit = fit(f1, Kmat[2,2,:])
+    K23fit = fit(f1, Kmat[2,3,:])
+    K24fit = fit(f1, Kmat[2,4,:])
+    K25fit = fit(f1, Kmat[2,5,:])
+    K26fit = fit(f1, Kmat[2,6,:])
+
+    K33fit = fit(f1, Kmat[3,3,:])
+    K34fit = fit(f1, Kmat[3,4,:])
+    K35fit = fit(f1, Kmat[3,5,:])
+    K36fit = fit(f1, Kmat[3,6,:])
+
+    K44fit = fit(f1, Kmat[4,4,:])
+    K45fit = fit(f1, Kmat[4,5,:])
+    K46fit = fit(f1, Kmat[4,6,:])
+
+    K55fit = fit(f1, Kmat[5,5,:])
+    K56fit = fit(f1, Kmat[5,6,:])
+
+    K66fit = fit(f1, Kmat[6,6,:])
+
+    Kfit = zeros(6,6,length(f2))
+    for i in eachindex(f2)
+        Kfit[1,1,i] = K11fit(f2[i])
+        Kfit[1,2,i] = K12fit(f2[i])
+        Kfit[1,3,i] = K13fit(f2[i])
+        Kfit[1,4,i] = K14fit(f2[i])
+        Kfit[1,5,i] = K15fit(f2[i])
+        Kfit[1,6,i] = K16fit(f2[i])
+
+        Kfit[2,1,i] = K12fit(f2[i])
+        Kfit[2,2,i] = K22fit(f2[i])
+        Kfit[2,3,i] = K23fit(f2[i])
+        Kfit[2,4,i] = K24fit(f2[i])
+        Kfit[2,5,i] = K25fit(f2[i])
+        Kfit[2,6,i] = K26fit(f2[i])
+
+        Kfit[3,1,i] = K13fit(f2[i])
+        Kfit[3,2,i] = K23fit(f2[i])
+        Kfit[3,3,i] = K33fit(f2[i])
+        Kfit[3,4,i] = K34fit(f2[i])
+        Kfit[3,5,i] = K35fit(f2[i])
+        Kfit[3,6,i] = K36fit(f2[i])
+
+        Kfit[4,1,i] = K14fit(f2[i])
+        Kfit[4,2,i] = K24fit(f2[i])
+        Kfit[4,3,i] = K34fit(f2[i])
+        Kfit[4,4,i] = K44fit(f2[i])
+        Kfit[4,5,i] = K45fit(f2[i])
+        Kfit[4,6,i] = K46fit(f2[i])
+
+        Kfit[5,1,i] = K15fit(f2[i])
+        Kfit[5,2,i] = K25fit(f2[i])
+        Kfit[5,3,i] = K35fit(f2[i])
+        Kfit[5,4,i] = K45fit(f2[i])
+        Kfit[5,5,i] = K55fit(f2[i])
+        Kfit[5,6,i] = K56fit(f2[i])
+
+        Kfit[6,1,i] = K16fit(f2[i])
+        Kfit[6,2,i] = K26fit(f2[i])
+        Kfit[6,3,i] = K36fit(f2[i])
+        Kfit[6,4,i] = K46fit(f2[i])
+        Kfit[6,5,i] = K56fit(f2[i])
+        Kfit[6,6,i] = K66fit(f2[i])
+    end
+
+    return Kfit
+end
+
 function pane_assembly(assembly; ne=nothing, verbose::Bool=false, fit=Linear)
     if isnothing(ne)
         return assembly
@@ -205,7 +297,7 @@ function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
 end
 
 
-function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, rgx, rhub, rtip)
+function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, assembly)
     # Fzfit = Linear(vcat(rhub, rvec, rtip), vcat(0, -Fx, 0) ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
     # Fyfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Fy, 0))
     # Mxfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Mx, 0))
@@ -214,16 +306,25 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, rgx, rhub, rtip)
     Fyfit = Linear(rvec, Fy)  
     Mxfit = Linear(rvec, Mx)
 
-    f_follower = @SVector zeros(3)
-    # m = @SVector zeros(3)
-    m_follower = @SVector zeros(3)
+    # f_follower = @SVector zeros(3)
+    # # m = @SVector zeros(3)
+    # m_follower = @SVector zeros(3)
     
-    for ielem = eachindex(rgx)
+    # for ielem = eachindex(rgx)
         
-        f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem])) #Using GXBeam's internal damping
-        m = SVector(0.0, 0.0, Mxfit(rgx[ielem]))
-        distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
+    #     f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem])) #Using GXBeam's internal damping
+    #     m = SVector(Mxfit(rgx[ielem]), 0.0, 0.0)
+    #     distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
+    # end
+
+
+    for ielem = eachindex(assembly.elements)
+        r1 = assembly.points[ielem][1] #Todo: I want a vector of just lengths, of the points. Not just the X distance. 
+        r2 = assembly.points[ielem+1][1]
+        # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit((1-s)*r1 + s*r2), fz = (s) -> Fzfit((1-s)*r1 + s*r2), mx = (s) -> Mxfit((1-s)*r1 + s*r2))
+        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), mx = (s) -> Mxfit(s), s1=r1, s2=r2)
     end
+
 end
 
 
@@ -236,7 +337,6 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
 
 
     ### Initialization information
-    na = length(rvec)
     nt = length(tvec)
 
     t0 = tvec[1]
@@ -251,38 +351,39 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
     # Fyfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Fy[1,:], 0))  #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? 
     # Mxfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Mx[1,:], 0))
 
-    Fzfit = Linear(rvec, -Fx[1,:]) 
-    Fyfit = Linear(rvec, Fy[1,:])  
-    Mxfit = Linear(rvec, Mx[1,:])
+    # Fzfit = Linear(rvec, -Fx[1,:]) 
+    # Fyfit = Linear(rvec, Fy[1,:])  
+    # Mxfit = Linear(rvec, -Mx[1,:])
 
     nelem = length(assembly.elements)
     rgx = [assembly.elements[i].x[1] for i in 1:nelem]
+    rgxp = [assembly.points[i][1] for i in eachindex(assembly.points)]
 
     distributed_loads = Dict{Int64, GXBeam.DistributedLoads{eltype(rvec)}}()
-    f_follower = @SVector zeros(3)
-    # m = @SVector zeros(3)
-    m_follower = @SVector zeros(3)
+    update_forces!(distributed_loads, Fx[1,:], Fy[1,:], Mx[1,:], rvec, assembly)
+    # f_follower = @SVector zeros(3) #Todo: Should I be applying a follower force instead of a dead load?
+    # # m = @SVector zeros(3)
+    # m_follower = @SVector zeros(3)
 
-    #Todo. I'm not including gravitational loads here.
-    #Todo. I need to add moment loads.  
-    for ielem = 1:nelem #Iterate through the elements and apply the distributed load at every element.  
-        f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem]))
-        m = SVector(0.0, 0.0, Mxfit(rgx[ielem])) 
-        distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
-    end 
+    # #Todo. I'm not including gravitational loads here.
+    # #Todo. I need to add moment loads.  
+    # for ielem = 1:nelem #Iterate through the elements and apply the distributed load at every element.  
+    #     f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem]))
+    #     m = SVector(Mxfit(rgx[ielem]), 0.0, 0.0) 
+    #     distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
+    # end 
 
 
 
     ### Prepare GXBeam inputs  
-    Omega = SVector(0.0, 0.0, -env.RS(t0))
+    Omega = SVector(0.0, 0.0, -env.RS(t0)) #Todo: This might be spinning the wrong way. 
     gravity0 = SVector(g*sin(azimuth0), -g*cos(azimuth0), 0.0)
     prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed
-
-
+    u0 = [SVector(0.0, -rgxp[i]*env.RS(t0), 0.0) for i in eachindex(assembly.points)]
 
 
     ### GXBeam initial solution #TODO: I might make it an option to initialize from rest, or from steady state at the intial conditions (as current). #Todo: This might be making a large difference, might need to simulate from rest. 
-    system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:2]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega, gravity=gravity0) 
+    system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:2]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega, gravity=gravity0, u0) 
 
     # gxhistory[1] = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
     gxhistory[1] = history0[end]
@@ -299,7 +400,7 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
 
         ### Update GXBeam loads #Todo. This is also not accounting for gravitational loads. 
         ##Todo: Does GXBeam account for actual angular movement when keeping the states and what not? Does it integrate and find the new position? -> i.e. changing the gravity. 
-        update_forces!(distributed_loads, Fx[i,:], Fy[i,:], Mx[i,:], rvec, rgx, rhub, rtip) #Todo: I'm not confident that the time step that I'm passing this will be correct. 
+        update_forces!(distributed_loads, Fx[i,:], Fy[i,:], Mx[i,:], rvec, assembly) #Todo: I'm not confident that the time step that I'm passing this will be correct. 
 
         Omega = SVector(0.0, 0.0, -env.RS(tvec[i]))
         gravity = SVector(g*sin(azimuth[i]), -g*cos(azimuth[i]), 0.0)

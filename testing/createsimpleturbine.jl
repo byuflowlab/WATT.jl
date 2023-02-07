@@ -23,7 +23,7 @@ dt_out = "\"default\""
 density = 1.225 #density (kg/m^3)
 kinvisc = 1.5 #Kinematic Viscosity (m^2/s)
 a = 335 #Speed of Sound (m/s)
-gravity = 9.81 #Gravity (m/s^2)
+gravity = 0.0 #9.81 #Gravity (m/s^2)
 
 Uinf = 10 #Freestream velocity (m/s)
 patm = 101325 #Atmospheric pressure (Pa)
@@ -52,12 +52,12 @@ rvec = collect(rhub:.1:rtip)
 n = length(rvec)
 
 chordvec = 0.25*ones(n)
-twistvec = zeros(n)
+twistvec = -ones(n).*3.0  #zeros(n)
 AFID = ones(n)
 
 E = 1.1e9 #6.83e10 #Young's Modulus
 nu = 0.3 #Poisson's Ratio
-m = 500 #2700.0 #kg/m^3 -> Decreasing the weight decreases the frequency of oscillation
+m = 10.0 #2700.0 #kg/m^3 -> Decreasing the weight decreases the frequency of oscillation
 h = 1.5 # Thickness (meters)
 w = 1.5 # Width (meters)
 mu = 0.01 #Damping ratio
@@ -70,7 +70,7 @@ K = of.stiffness_matrix(E, nu, h*w, Ix, Iy) #Stiffness matrix
 
 l = rvec[2]-rvec[1] # Element length
 
-dm = m*l #Distributed mass of the section 
+dm = m*w*h #Distributed mass of the section #TODO: Dr. Ning suggested setting this to zero to simplify terms.  
 Mix = dm*Ix #Mass moment of inertia
 Miy = dm*Iy
 M = of.mass_matrix(dm, Mix, Miy)
@@ -129,7 +129,9 @@ let
 
     #### AD Blade file
     adblade["NumBlNds"] = n
-    adblade["BlSpn"] = rvec .- rhub
+    rtemp = rvec .- rhub 
+    rtemp[end] = rtemp[end] - 0.0001
+    adblade["BlSpn"] = rtemp
     adblade["BlCrvAC"] = zeros(n)
     adblade["BlSwpAC"] = zeros(n)
     adblade["BlCrvAng"] = zeros(n)
@@ -210,7 +212,8 @@ let
     inflowwind["NWindVel"] = 0
     inflowwind["HWindSpeed"] = Uinf
     inflowwind["RefHt"] = hubht
-    inflowwind["PLExp"] = plexp
+    inflowwind["PLexp"] = plexp
+
 
 
 

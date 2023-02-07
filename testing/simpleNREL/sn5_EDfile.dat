@@ -82,10 +82,10 @@ false         PtfmYDOF    - Platform yaw rotation DOF (flag)
         0.0   PtfmPIner   - Platform inertia for pitch tilt rotation about the platform CM (kg m^2)
         0.0   PtfmYIner   - Platform inertia for yaw rotation about the platform CM (kg m^2)
 ---------------------- BLADE ---------------------------------------------------
-         49   BldNodes    - Number of blade nodes (per blade) used for analysis (-)
-"NREL5MW_EDblade.dat"                 BldFile(1)  - Name of file containing properties for blade 1 (quoted string)
-"NREL5MW_EDblade.dat"                 BldFile(2)  - Name of file containing properties for blade 2 (quoted string)
-"NREL5MW_EDblade.dat"                 BldFile(3)  - Name of file containing properties for blade 3 (quoted string) [unused for 2 blades]
+       49.0   BldNodes    - Number of blade nodes (per blade) used for analysis (-)
+"sn5_BDblade.dat"                     BldFile(1)  - Name of file containing properties for blade 1 (quoted string)
+"sn5_BDblade.dat"                     BldFile(2)  - Name of file containing properties for blade 2 (quoted string)
+"sn5_BDblade.dat"                     BldFile(3)  - Name of file containing properties for blade 3 (quoted string) [unused for 2 blades]
 ______________________ ROTOR-TEETER --------------------------------------------
           0   TeetMod     - Rotor-teeter spring/damper model {0: none, 1: standard, 2: user-defined from routine UserTeet} (switch) [unused for 3 blades]
         0.0   TeetDmpP    - Rotor-teeter damper position (degrees) [used only for 2 blades and when TeetMod=1]
@@ -102,25 +102,25 @@ ______________________ ROTOR-TEETER --------------------------------------------
     6.215e6   DTTorDmp    - Drivetrain torsional damper (N-m/(rad/s))
 ---------------------- FURLING -------------------------------------------------
 false         Furling     - Read in additional model properties for furling turbine (flag) [must currently be FALSE)
-unused        FurlFile    - Name of file containing furling properties (quoted string) [unused when Furling=False]
+"unused"                              FurlFile    - Name of file containing furling properties (quoted string) [unused when Furling=False]
 ---------------------- TOWER ---------------------------------------------------
          20   TwrNodes    - Number of tower nodes used for analysis (-)
-"NREL5MW_EDtower.dat"   TwrFile     - Name of file containing tower properties (quoted string)
+"sn5_EDtower.dat"                     TwrFile     - Name of file containing tower properties (quoted string)
 ---------------------- OUTPUT --------------------------------------------------
 true          SumPrint    - Print summary data to "<RootName>.sum" (flag)
           1   OutFile     - Switch to determine where output will be placed: {1: in module output file only; 2: in glue code output file only; 3: both} (currently unused)
 true         TabDelim    - Use tab delimiters in text tabular output file? (flag) (currently unused)
 "ES10.3E2"    OutFmt      - Format used for text tabular output (except time).  Resulting field should be 10 characters. (quoted string) (currently unused)
         0.0   TStart      - Time to begin tabular output (s) (currently unused)
-          1   DecFact     - Decimation factor for tabular output {1: output every time step} (-) (currently unused)
-          0   NTwGages    - Number of tower nodes that have strain gages for output [0 to 9] (-)
+        1.0   DecFact     - Decimation factor for tabular output {1: output every time step} (-) (currently unused)
+        0.0   NTwGages    - Number of tower nodes that have strain gages for output [0 to 9] (-)
           0   TwrGagNd    - List of tower nodes that have strain gages [1 to TwrNodes] (-) [unused if NTwGages=0]
-          0   NBlGages    - Number of blade nodes that have strain gages for output [0 to 9] (-)
+        0.0   NBlGages    - Number of blade nodes that have strain gages for output [0 to 9] (-)
           0   BldGagNd    - List of blade nodes that have strain gages [1 to BldNodes] (-) [unused if NBlGages=0]
               OutList     - The next line(s) contains a list of output parameters.  See OutListParameters.xlsx for a listing of available output channels, (-)
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)
 ---------------------- NODE OUTPUTS --------------------------------------------
-          1   BldNd_BladesOut  - Blades to output
-          3   BldNd_BlOutNd    - Blade nodes on each blade (currently unused)
+               1   BldNd_BladesOut  - Blades to output
+        3.0   BldNd_BlOutNd - Blade nodes on each blade (currently unused)
                    OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)

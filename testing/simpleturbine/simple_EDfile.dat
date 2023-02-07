@@ -123,7 +123,4 @@ END of input file (the word "END" must appear in the first 3 columns of this las
                1   BldNd_BladesOut  - Blades to output
         3.0   BldNd_BlOutNd - Blade nodes on each blade (currently unused)
                    OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
-"UxB"      
-"UyB"      
-"UzB"      
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)

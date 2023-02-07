@@ -92,8 +92,9 @@ True          SumPrint       - Print summary data to "<RootName>.sum" (flag)
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)
 ---------------------- NODE OUTPUTS --------------------------------------------
           1   BldNd_BladesOut  - Blades to output
-          3   - Blade nodes on each blade (currently unused)
+          3   BldNd_BlOutNd    - Blade nodes on each blade (currently unused)
 "TDxr"                   OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
 "TDyr"
 "TDzr"
+"AbsXg, AbsYg, AbsZg"
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)

@@ -5,3 +5,5 @@
 *.ech
 *.sum.yaml
 docs/build/
+*.vtu
+*.pvd

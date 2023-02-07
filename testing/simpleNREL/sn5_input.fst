@@ -1,11 +1,11 @@
 ------- OpenFAST example INPUT FILE -------------------------------------------
-A simple wind turbine for validating Rotors.jl
+FAST Certification Test #26: NREL 5.0 MW Baseline Wind Turbine (Onshore)
 ---------------------- SIMULATION CONTROL --------------------------------------
 True       Echo            - Echo input data to <RootName>.ech (flag)
 "FATAL"       AbortLevel      - Error level when simulation should abort (string) {"WARNING", "SEVERE", "FATAL"}
-2.0           TMax            - Total run time (s)
-0.0002        DT              - Recommended module time step (s)
-1             InterpOrder     - Interpolation order for input/output time history (-) {1=linear, 2=quadratic}
+10.0          TMax            - Total run time (s)
+0.001         DT              - Recommended module time step (s)
+2             InterpOrder     - Interpolation order for input/output time history (-) {1=linear, 2=quadratic}
 0             NumCrctn        - Number of correction iterations (-) {0=explicit calculation, i.e., no corrections}
 99999.0       DT_UJac         - Time between calls to get Jacobians (s)
 1.0e6         UJacSclFact     - Scaling factor used in Jacobians (-)
@@ -24,18 +24,18 @@ True       Echo            - Echo input data to <RootName>.ech (flag)
 1.225         AirDens         - Air density (kg/m^3)
 0.0           WtrDens         - Water density (kg/m^3)
 1.5           KinVisc         - Kinematic viscosity of working fluid (m^2/s)
-335           SpdSound        - Speed of sound in working fluid (m/s)
-101325        Patm            - Atmospheric pressure (Pa) [used only for an MHK turbine cavitation check]
+335.0         SpdSound        - Speed of sound in working fluid (m/s)
+101325.0      Patm            - Atmospheric pressure (Pa) [used only for an MHK turbine cavitation check]
 2000.0        Pvap            - Vapour pressure of working fluid (Pa) [used only for an MHK turbine cavitation check]
 0.0           WtrDpth         - Water depth (m)
 0.0           MSL2SWL         - Offset between still-water level and mean sea level (m) [positive upward]
 ---------------------- INPUT FILES ---------------------------------------------
-"simple_EDfile.dat"   EDFile      - ElastoDyn input file (string)
-"simple_BDfile.dat"   BDBldFile(1)    - Name of file containing BeamDyn input parameters for blade 1 (quoted string)
-"simple_BDfile.dat"   BDBldFile(2)    - Name of file containing BeamDyn input parameters for blade 1 (quoted string)
-"simple_BDfile.dat"   BDBldFile(3)    - Name of file containing BeamDyn input parameters for blade 1 (quoted string)
-"simple_inflowwind.dat"   InflowFile      - Inflow wind file (string)
-"simple_ADfile.dat"   AeroFile        - AeroDyn input file (string)
+"sn5_EDfile.dat"   EDFile      - ElastoDyn input file (string)
+"sn5_BDfile.dat"   BDBldFile(1)    - Name of file containing BeamDyn input parameters for blade 1 (quoted string)
+"sn5_BDfile.dat"   BDBldFile(2)    - Name of file containing BeamDyn input parameters for blade 1 (quoted string)
+"sn5_BDfile.dat"   BDBldFile(3)    - Name of file containing BeamDyn input parameters for blade 1 (quoted string)
+"sn5_inflowwind.dat"   InflowFile      - Inflow wind file (string)
+"sn5_ADfile.dat"   AeroFile        - AeroDyn input file (string)
 "unused"   ServoFile       - ServoDyn input file (string)
 "unused"   HydroFile       - HydroDyn input file (string)
 "unused"   SubFile         - SubDyn input file (string)
