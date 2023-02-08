@@ -14,6 +14,17 @@ of = OpenFASTsr
 path = dirname(@__FILE__)
 cd(path)
 
+### Read in OpenFAST files
+ofpath = "../OpenFAST_NREL5MW/" 
+inputfile = of.read_inputfile("NREL5MW_input.fst", ofpath)
+inflowwind = of.read_inflowwind("NREL5MW_inflowwind.dat", ofpath)
+# addriver = of.read_addriver("NREL5MW_ADdriver.inp", ofpath)
+adfile = of.read_adfile("NREL5MW_ADfile.dat", ofpath)
+adblade = of.read_adblade("NREL5MW_ADblade.dat", ofpath)
+edfile = of.read_edfile("NREL5MW_edfile.dat", ofpath)
+bdfile = of.read_bdfile("NREL5MW_bdfile.dat", ofpath)
+bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
+
 ### Simulation control
 tmax = 10.0
 dt = 0.001
@@ -47,7 +58,7 @@ overhang = -1
 rhub = 1.5 #Hub radius
 rtip = 63.0 #Tip radius
 
-# rvec = collect(rhub:.1:rtip)
+rvec = adblade["BlSpn"] .+ rhub
 
 # n = length(rvec)
 
@@ -91,16 +102,7 @@ Miy = dm*Iy
 M = of.mass_matrix(dm, Mix, Miy)
 
 
-### Read in OpenFAST files
-ofpath = "../OpenFAST_NREL5MW/" 
-inputfile = of.read_inputfile("NREL5MW_input.fst", ofpath)
-inflowwind = of.read_inflowwind("NREL5MW_inflowwind.dat", ofpath)
-# addriver = of.read_addriver("NREL5MW_ADdriver.inp", ofpath)
-adfile = of.read_adfile("NREL5MW_ADfile.dat", ofpath)
-adblade = of.read_adblade("NREL5MW_ADblade.dat", ofpath)
-edfile = of.read_edfile("NREL5MW_edfile.dat", ofpath)
-bdfile = of.read_bdfile("NREL5MW_bdfile.dat", ofpath)
-bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
+
 
 inflowfile = 0
 

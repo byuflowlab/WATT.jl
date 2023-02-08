@@ -1,4 +1,4 @@
-using OpenFASTsr, DelimitedFiles, GXBeam, Rotors, LinearAlgebra
+using OpenFASTsr, DelimitedFiles, GXBeam, Rotors, LinearAlgebra, StaticArrays
 
 of = OpenFASTsr
 
@@ -79,7 +79,7 @@ if readflag
 
         fxmat[:,i] = outs[namex]
         fymat[:,i] = outs[namey]
-        # Mmat[:,i] = outs[namem]
+        Mmat[:,i] = outs[namem]
         # alphamat[:,i] = outs[namealpha]
     end
 
@@ -160,90 +160,26 @@ assembly = of.make_assembly(edfile, bdfile, bdblade)
 
 # newassembly = Rotors.update_assembly(assembly; compliance=compliance)
 
-# Mmat = zero(fymat)
-if !@isdefined(runflag)
-    runflag = true
-end
+t0 = tvec[1]
+g=inputfile["Gravity"]
+azimuth0 = azimuth[1]
 
-if runflag
-    gxhistory = Rotors.simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, fxmat, fymat, Mmat, env, assembly; verbose=true, speakiter=100, structural_damping=true, linear=false, g=inputfile["Gravity"])
-    runflag = false
-end
+distributed_loads = Dict{Int64, GXBeam.DistributedLoads{eltype(rvec)}}()
+Rotors.update_forces!(distributed_loads, fxmat[1,:], fymat[1,:], Mmat[1,:], rvec, assembly)
 
+
+Omega = SVector(0.0, 0.0, -env.RS(t0)) #Todo: This might be spinning the wrong way. 
+gravity0 = SVector(g*sin(azimuth0), -g*cos(azimuth0), 0.0)
+prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed
+# V0 = [SVector(0.0, -rgxp[i]*env.RS(t0), 0.0) for i in eachindex(assembly.points)]
+
+
+system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:1]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0) 
     
 
-#Tip deflections
-tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec)]
-tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec)]
-tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec)]
+Vtot = getproperty.(history0[1].points, :V)
+Vy = [Vtot[i][2] for i in eachindex(Vtot)]
 
 
-Vx1 = [gxhistory[1].points[i].V[1] for i in eachindex(assembly.points)]
-Vy1 = [gxhistory[1].points[i].V[2] for i in eachindex(assembly.points)]
-Vz1 = [gxhistory[1].points[i].V[3] for i in eachindex(assembly.points)]
-
-
-
-
-
-
-
-
-
-using Plots, LaTeXStrings
-
-
-
-loadplt = plot(xaxis="Radius (m)", yaxis="Distributed Load (N/m)")
-plot!(rvec, fxmat[end,:], lab=L"F_x")
-plot!(rvec, fymat[end,:], lab=L"F_y")
-# display(loadplt)
-
-
-
-tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)")
-plot!(tvec, fxmat[:,end], lab=L"F_x", seriescolor=:blue)
-plot!(tvec, fymat[:,end], lab=L"F_y", seriescolor=:red)
-plot!(tvec, Mmat[:,end], lab=L"M_z", seriescolor=:green)
-# plot!(tvec, Dxmat[:,end], lab=L"D_x", linestyle=:dash)
-# plot!(tvec, Dymat[:,end], lab=L"D_y", linestyle=:dash)
-# plot!(tvec, Dzmat[:,end], lab=L"D_z", linestyle=:dash)
-display(tiploads)
-# savefig("/Users/adamcardoza/Desktop/SimpleTurbineTipLoads.png")
-
-
-tipdefs = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)") #
-plot!(tvec, dxmat[:,end], lab=L"\delta x - OF", linestyle=:dash, seriescolor=:blue)
-plot!(tvec, dymat[:,end], lab=L"\delta y - OF", linestyle=:dash, seriescolor=:red)
-plot!(tvec, dzmat[:,end], lab=L"\delta z - OF", linestyle=:dash, seriescolor=:green)
-# display(tipdefs)
-# savefig("/Users/adamcardoza/Desktop/SimpleTurbineTipDeflections.png")
-
-
-tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)") #
-plot!(tvec, dxmat[:,end], lab=L"\delta x - OF", linestyle=:dash)
-plot!(tvec, dymat[:,end], lab=L"\delta y - OF", linestyle=:dash)
-plot!(tvec, dzmat[:,end], lab=L"\delta z - OF", linestyle=:dash)
-plot!(tvec, -tipdef_z, lab=L"\delta x - GX")
-plot!(tvec, tipdef_y, lab=L"\delta y - GX")
-plot!(tvec, tipdef_x, lab=L"\delta z - GX")
-display(tipdefs2)
-
-
-
-# airfoil = readdlm("./simpleturbine/Airfoils/NACA64_A17_coords.txt", skipstart=8)
-
-# chordvec = adblade["BlChord"]
-
-# sections = zeros(3, size(airfoil, 1), length(assembly.points))
-# for ip = eachindex(assembly.points)
-#     chord = chordvec[ip]
-#     sections[1, :, ip] .= 0
-#     sections[2, :, ip] .= chord .* (airfoil[:,1] .- 0.5)
-#     sections[3, :, ip] .= chord .* airfoil[:,2]
-# end
-
-# mkpath("simpleturbine/viz/simpleturbine-simulation")
-# write_vtk("simpleturbine/viz/simpleturbine-simulation/wind-turbine-blade-simulation", assembly, gxhistory[1:2500], tvec[1:2500]; sections = sections)
 
 nothing

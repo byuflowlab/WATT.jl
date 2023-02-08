@@ -302,6 +302,9 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, assembly)
     # Fyfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Fy, 0))
     # Mxfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Mx, 0))
 
+    # @show length(rvec)
+    # @show length(Fx)
+
     Fzfit = Linear(rvec, -Fx) 
     Fyfit = Linear(rvec, Fy)  
     Mxfit = Linear(rvec, Mx)
@@ -322,6 +325,7 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, assembly)
         r1 = assembly.points[ielem][1] #Todo: I want a vector of just lengths, of the points. Not just the X distance. 
         r2 = assembly.points[ielem+1][1]
         # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit((1-s)*r1 + s*r2), fz = (s) -> Fzfit((1-s)*r1 + s*r2), mx = (s) -> Mxfit((1-s)*r1 + s*r2))
+        # @show r1, r2
         distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), mx = (s) -> Mxfit(s), s1=r1, s2=r2)
     end
 
@@ -379,11 +383,13 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
     Omega = SVector(0.0, 0.0, -env.RS(t0)) #Todo: This might be spinning the wrong way. 
     gravity0 = SVector(g*sin(azimuth0), -g*cos(azimuth0), 0.0)
     prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed
-    u0 = [SVector(0.0, -rgxp[i]*env.RS(t0), 0.0) for i in eachindex(assembly.points)]
+    # V0 = [SVector(0.0, -rgxp[i]*env.RS(t0), 0.0) for i in eachindex(assembly.points)]
 
 
     ### GXBeam initial solution #TODO: I might make it an option to initialize from rest, or from steady state at the intial conditions (as current). #Todo: This might be making a large difference, might need to simulate from rest. 
-    system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:2]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega, gravity=gravity0, u0) 
+    # system, converged = 
+    # system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:2]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0, steady=false) 
+    system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:1]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0) 
 
     # gxhistory[1] = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
     gxhistory[1] = history0[end]
@@ -393,7 +399,7 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
 
 
     ### Iterate through time 
-    for i = 2:nt-1 #Todo: I need to change how I'm doing this for this to work with what I'm doing. 
+    for i = 1:nt-1 #Todo: I need to change how I'm doing this for this to work with what I'm doing. 
         t = tvec[i]
 
 
