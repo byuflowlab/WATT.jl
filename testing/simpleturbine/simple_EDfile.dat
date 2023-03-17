@@ -30,7 +30,7 @@ false         PtfmYDOF    - Platform yaw rotation DOF (flag)
         0.0   BlPitch(3)  - Blade 3 initial pitch (degrees) [unused for 2 blades]
         0.0   TeetDefl    - Initial or fixed teeter angle (degrees) [unused for 3 blades]
         0.0   Azimuth     - Initial azimuth angle for blade 1 (degrees)
-         50   RotSpeed    - Initial or fixed rotor speed (rpm)
+          6   RotSpeed    - Initial or fixed rotor speed (rpm)
         0.0   NacYaw      - Initial or fixed nacelle-yaw angle (degrees)
         0.0   TTDspFA     - Initial fore-aft tower-top displacement (meters)
         0.0   TTDspSS     - Initial side-to-side tower-top displacement (meters)
@@ -42,7 +42,7 @@ false         PtfmYDOF    - Platform yaw rotation DOF (flag)
         0.0   PtfmYaw     - Initial or fixed yaw rotational displacement of platform (degrees)
 ---------------------- TURBINE CONFIGURATION -----------------------------------
           3   NumBl       - Number of blades (-)
-       10.0   TipRad      - The distance from the rotor apex to the blade tip (meters)
+      100.0   TipRad      - The distance from the rotor apex to the blade tip (meters)
         1.0   HubRad      - The distance from the rotor apex to the blade root (meters)
         0.0   PreCone(1)  - Blade 1 cone angle (degrees)
         0.0   PreCone(2)  - Blade 2 cone angle (degrees)
@@ -82,7 +82,7 @@ false         PtfmYDOF    - Platform yaw rotation DOF (flag)
         0.0   PtfmPIner   - Platform inertia for pitch tilt rotation about the platform CM (kg m^2)
         0.0   PtfmYIner   - Platform inertia for yaw rotation about the platform CM (kg m^2)
 ---------------------- BLADE ---------------------------------------------------
-         91   BldNodes    - Number of blade nodes (per blade) used for analysis (-)
+        100   BldNodes    - Number of blade nodes (per blade) used for analysis (-)
 "simple_BDblade.dat"                  BldFile(1)  - Name of file containing properties for blade 1 (quoted string)
 "simple_BDblade.dat"                  BldFile(2)  - Name of file containing properties for blade 2 (quoted string)
 "simple_BDblade.dat"                  BldFile(3)  - Name of file containing properties for blade 3 (quoted string) [unused for 2 blades]
@@ -114,9 +114,9 @@ true         TabDelim    - Use tab delimiters in text tabular output file? (flag
         0.0   TStart      - Time to begin tabular output (s) (currently unused)
         1.0   DecFact     - Decimation factor for tabular output {1: output every time step} (-) (currently unused)
         0.0   NTwGages    - Number of tower nodes that have strain gages for output [0 to 9] (-)
-          1   TwrGagNd    - List of tower nodes that have strain gages [1 to TwrNodes] (-) [unused if NTwGages=0]
+          0   TwrGagNd    - List of tower nodes that have strain gages [1 to TwrNodes] (-) [unused if NTwGages=0]
         0.0   NBlGages    - Number of blade nodes that have strain gages for output [0 to 9] (-)
-          1   BldGagNd    - List of blade nodes that have strain gages [1 to BldNodes] (-) [unused if NBlGages=0]
+          0   BldGagNd    - List of blade nodes that have strain gages [1 to BldNodes] (-) [unused if NBlGages=0]
               OutList     - The next line(s) contains a list of output parameters.  See OutListParameters.xlsx for a listing of available output channels, (-)
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)
 ---------------------- NODE OUTPUTS --------------------------------------------

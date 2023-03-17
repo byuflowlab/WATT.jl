@@ -48,17 +48,17 @@ hubht = addriver["HubHt(1)"]
  
 
 ## Turbine Control variables
-pitch = addriver["Pitch"][1]
+pitch = addriver["Pitch_mat"][1]
 precone = addriver["Precone(1)"]*pi/180 #0.0 #2.5*pi/180 #TODO: !!!! I need to work in a way to include precone
-yaw = addriver["Yaw"][1]*(pi/180) # 0.0*pi/180
+yaw = addriver["Yaw_mat"][1]*(pi/180) # 0.0*pi/180
 tilt = addriver["ShftTilt(1)"]*(pi/180) #0.0 #5.0*pi/180
 azimuth = 0.0
 
 ## Environmental variables
-vinf = addriver["HWndSpeed"][1] #10.0
+vinf = addriver["HWndSpeed_mat"][1] #10.0
 # tsr = 7.55
 # rotorR = rtip*cos(precone)
-rpm = addriver["RotSpd"][1]
+rpm = addriver["RotSpd_mat"][1]
 omega = rpm*(2*pi)/60 #vinf*tsr/rotorR
 
 rho = addriver["FldDens"] #1.225
@@ -108,8 +108,8 @@ dsmodelinit = Rotors.BeddoesLeishman()
 
 
 #### Define solution
-tspan = (0.0, addriver["Tmax"][1]) #(0.0, 0.02) #
-dt = addriver["dT"][1] #0.01
+tspan = (0.0, addriver["Tmax_mat"][1]) #(0.0, 0.02) #
+dt = addriver["dT_mat"][1] #0.01
 
 tvec = tspan[1]:dt:tspan[2]
 

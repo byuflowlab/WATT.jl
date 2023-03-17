@@ -26,12 +26,13 @@ include("./beddoesleishman.jl")
 
 ### Structures
 # include("../dev/gxbeam.jl") #Todo: Need to get the relavent functions out. Then remove the file. -> Or just simplify the file. 
+#Todo: I need to unify the structural and aerodynamic reference frames. 
 include("./gxbeam.jl")
 
 
 ### Couplings
-include("./loosely.jl")
-include("./coupled.jl")
+include("./aero_only.jl")
+include("./aerostructural.jl")
 
 # include("../dev/indicialgxbeam.jl")
 

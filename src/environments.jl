@@ -48,6 +48,11 @@ function get_aero_velocities(env::Environment, t, r, azimuth, precone, tilt, yaw
     heightFromHub = (y_az*sa + z_az*ca)*ct - x_az*st
 
     # velocity with shear
+    # if env.shearexp==0.0
+    #     V = env.Vinf(t)
+    # else
+    #     V = env.Vinf(t)*(1 + heightFromHub/hubht)^env.shearexp
+    # end
     V = env.Vinf(t)*(1 + heightFromHub/hubht)^env.shearexp
 
     # transform wind to blade c.s.
@@ -61,6 +66,11 @@ function get_aero_velocities(env::Environment, t, r, azimuth, precone, tilt, yaw
     # total velocity
     Vx = Vwind_x + Vrot_x
     Vy = Vwind_y + Vrot_y
+
+    # if r == 1.501 && t==0.0
+    #     println("Vx: ", Vx)
+    #     println("Vy: ", Vy)
+    # end
 
     return Vx, Vy
 end

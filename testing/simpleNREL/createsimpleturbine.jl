@@ -7,7 +7,7 @@ Adam Cardoza 01/23/23
 =#
 
 
-using OpenFASTsr
+using OpenFASTsr, Rotors, DynamicStallModels
 
 of = OpenFASTsr
 
@@ -24,11 +24,12 @@ adblade = of.read_adblade("NREL5MW_ADblade.dat", ofpath)
 edfile = of.read_edfile("NREL5MW_edfile.dat", ofpath)
 bdfile = of.read_bdfile("NREL5MW_bdfile.dat", ofpath)
 bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
+bddriver = of.read_bddriver("NREL5MW_bddriver.inp", ofpath)
 
 ### Simulation control
-tmax = 10.0
+tmax = 5.0
 dt = 0.001
-dt_out = "\"default\""
+dt_out = 0.001 # "\"default\""
 
 ### Environmental variables
 density = 1.225 #density (kg/m^3)
@@ -58,13 +59,19 @@ overhang = -1
 rhub = 1.5 #Hub radius
 rtip = 63.0 #Tip radius
 
-rvec = adblade["BlSpn"] .+ rhub
+# rvec = adblade["BlSpn"] .+ rhub
 
-# n = length(rvec)
+# n = 200
+# rvec = collect(range(rhub, rtip, length=n))
+# rfrac = (rvec .- rhub)/(rtip-rhub)
 
-# chordvec = 0.25*ones(n)
-# twistvec = -ones(n).*3.0  #zeros(n)
-# AFID = ones(n)
+nelem = 1
+np_elem = 300
+
+# chordvec = ones(n)
+# twistvec = zeros(n)
+# # twistvec = -ones(n).*3.0  
+# AFID = ones(n).*8
 
 E = 1.1e10 #6.83e10 #Young's Modulus
 nu = 0.3 #Poisson's Ratio
@@ -81,7 +88,7 @@ J = Ix + Iy
 
 G=E/(2*(1+nu))
 
-K = of.stiffness_matrix(E, nu, h*w, Ix, Iy) #Stiffness matrix
+# K = of.stiffness_matrix(E, nu, h*w, Ix, Iy) #Stiffness matrix
 
 #[3, 1, 2, 6, 4, 5] #BD to GX indexing
 # gxtobdidx = [2, 3, 1, 5, 6, 4] #GX to BD indexing
@@ -94,12 +101,12 @@ K = of.stiffness_matrix(E, nu, h*w, Ix, Iy) #Stiffness matrix
 # K = K[gxtobdidx, gxtobdidx] #Convert to BD stiffness matrix
 #Note: both K and K1 produce the same matrix. :| Which means that I did it right the first go aroound. Which means that BeamDyn just can't solve my stiffness matrix. 
 
-l = rvec[2]-rvec[1] # Element length
+# l = rvec[2]-rvec[1] # Element length
 
-dm = m*w*h #Distributed mass of the section #TODO: Dr. Ning suggested setting this to zero to simplify terms.  
-Mix = dm*Ix #Mass moment of inertia
-Miy = dm*Iy
-M = of.mass_matrix(dm, Mix, Miy)
+# dm = m*w*h #Distributed mass of the section #TODO: Dr. Ning suggested setting this to zero to simplify terms.  
+# Mix = dm*Ix #Mass moment of inertia
+# Miy = dm*Iy
+# M = of.mass_matrix(dm, Mix, Miy)
 
 
 
@@ -133,48 +140,77 @@ let
     # addriver["dT_mat"] = dt
     # addriver["Tmax_mat"] = tmax
 
+    
+    bdfile["member_total"] = nelem
+    members = zeros(nelem, 2)
+    for i = 1:nelem
+        members[i,1] = i
+        members[i,2] = np_elem
+    end
+    bdfile["KeyPairs"] = members
+
+    n = Int(sum(members[:,2]) - nelem + 1)
+    rvec = collect(range(rhub, rtip, length=n))
+    rfrac = (rvec .- rhub)/(rtip-rhub)
+    chordvec = ones(n)
+    twistvec = zeros(n)
+    # twistvec = -ones(n).*3.0  
+    AFID = ones(n).*8
+
 
 
     ##### AD Primary file
+    adfile["IndToler"] = 2e-12
+    adfile["MaxIter"] = 10000
     adfile["WakeMod"] = 1
-    adfile["AFAeroMod"] = 1
+    adfile["AFAeroMod"] = 2
     # adfile["AFNames"] = ["./Airfoils/NACA64_A17.dat"]
     # adfile["NumAFfiles"] = length(adfile["AFNames"])
     adfile["ADBlFile(1)"] = "sn5_ADblade.dat"
     adfile["ADBlFile(2)"] = "sn5_ADblade.dat"
     adfile["ADBlFile(3)"] = "sn5_ADblade.dat"
+    adfile["OutList"] = ["B1Azimuth"]
+    adfile["NodeOutList"] = ["Fx", "Fy", "Mm"]
+    # append!(adfile["NodeOutList"], ["Alpha"])
 
 
 
     #### AD Blade file
-    # adblade["NumBlNds"] = n
-    ltemp = rtip - rhub
-    rtemp = ltemp.*adblade["BlSpn"]./61.5
-    adblade["BlSpn"] = rtemp
-    # adblade["BlCrvAC"] = zeros(n)
-    # adblade["BlSwpAC"] = zeros(n)
-    # adblade["BlCrvAng"] = zeros(n)
-    adblade["BlTwist"] = zero(adblade["BlTwist"])
-    adblade["BlChord"] = ones(length(adblade["BlChord"]))
-    adblade["BlAFID"] = ones(length(adblade["BlAFID"])).*8
+    adblade["NumBlNds"] = n
+    # ltemp = rtip - rhub
+    # rtemp = ltemp.*adblade["BlSpn"]./61.5
+    # adblade["BlSpn"] = rtemp
+    adblade["BlSpn"] = rvec .- rhub
+    adblade["BlSpn"][end] -= 0.0001
+    adblade["BlCrvAC"] = zeros(n)
+    adblade["BlSwpAC"] = zeros(n)
+    adblade["BlCrvAng"] = zeros(n)
+
+    # adblade["BlTwist"] = zero(adblade["BlTwist"])
+    # adblade["BlChord"] = ones(length(adblade["BlChord"]))
+    # adblade["BlAFID"] = ones(length(adblade["BlAFID"])).*8
+
+    adblade["BlTwist"] = twistvec
+    adblade["BlChord"] = chordvec
+    adblade["BlAFID"] = AFID
 
 
 
     ### ED Primary
-    # edfile["TeetDOF"] = false ## Rotor-Teeter DOF (flag)
-    # edfile["DrTrDOF"] = false ## Drivetrain rotation flexibility DOF (flag)
-    # edfile["GenDOF"]    = false ## Generator DOF (flag)
-    # edfile["YawDOF"]    = false ## Yaw DOF (flag)
-    # edfile["TwFADOF1"]  = false ## First fore-aft tower bending-mode DOF (flag)
-    # edfile["TwFADOF2"]  = false ## Second fore-aft tower bending-mode DOF (flag)
-    # edfile["TwSSDOF1"]  = false ## First side-to-side tower bending-mode DOF (flag)
-    # edfile["TwSSDOF2"]  = false ## Second side-to-side tower bending-mode DOF (flag)
-    # edfile["PtfmSgDOF"] = false ## Platform horizontal surge translation DOF (flag)
-    # edfile["PtfmSwDOF"] = false ## Platform horizontal sway translation DOF (flag)
-    # edfile["PtfmHvDOF"] = false ## Platform vertical heave translation DOF (flag)
-    # edfile["PtfmRDOF"]  = false ## Platform roll tilt rotation DOF (flag)
-    # edfile["PtfmPDOF"]  = false ## Platform pitch tilt rotation DOF (flag)
-    # edfile["PtfmYDOF"]  = false ## Platform yaw rotation DOF (flag)
+    edfile["TeetDOF"] = false ## Rotor-Teeter DOF (flag)
+    edfile["DrTrDOF"] = false ## Drivetrain rotation flexibility DOF (flag)
+    edfile["GenDOF"]    = false ## Generator DOF (flag)
+    edfile["YawDOF"]    = false ## Yaw DOF (flag)
+    edfile["TwFADOF1"]  = false ## First fore-aft tower bending-mode DOF (flag)
+    edfile["TwFADOF2"]  = false ## Second fore-aft tower bending-mode DOF (flag)
+    edfile["TwSSDOF1"]  = false ## First side-to-side tower bending-mode DOF (flag)
+    edfile["TwSSDOF2"]  = false ## Second side-to-side tower bending-mode DOF (flag)
+    edfile["PtfmSgDOF"] = false ## Platform horizontal surge translation DOF (flag)
+    edfile["PtfmSwDOF"] = false ## Platform horizontal sway translation DOF (flag)
+    edfile["PtfmHvDOF"] = false ## Platform vertical heave translation DOF (flag)
+    edfile["PtfmRDOF"]  = false ## Platform roll tilt rotation DOF (flag)
+    edfile["PtfmPDOF"]  = false ## Platform pitch tilt rotation DOF (flag)
+    edfile["PtfmYDOF"]  = false ## Platform yaw rotation DOF (flag)
 
     # #Initial Conditions
     # edfile["BlPitch(1)"] = pitch
@@ -185,61 +221,104 @@ let
     # #Turbine Config
     # edfile["NumBl"] = B
     edfile["TipRad"] = rtip
-    # edfile["HubRad"] = rhub
-    # edfile["PreCone(1)"] = precone
-    # edfile["PreCone(2)"] = precone
-    # edfile["PreCone(3)"] = precone
+    edfile["HubRad"] = rhub
+    edfile["PreCone(1)"] = precone
+    edfile["PreCone(2)"] = precone
+    edfile["PreCone(3)"] = precone
     # edfile["OverHang"] = overhang
-    # edfile["ShftTilt"] = tilt
+    edfile["ShftTilt"] = tilt
 
     #Blade
-    # edfile["BldNodes"] = n
-    edfile["BldFile(1)"] = "sn5_BDblade.dat"
-    edfile["BldFile(2)"] = "sn5_BDblade.dat"
-    edfile["BldFile(3)"] = "sn5_BDblade.dat"
+    edfile["BldNodes"] = n
+    edfile["BldFile(1)"] = "sn5_EDblade.dat"
+    edfile["BldFile(2)"] = "sn5_EDblade.dat"
+    edfile["BldFile(3)"] = "sn5_EDblade.dat"
 
     edfile["TwrFile"] = "sn5_EDtower.dat"
 
 
+    ### BD Driver
+    bddriver["t_final"] = tmax
+    bddriver["dt"] = dt
 
 
-    ### BD Primary
-    # bdfile["member_total"] = 1
-    # bdfile["kp_total"] = n
-    # bdfile["KeyPairs"] = [1 n]
-    # bdfile["kp_xr"] = zeros(n)
-    # bdfile["kp_yr"] = zeros(n)
-    bdfile["NRMax"] = 1000
+    ### BD Primary #Todo: Add stuff to automatically update the BDDriver as well. 
+    bdfile["QuasiStaticInit"] = true
+    bdfile["NRMax"] = 10000
     bdfile["quadrature"] = 2
+    bdfile["DTBeam"] = "DEFAULT"
+    bdfile["order_elem"] = 8
+    bdfile["stop_tol"] = 1e-8
+    bdfile["rhoinf"] = 1.0
 
-    bdfile["kp_zr"] = ltemp.*bdfile["kp_zr"]./61.5
-    bdfile["initial_twist"] = zero(bdfile["initial_twist"])
+    # nelem = 1
+    # bdfile["member_total"] = nelem
+    # np_elem = Int(n/nelem)
+    # members = zeros(nelem, 2)
+    # for i = 1:nelem
+    #     members[i,1] = i
+    #     if i==1
+    #         members[i,2] = np_elem
+    #     else
+    #         members[i,2] = np_elem + 1
+    #     end
+    # end
+    # bdfile["KeyPairs"] = members
+
+    bdfile["kp_total"] = n
+    # bdfile["KeyPairs"] = [1 n]
+    bdfile["kp_xr"] = zeros(n)
+    bdfile["kp_yr"] = zeros(n)
+    
+    # bdfile["kp_zr"] = ltemp.*bdfile["kp_zr"]./61.5
+    # bdfile["initial_twist"] = zero(bdfile["initial_twist"])
+
+    bdfile["kp_zr"] = rvec .- rhub
+    bdfile["initial_twist"] = twistvec
+
+    
 
     bdfile["BldFile"] = ["sn5_BDblade.dat"]
     bdfile["BldNd_BlOutNd"] = 99
 
     bdfile["OutNd"] = Int[1]
-
-    append!(bdfile["NodeOutList"], ["TVxr", "TVyr", "TVzr", "RVxr", "RVyr", "RVzr"])
+    bdfile["OutList"] = [" ", "TipTDxr", "TipTDyr", "TipTDzr"]
+    # bdfile["NodeOutList"] = ["TDxr"]
+    append!(bdfile["NodeOutList"], ["RDxr", "RDyr", "RDzr", "TVxr", "TVyr", "TVzr", "RVxr", "RVyr", "RVzr", "DFxr", "DFyr", "DFzr" ])
 
     # ### BD Blade file
-    # bdblade["station_total"] = n
-    # bdblade["rfrac"] = (rvec .- rhub)/(rtip-rhub)
+    Kmat = zeros(6,6,Int(bdblade["station_total"]))
+    Mmat = zeros(6,6,Int(bdblade["station_total"]))
+    
+    for i = 1:Int(bdblade["station_total"])
+        Kmat[:,:,i] = bdblade["K$i"]
+        Mmat[:,:,i] = bdblade["M$i"]
+    end
+
+    Kfit = Rotors.interpolate_matrix_symmetric(bdblade["rfrac"], rfrac, Kmat; fit=Linear)
+    Mfit = Rotors.interpolate_matrix_symmetric(bdblade["rfrac"], rfrac, Mmat; fit=Linear)
+
+    for i = 1:n
+        bdblade["K$i"] = Kfit[:,:,i]
+        bdblade["M$i"] = Mfit[:,:,i]
+    end
+
+    
+    bdblade["station_total"] = n
+    bdblade["rfrac"] = rfrac
     bdblade["mu"] .= mu
-    
-    # for i = 1:Int(bdblade["station_total"])
-    #     bdblade["K$i"] = K
-    #     bdblade["M$i"] = M
-    # end
 
-    
 
+    bddriver["InputFile"] = "sn5_BDfile.dat"
+    bddriver["DynamicSolve"] = true
+    bddriver["t_final"] = tmax
+    bddriver["dt"] = dt
 
     ### Inflowwind
-    # inflowwind["WindType"] = 1
-    # inflowwind["NWindVel"] = 0
-    # inflowwind["HWindSpeed"] = Uinf
-    # inflowwind["RefHt"] = hubht
+    inflowwind["WindType"] = 1
+    inflowwind["NWindVel"] = 0
+    inflowwind["HWindSpeed"] = Uinf
+    inflowwind["RefHt"] = hubht
     inflowwind["PLexp"] = plexp
 
 
@@ -260,6 +339,9 @@ let
 
     inputfile["TMax"] = tmax
     inputfile["DT"] = dt
+    inputfile["DT_Out"] = dt
+    inputfile["DT_Out"] = dt_out
+    inputfile["NumCrctn"] = 0
 
     inputfile["Gravity"] = gravity
     # inputfile["AirDens"] = density
@@ -267,7 +349,7 @@ let
     # inputfile["SpdSound"] = a
     # inputfile["Patm"] = patm
 
-    # inputfile["DT_Out"] = dt_out
+    
 
 
 
@@ -278,6 +360,7 @@ let
     of.write_edfile(edfile, "sn5_EDfile.dat"; outputpath="./")
     of.write_bdfile(bdfile, "sn5_BDfile.dat"; outputpath="./")
     of.write_bdblade(bdblade, "sn5_BDblade.dat"; outputpath="./")
+    of.write_bddriver(bddriver, "sn5_bddriver.inp"; outputpath="./")
     of.write_inflowwind(inflowwind, "sn5_inflowwind.dat"; outputpath="./")
     of.write_inputfile(inputfile, "sn5_input.fst"; outputpath="./")
 end

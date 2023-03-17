@@ -1,17 +1,17 @@
 ------- AERODYN v15 for OpenFAST INPUT FILE -----------------------------------------------
-A simple wind turbine for testing Rotors.jl
+NREL 5.0 MW offshore baseline aerodynamic input properties.
 ======  General Options  ============================================================================
 false         Echo               - Echo the input to "<rootname>.AD.ech"?  (flag)
-  "default"   DTAero             - Time interval for aerodynamic calculations {or "default"} (s)
-          1   WakeMod            - Type of wake/induction model (switch) {0=none, 1=BEMT, 2=DBEMT} [WakeMod cannot be 2 when linearizing]
-          1   AFAeroMod          - Type of blade airfoil aerodynamics model (switch) {1=steady model, 2=Beddoes-Leishman unsteady model} [AFAeroMod must be 1 when linearizing]
+  "Default"   DTAero             - Time interval for aerodynamic calculations {or "default"} (s)
+          2   WakeMod            - Type of wake/induction model (switch) {0=none, 1=BEMT, 2=DBEMT} [WakeMod cannot be 2 when linearizing]
+          2   AFAeroMod          - Type of blade airfoil aerodynamics model (switch) {1=steady model, 2=Beddoes-Leishman unsteady model} [AFAeroMod must be 1 when linearizing]
           0   TwrPotent          - Type tower influence on wind based on potential flow around the tower (switch) {0=none, 1=baseline potential flow, 2=potential flow with Bak correction}
           0   TwrShadow          - Calculate tower influence on wind based on downstream tower shadow? (flag)
-False         TwrAero            - Calculate tower aerodynamic loads? (flag)
-False         FrozenWake         - Assume frozen wake during linearization? (flag) [used only when WakeMod=1 and when linearizing]
-False         CavitCheck         - Perform cavitation check? (flag) [AFAeroMod must be 1 when CavitCheck=true]
+false         TwrAero            - Calculate tower aerodynamic loads? (flag)
+false         FrozenWake         - Assume frozen wake during linearization? (flag) [used only when WakeMod=1 and when linearizing]
+false         CavitCheck         - Perform cavitation check? (flag) [AFAeroMod must be 1 when CavitCheck=true]
 False         Buoyancy           - Include buoyancy effects? (flag)
-False         CompAA             - Flag to compute AeroAcoustics calculation [only used when WakeMod=1 or 2]
+false         CompAA             - Flag to compute AeroAcoustics calculation [only used when WakeMod=1 or 2]
 "unused"      AA_InputFile       - Aeroacoustics input file
 ======  Environmental Conditions  ===================================================================
       1.225   AirDens            - Air density (kg/m^3)
@@ -21,13 +21,13 @@ False         CompAA             - Flag to compute AeroAcoustics calculation [on
      1700.0   Pvap               - Vapour pressure of fluid (Pa) [used only when CavitCheck=True]
 ======  Blade-Element/Momentum Theory Options  ======================================================
           1   SkewMod            - Type of skewed-wake correction model (switch) {1=uncoupled, 2=Pitt/Peters, 3=coupled} [unused when WakeMod=0]
-  "default"   SkewModFactor      - Constant used in Pitt/Peters skewed wake model {or "default" is 15/32*pi} (-) [used only when SkewMod=2; unused when WakeMod=0]
+  "Default"   SkewModFactor      - Constant used in Pitt/Peters skewed wake model {or "default" is 15/32*pi} (-) [used only when SkewMod=2; unused when WakeMod=0]
 false         TipLoss            - Use the Prandtl tip-loss model? (flag) [unused when WakeMod=0]
 false         HubLoss            - Use the Prandtl hub-loss model? (flag) [unused when WakeMod=0]
-True          TanInd             - Include tangential induction in BEMT calculations? (flag) [unused when WakeMod=0]
-True          AIDrag             - Include the drag term in the axial-induction calculation? (flag) [unused when WakeMod=0]
-True          TIDrag             - Include the drag term in the tangential-induction calculation? (flag) [unused when WakeMod=0 or TanInd=FALSE]
-     1.0e-5   IndToler           - Convergence tolerance for BEMT nonlinear solve residual equation {or "default"} (-) [unused when WakeMod=0]
+true          TanInd             - Include tangential induction in BEMT calculations? (flag) [unused when WakeMod=0]
+true          AIDrag             - Include the drag term in the axial-induction calculation? (flag) [unused when WakeMod=0]
+true          TIDrag             - Include the drag term in the tangential-induction calculation? (flag) [unused when WakeMod=0 or TanInd=FALSE]
+  "Default"   IndToler           - Convergence tolerance for BEMT nonlinear solve residual equation {or "default"} (-) [unused when WakeMod=0]
         400   MaxIter            - Maximum number of iteration steps (-) [unused when WakeMod=0]
 ======  Dynamic Blade-Element/Momentum Theory Options  ==============================================
           1   DBEMT_Mod          - Type of dynamic BEMT (DBEMT) model {1=constant tau1, 2=time-dependent tau1} (-) [used only when WakeMod=2]
@@ -44,7 +44,7 @@ true          FLookup            - Flag to indicate whether a lookup for f' will
           1   InCol_Alfa         - The column in the airfoil tables that contains the angle of attack (-)
           2   InCol_Cl           - The column in the airfoil tables that contains the lift coefficient (-)
           3   InCol_Cd           - The column in the airfoil tables that contains the drag coefficient (-)
-          0   InCol_Cm           - The column in the airfoil tables that contains the pitching-moment coefficient; use zero if there is no Cm column (-)
+          4   InCol_Cm           - The column in the airfoil tables that contains the pitching-moment coefficient; use zero if there is no Cm column (-)
           0   InCol_Cpmin        - The column in the airfoil tables that contains the Cpmin coefficient; use zero if there is no Cpmin column (-)
           1   NumAFfiles         - Number of airfoil files used (-)
 "./Airfoils/NACA64_A17.dat"   AFNames            - Airfoil file names (NumAFfiles lines) (quoted strings)
@@ -76,11 +76,11 @@ TwrElev        TwrDiam        TwrCd          TwrTI      TwrCb
 8.5268000E+01  3.8700000E+00  1.0000000E+00  1.0000000E-01  0.0000000E+00
 8.7600000E+01  3.8700000E+00  1.0000000E+00  1.0000000E-01  0.0000000E+00
 ======  Outputs  ====================================================================================
-True          SumPrint            - Generate a summary file listing input options and interpolated properties to "<rootname>.AD.sum"?  (flag)
+true          SumPrint            - Generate a summary file listing input options and interpolated properties to "<rootname>.AD.sum"?  (flag)
           0   NBlOuts             - Number of blade node outputs [0 - 9] (-)
            1   BlOutNd             - Blade nodes whose values will be output  (-)
           0   NTwOuts             - Number of tower node outputs [0 - 9]  (-)
-          1   TwOutNd             - Tower nodes whose values will be output  (-)
+          1,          2,          6   TwOutNd             - Tower nodes whose values will be output  (-)
                    OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
 "B1Azimuth"
 "B2Azimuth"
@@ -88,13 +88,18 @@ True          SumPrint            - Generate a summary file listing input option
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)
 ---------------------- NODE OUTPUTS --------------------------------------------
           1   BldNd_BladesOut  - Blades to output
-"All"          BldNd_BlOutNd       - Future feature will allow selecting a portion of the nodes to output.  Not implemented yet. (-)
+"99.0"         BldNd_BlOutNd       - Future feature will allow selecting a portion of the nodes to output.  Not implemented yet. (-)
                    OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
 "Fx"
 "Fy"
 "Mm"
 "Vx"
 "Vy"
-"Alpha"
+"Theta"
 "Phi"
+"Cl"
+"Cd"
+"Cm"
+"Cn"
+"Ct"
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)

@@ -1,0 +1,269 @@
+#=
+A simple turbine to compare OpenFAST, GXBeam, and eventually Rotors.jl. 
+
+
+Adam Cardoza 01/23/23
+
+=#
+
+
+using OpenFASTsr
+
+of = OpenFASTsr
+
+path = dirname(@__FILE__)
+cd(path)
+
+### Simulation control
+tmax = 2.0
+dt = 0.0001
+dt_out = "\"default\""
+
+### Environmental variables
+density = 1.225 #density (kg/m^3)
+kinvisc = 1.5 #Kinematic Viscosity (m^2/s)
+a = 335 #Speed of Sound (m/s)
+gravity = 0.0 #9.81 #Gravity (m/s^2)
+
+Uinf = 10 #Freestream velocity (m/s)
+patm = 101325 #Atmospheric pressure (Pa)
+rpm = 6 #angular velocity (rotations per minute)
+omega = rpm*2*pi/60 #angular velocity (radians/second)
+
+
+refht = 150 #Reference height for the power law exponent shear rule
+plexp = 0.0
+
+
+### Turbine description
+
+pitch = 0.0 
+tilt = 0.0
+precone = 0.0
+
+B = 3 #Number of blades
+hubht = 150 #Hub height (m)
+overhang = -1 
+
+rhub = 1.0 #Hub radius
+rtip = 100.0 #Tip radius
+n = 100
+
+rvec = collect(range(rhub, rtip; length=n))
+
+
+
+chordvec = 4.0*ones(n)
+twistvec = zeros(n) #-ones(n).*3.0  #zeros(n)
+AFID = ones(n)
+
+E = 5.0e9 #6.83e10 #Young's Modulus
+nu = 0.3 #Poisson's Ratio
+m = 270.0 #2700.0 #kg/m^3 -> Decreasing the weight decreases the frequency of oscillation
+h = 1.5 # Thickness (meters)
+w = 1.5 # Width (meters)
+mu = 0.001 #Damping ratio
+
+
+
+Ix = w*(h^3)/12  #Area moment of inertia
+Iy = h*(w^3)/12
+K = of.stiffness_matrix(E, nu, h*w, Ix, Iy) #Stiffness matrix
+
+l = rvec[2]-rvec[1] # Element length
+
+dm = m*w*h #Distributed mass of the section #TODO: Dr. Ning suggested setting this to zero to simplify terms.  
+Mix = dm*Ix #Mass moment of inertia
+Miy = dm*Iy
+M = of.mass_matrix(dm, Mix, Miy)
+
+
+lambda = omega*rtip/Uinf
+println("Tip speed ratio: ", lambda)
+
+### Read in OpenFAST files
+ofpath = "../OpenFAST_NREL5MW/" 
+inputfile = of.read_inputfile("NREL5MW_input.fst", ofpath)
+inflowwind = of.read_inflowwind("NREL5MW_inflowwind.dat", ofpath)
+# addriver = of.read_addriver("NREL5MW_ADdriver.inp", ofpath)
+adfile = of.read_adfile("NREL5MW_ADfile.dat", ofpath)
+adblade = of.read_adblade("NREL5MW_ADblade.dat", ofpath)
+edfile = of.read_edfile("NREL5MW_edfile.dat", ofpath)
+bdfile = of.read_bdfile("NREL5MW_bdfile.dat", ofpath)
+bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
+
+inflowfile = 0
+
+let
+    ### Set OpenFAST file values
+    ##### ADdriver
+    addriver["TMax"] = tmax
+    addriver["DT"] = dt
+    addriver["FldDens"] = density
+    addriver["KinVisc"] = kinvisc
+    addriver["SpdSound"] = a
+    addriver["CompInflow"] = inflowfile
+    addriver["HWindSpeed"] = Uinf
+    addriver["RefHt"] = refht
+    addriver["PLExp"] = plexp
+    addriver["NumBlades(1)"] = B
+    addriver["HubRad(1)"] = rhub
+    addriver["HubHt(1)"] = hubht
+    addriver["Overhang(1)"] = overhang
+    addriver["ShftTilt(1)"] = tilt
+    addriver["PreCone(1)"] = precone
+    addriver["HubHt"] = hubht
+    addriver["NumCases"] = 1
+    addriver["HWndSpeed_mat"] = [Uinf]
+    addriver["PLExp_mat"] = [plexp]
+    addriver["RotSpd_mat"] = hubht
+    addriver["Pitch_mat"] = [pitch]
+    addriver["dT_mat"] = dt
+    addriver["Tmax_mat"] = tmax
+
+
+
+    ##### AD Primary file
+    adfile["AFNames"] = ["./Airfoils/NACA64_A17.dat"]
+    adfile["NumAFfiles"] = length(adfile["AFNames"])
+    adfile["ADBlFile(1)"] = "simple_ADblade.dat"
+    adfile["ADBlFile(2)"] = "simple_ADblade.dat"
+    adfile["ADBlFile(3)"] = "simple_ADblade.dat"
+
+
+
+    #### AD Blade file
+    adblade["NumBlNds"] = n
+    rtemp = rvec .- rhub 
+    rtemp[end] = rtemp[end] - 0.0001
+    adblade["BlSpn"] = rtemp
+    adblade["BlCrvAC"] = zeros(n)
+    adblade["BlSwpAC"] = zeros(n)
+    adblade["BlCrvAng"] = zeros(n)
+    adblade["BlTwist"] = twistvec
+    adblade["BlChord"] = chordvec
+    adblade["BlAFID"] = AFID
+
+
+
+    ### ED Primary
+    edfile["TeetDOF"] = false ## Rotor-Teeter DOF (flag)
+    edfile["DrTrDOF"] = false ## Drivetrain rotation flexibility DOF (flag)
+    edfile["GenDOF"]    = false ## Generator DOF (flag)
+    edfile["YawDOF"]    = false ## Yaw DOF (flag)
+    edfile["TwFADOF1"]  = false ## First fore-aft tower bending-mode DOF (flag)
+    edfile["TwFADOF2"]  = false ## Second fore-aft tower bending-mode DOF (flag)
+    edfile["TwSSDOF1"]  = false ## First side-to-side tower bending-mode DOF (flag)
+    edfile["TwSSDOF2"]  = false ## Second side-to-side tower bending-mode DOF (flag)
+    edfile["PtfmSgDOF"] = false ## Platform horizontal surge translation DOF (flag)
+    edfile["PtfmSwDOF"] = false ## Platform horizontal sway translation DOF (flag)
+    edfile["PtfmHvDOF"] = false ## Platform vertical heave translation DOF (flag)
+    edfile["PtfmRDOF"]  = false ## Platform roll tilt rotation DOF (flag)
+    edfile["PtfmPDOF"]  = false ## Platform pitch tilt rotation DOF (flag)
+    edfile["PtfmYDOF"]  = false ## Platform yaw rotation DOF (flag)
+
+    #Initial Conditions
+    edfile["BlPitch(1)"] = pitch
+    edfile["BlPitch(2)"] = pitch
+    edfile["BlPitch(3)"] = pitch
+    edfile["RotSpeed"] = rpm 
+
+    #Turbine Config
+    edfile["NumBl"] = B
+    edfile["TipRad"] = rtip
+    edfile["HubRad"] = rhub
+    edfile["PreCone(1)"] = precone
+    edfile["PreCone(2)"] = precone
+    edfile["PreCone(3)"] = precone
+    edfile["OverHang"] = overhang
+    edfile["ShftTilt"] = tilt
+
+    #Blade
+    edfile["BldNodes"] = n
+    edfile["BldFile(1)"] = "simple_BDblade.dat"
+    edfile["BldFile(2)"] = "simple_BDblade.dat"
+    edfile["BldFile(3)"] = "simple_BDblade.dat"
+
+    edfile["TwrFile"] = "simple_EDtower.dat"
+
+
+
+
+    ### BD Primary
+    bdfile["QuasiStaticInit"] = true
+    bdfile["NRMax"] = 5000
+
+    bdfile["order_elem"] = 7
+    bdfile["member_total"] = 1
+    bdfile["kp_total"] = n
+    bdfile["KeyPairs"] = [1 n]
+    bdfile["kp_xr"] = zeros(n)
+    bdfile["kp_yr"] = zeros(n)
+    bdfile["kp_zr"] = rvec .- rhub
+    bdfile["initial_twist"] = twistvec
+
+    bdfile["BldFile"] = ["simple_BDblade.dat"]
+
+
+    ### BD Blade file
+    bdblade["station_total"] = n
+    bdblade["rfrac"] = (rvec .- rhub)/(rtip-rhub)
+    bdblade["mu"] .= mu
+    
+    for i = 1:n
+        bdblade["K$i"] = K
+        bdblade["M$i"] = M
+    end
+
+
+    ### Inflowwind
+    inflowwind["WindType"] = 1
+    inflowwind["NWindVel"] = 0
+    inflowwind["HWindSpeed"] = Uinf
+    inflowwind["RefHt"] = hubht
+    inflowwind["PLexp"] = plexp
+
+
+
+
+    ### Input file
+    inputfile["CompElast"] = 2
+    inputfile["CompInflow"] = 1
+    inputfile["CompAero"] = 2
+
+    inputfile["TMax"] = tmax
+    inputfile["DT"] = dt
+
+    inputfile["Gravity"] = gravity
+    inputfile["AirDens"] = density
+    inputfile["KinVisc"] = kinvisc
+    inputfile["SpdSound"] = a
+    inputfile["Patm"] = patm
+
+    inputfile["EDFile"] = "simple_EDfile.dat"
+    inputfile["BDBldFile(1)"] = "simple_BDfile.dat"
+    inputfile["BDBldFile(2)"] = "simple_BDfile.dat"
+    inputfile["BDBldFile(3)"] = "simple_BDfile.dat"
+    inputfile["InflowFile"] = "simple_inflowwind.dat"
+    inputfile["AeroFile"] = "simple_ADfile.dat"
+
+    inputfile["DT_Out"] = dt_out
+
+
+
+    ### Write OpenFAST files
+    of.write_addriver(addriver, "simple_ADdriver.dvr"; outputpath="./")
+    of.write_adfile(adfile, "simple_ADfile.dat"; outputpath="./")
+    of.write_adblade(adblade, "simple_ADblade.dat"; outputpath="./")
+    of.write_edfile(edfile, "simple_EDfile.dat"; outputpath="./")
+    of.write_bdfile(bdfile, "simple_BDfile.dat"; outputpath="./")
+    of.write_bdblade(bdblade, "simple_BDblade.dat"; outputpath="./")
+    of.write_inflowwind(inflowwind, "simple_inflowwind.dat"; outputpath="./")
+    of.write_inputfile(inputfile, "simple_input.fst"; outputpath="./")
+end
+
+
+
+
+
+nothing

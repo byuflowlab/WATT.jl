@@ -297,36 +297,18 @@ function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
 end
 
 
-function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, assembly)
-    # Fzfit = Linear(vcat(rhub, rvec, rtip), vcat(0, -Fx, 0) ) #I use the loads of the previous time. We want everything to be calculated based off of the previous time step to update the next time step. Then we'll move to that step.  
-    # Fyfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Fy, 0))
-    # Mxfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Mx, 0))
+function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, assembly; fit=DS.Linear)
 
-    # @show length(rvec)
-    # @show length(Fx)
-
-    Fzfit = Linear(rvec, -Fx) 
-    Fyfit = Linear(rvec, Fy)  
-    Mxfit = Linear(rvec, Mx)
-
-    # f_follower = @SVector zeros(3)
-    # # m = @SVector zeros(3)
-    # m_follower = @SVector zeros(3)
-    
-    # for ielem = eachindex(rgx)
-        
-    #     f = SVector(0.0, Fyfit(rgx[ielem]), Fzfit(rgx[ielem])) #Using GXBeam's internal damping
-    #     m = SVector(Mxfit(rgx[ielem]), 0.0, 0.0)
-    #     distributed_loads[ielem] = GXBeam.DistributedLoads(f, f, m, m, f_follower, f_follower, m_follower, m_follower)
-    # end
+    #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. )
+    Fzfit = fit(rvec, -Fx) #Todo: I need to nail down behavior outside of the aero node regions. 
+    Fyfit = fit(rvec, -Fy) #The loading is negative for Fy because the forces are reported positive in the negative direction. 
+    Mxfit = fit(rvec, Mx)
 
 
     for ielem = eachindex(assembly.elements)
         r1 = assembly.points[ielem][1] #Todo: I want a vector of just lengths, of the points. Not just the X distance. 
         r2 = assembly.points[ielem+1][1]
-        # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit((1-s)*r1 + s*r2), fz = (s) -> Fzfit((1-s)*r1 + s*r2), mx = (s) -> Mxfit((1-s)*r1 + s*r2))
-        # @show r1, r2
-        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), mx = (s) -> Mxfit(s), s1=r1, s2=r2)
+        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
     end
 
 end
@@ -386,12 +368,9 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
     # V0 = [SVector(0.0, -rgxp[i]*env.RS(t0), 0.0) for i in eachindex(assembly.points)]
 
 
-    ### GXBeam initial solution #TODO: I might make it an option to initialize from rest, or from steady state at the intial conditions (as current). #Todo: This might be making a large difference, might need to simulate from rest. 
-    # system, converged = 
-    # system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:2]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0, steady=false) 
-    system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:1]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0) 
+    ### GXBeam initial solution #TODO: I might make it an option to initialize from rest, or from steady state at the intial conditions (as current). 
+    system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:1]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0, steady=true) #Initialize from undeflected, everything moving. -> Taylor fixed GXBema so that adding the angular_velocity will update the velocity of everything in the global frame when initializing. 
 
-    # gxhistory[1] = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
     gxhistory[1] = history0[end]
 
 
@@ -435,4 +414,49 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
     gxhistory[end] = gxhistory[end-1] #Hack: 
 
     return gxhistory
+end
+
+function steady_simulate_gxbeam(rvec, azimuth, Fx, Fy, Mx, env::Environment, assembly::GXBeam.Assembly; verbose::Bool=false, speakiter=100, structural_damping::Bool=true, linear::Bool=false, g=9.81)
+    # println("Why isn't it printing inside the function.")
+    if verbose
+        println("Rotors.jl initializing solution...")
+    end
+
+
+    ### Initialization information
+
+    t0 = 0.0
+    azimuth0 = azimuth[1]
+
+
+    ### Extract CCBlade Loads and create a distributed load 
+    nelem = length(assembly.elements)
+    rgx = [assembly.elements[i].x[1] for i in 1:nelem]
+    rgxp = [assembly.points[i][1] for i in eachindex(assembly.points)]
+
+    distributed_loads = Dict{Int64, GXBeam.DistributedLoads{eltype(rvec)}}()
+    update_forces!(distributed_loads, Fx[1,:], Fy[1,:], Mx[1,:], rvec, assembly)
+    
+
+
+
+    ### Prepare GXBeam inputs  
+    Omega = SVector(0.0, 0.0, -env.RS(t0)) 
+    gravity0 = SVector(g*sin(azimuth0), -g*cos(azimuth0), 0.0)
+    prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed
+    
+
+
+    ### GXBeam initial solution  
+    system, converged = GXBeam.steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0) 
+
+    if !converged
+        println("Yo, GXBeam didn't converge.")
+    end
+
+    state = AssemblyState(system, assembly; prescribed_conditions)
+
+
+
+    return state
 end

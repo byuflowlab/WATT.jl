@@ -4,7 +4,7 @@ NREL 5.0 MW offshore baseline aerodynamic input properties.
 false         Echo               - Echo the input to "<rootname>.AD.ech"?  (flag)
   "Default"   DTAero             - Time interval for aerodynamic calculations {or "default"} (s)
           1   WakeMod            - Type of wake/induction model (switch) {0=none, 1=BEMT, 2=DBEMT} [WakeMod cannot be 2 when linearizing]
-          1   AFAeroMod          - Type of blade airfoil aerodynamics model (switch) {1=steady model, 2=Beddoes-Leishman unsteady model} [AFAeroMod must be 1 when linearizing]
+          2   AFAeroMod          - Type of blade airfoil aerodynamics model (switch) {1=steady model, 2=Beddoes-Leishman unsteady model} [AFAeroMod must be 1 when linearizing]
           0   TwrPotent          - Type tower influence on wind based on potential flow around the tower (switch) {0=none, 1=baseline potential flow, 2=potential flow with Bak correction}
           0   TwrShadow          - Calculate tower influence on wind based on downstream tower shadow? (flag)
 false         TwrAero            - Calculate tower aerodynamic loads? (flag)
@@ -27,8 +27,8 @@ false         HubLoss            - Use the Prandtl hub-loss model? (flag) [unuse
 true          TanInd             - Include tangential induction in BEMT calculations? (flag) [unused when WakeMod=0]
 true          AIDrag             - Include the drag term in the axial-induction calculation? (flag) [unused when WakeMod=0]
 true          TIDrag             - Include the drag term in the tangential-induction calculation? (flag) [unused when WakeMod=0 or TanInd=FALSE]
-  "Default"   IndToler           - Convergence tolerance for BEMT nonlinear solve residual equation {or "default"} (-) [unused when WakeMod=0]
-        400   MaxIter            - Maximum number of iteration steps (-) [unused when WakeMod=0]
+    2.0e-12   IndToler           - Convergence tolerance for BEMT nonlinear solve residual equation {or "default"} (-) [unused when WakeMod=0]
+      10000   MaxIter            - Maximum number of iteration steps (-) [unused when WakeMod=0]
 ======  Dynamic Blade-Element/Momentum Theory Options  ==============================================
           1   DBEMT_Mod          - Type of dynamic BEMT (DBEMT) model {1=constant tau1, 2=time-dependent tau1} (-) [used only when WakeMod=2]
           4   tau1_const         - Time constant for DBEMT (s) [used only when WakeMod=2 and DBEMT_Mod=1]
@@ -90,8 +90,6 @@ true          SumPrint            - Generate a summary file listing input option
           1,          2,          6   TwOutNd             - Tower nodes whose values will be output  (-)
                    OutList             - The next line(s) contains a list of output parameters.  See s for a listing of available output channels, (-)
 "B1Azimuth"
-"B2Azimuth"
-"B3Azimuth"
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)
 ---------------------- NODE OUTPUTS --------------------------------------------
           1   BldNd_BladesOut  - Blades to output
@@ -100,13 +98,4 @@ END of input file (the word "END" must appear in the first 3 columns of this las
 "Fx"
 "Fy"
 "Mm"
-"Vx"
-"Vy"
-"Theta"
-"Phi"
-"Cl"
-"Cd"
-"Cm"
-"Cn"
-"Ct"
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)

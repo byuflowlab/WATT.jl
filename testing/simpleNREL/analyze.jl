@@ -1,5 +1,11 @@
 using OpenFASTsr, DelimitedFiles, GXBeam, Rotors, LinearAlgebra
 
+#=
+Analyze the results of the openFAST simulation. 
+
+Adam Cardoza
+=#
+
 of = OpenFASTsr
 
 localpath = @__DIR__

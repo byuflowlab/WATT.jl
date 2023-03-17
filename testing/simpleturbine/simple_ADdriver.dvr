@@ -5,8 +5,8 @@ False         Echo               -   Echo the input to "<rootname>.ech"?  (flag)
 0             MHK          - MHK turbine type (switch) {0: not an MHK turbine, 1: fixed MHK turbine, 2: floating MHK turbine}
 3             AnalysisType - {1: multiple turbines, one simulation, 2: one turbine, one time-dependent simulation, 3: one turbine, combined cases}
 2.0           TMax         - Total run time [used only when AnalysisType/=3] (s)
-0.0002        DT           - Simulation time step [used only when AnalysisType/=3] (s)
-"./simple_ADfile.dat"        AeroFile    -  Name of the primary AeroDyn input file
+0.0001        DT           - Simulation time step [used only when AnalysisType/=3] (s)
+"./NREL5MW_ADfile.dat"        AeroFile    -  Name of the primary AeroDyn input file
 ------- Environmental Data ------------------------------
 1.225         FldDens      - Density of working fluid (kg/m^3)
 1.5           KinVisc      - Kinematic viscosity of working fluid (m^2/s)
@@ -18,7 +18,7 @@ False         Echo               -   Echo the input to "<rootname>.ech"?  (flag)
 0             CompInflow  - Compute inflow wind velocities (switch) {0=Steady Wind; 1=InflowWind}
 "unused"        InflowFile  - Name of the InflowWind input file [used only when CompInflow=1]
 10            HWindSpeed  - Horizontal wind speed   [used only when CompInflow=0 and AnalysisType=1] (m/s)
-20            RefHt       - Reference height for horizontal wind speed [used only when CompInflow=0]  (m)
+150           RefHt       - Reference height for horizontal wind speed [used only when CompInflow=0]  (m)
 0.0           PLExp       - Power law exponent   [used only when CompInflow=0 and AnalysisType=1]   (-)
 ------- Turbine Data ------------------------------
 1             NumTurbines  - Number of turbines
@@ -27,7 +27,7 @@ False         Echo               -   Echo the input to "<rootname>.ech"?  (flag)
      0.0, 0.0, 0.0   BaseOriginInit(1) - Coordinate of tower base in base coordinates (m)
           3   NumBlades(1)    - Number of blades (-)
         1.0   HubRad(1)          - Hub radius (m)
-         20   HubHt(1)           - Hub height (m)
+        150   HubHt(1)           - Hub height (m)
          -1   Overhang(1)        - Overhang (m)
         0.0   ShftTilt(1)        - Shaft tilt (deg)
         2.5   Precone(1)         - Blade precone (deg)
@@ -47,7 +47,7 @@ False         Echo               -   Echo the input to "<rootname>.ech"?  (flag)
           1   NumCases     - Number of cases to run
 HWndSpeed  PLExp  RotSpd  Pitch   Yaw   dT    Tmax  DOF  Amplitude Frequency 
 (m/s)      (-)    (rpm)   (deg)  (deg)  (s)   (s)   (-)   (-)       (Hz)
-1.0000000E+01  0.0000000E+00  2.0000000E+01  0.0000000E+00  0.0000000E+00  2.0000000E-04  2.0000000E+00  0.0000000E+00  0.0000000E+00  0.0000000E+00
+1.0000000E+01  0.0000000E+00  1.5000000E+02  0.0000000E+00  0.0000000E+00  1.0000000E-04  2.0000000E+00  0.0000000E+00  0.0000000E+00  0.0000000E+00
 ------- Output Settings ------------------------------
 "ES15.8E2"        OutFmt      - Format used for text tabular output, excluding the time channel.  Resulting field should be 10 characters. (quoted string)
 1             OutFileFmt  - Format for tabular (time-marching) output file (switch) {1: text file [<RootName>.out], 2: binary file [<RootName>.outb], 3: both}
