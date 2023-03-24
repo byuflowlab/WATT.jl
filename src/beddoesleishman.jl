@@ -93,3 +93,24 @@ function parsesolution(dsmodel::DS.BeddoesLeishman, xds, W, phi, tvec, chordvec,
     end
     error("Dynamic stall model failed to initialize. You likely chose a model that is not yet incorporated.")
 end
+
+
+function extractloads!(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twistvec, pitch, blade::Blade, env::Environment, Cx, Cy, Cn, Ct, Cl, Cd, Cm) #TODO: This should probably be an inplace function. 
+    if isa(dsmodel.detype, DS.Functional)
+        error("The Beddoes-Leishman functional form isn't ready yet. ")
+    elseif isa(dsmodel.detype, DS.Iterative)
+        error("The Beddoes-Leishman iterative implementation is still tying its' shoes.")
+    else #Model is an indicial
+        if dsmodel.version==1 #Original implementation
+            error("Original Beddoes-Leishman model not yet ready.")
+        elseif dsmodel.version==2 #AeroDyn Original #Todo: Add a moment place holder. 
+            extractloads_BLA(dsmodel, x, ccout, chordvec, twistvec, pitch, blade, env) #TODO: If I'm doing name functions here, then I don't need to have all of the variables used for multiple dispatch passed to each function. 
+        elseif dsmodel.version==3 #AeroDyn Gonzalez
+            # error("The AreoDyn Gonzalez implementation isn't ready yet.")
+            extractloads_BLAG!(dsmodel, x, ccout, chordvec, twistvec, pitch, blade, env, Cx, Cy, Cn, Ct, Cl, Cd, Cm)
+        elseif dsmodel.version==4 #AeroDyn Minema
+            error("The AeroDyn Minema implementation needs work. Try a different model.")
+        end
+    end
+    # error("Dynamic stall model failed to extract the loads. You likely chose a model that is not yet incorporated.")
+end

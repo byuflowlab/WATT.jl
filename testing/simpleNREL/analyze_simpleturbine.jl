@@ -208,16 +208,16 @@ if readflag
         namedx = "B1N"*number*"_TDxr"
         namedy = "B1N"*number*"_TDyr"
         namedz = "B1N"*number*"_TDzr"
-        namedfx = "B1N"*number*"_DFxR"
-        namedfy = "B1N"*number*"_DFyR"
-        namedfz = "B1N"*number*"_DFzR"
+        # namedfx = "B1N"*number*"_DFxR"
+        # namedfy = "B1N"*number*"_DFyR"
+        # namedfz = "B1N"*number*"_DFzR"
 
         dxmat[:,i] = outs[namedx]
         dymat[:,i] = outs[namedy]
         dzmat[:,i] = outs[namedz]
-        dfx[:,i] = outs[namedfx]
-        dfy[:,i] = outs[namedfy]
-        dfz[:,i] = outs[namedfz]
+        # dfx[:,i] = outs[namedfx]
+        # dfy[:,i] = outs[namedfy]
+        # dfz[:,i] = outs[namedfz]
     end
 
     # global rdx = zeros(nt, ne)
@@ -306,8 +306,14 @@ if runflag
     runflag = false
 end
 
+@time Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
     
+nothing
 
+# @code_warntype Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+
+# nothing
+ 
 #Tip deflections
 tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec)]
 tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec)]

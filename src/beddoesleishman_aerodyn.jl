@@ -85,28 +85,18 @@ function extractloads_BLA(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twist
     # @show x
     for i = 1:n
         idx = 22*(i-1)
-        xs = x[1+idx:idx+22] 
+        xs = view(x, 1+idx:idx+22)
         af = dsmodel.airfoils[i]
 
         u = ccout.W[i] 
-        # alpha = -((twistvec[i] + pitch) - ccout.phi[i]) #TODO: Make this work for a turbine or a propeller. 
-        # if i==2
-        #     @show alpha #This appears to be slightly off. -> It could be off cause I might be starting from a different azimuthal angle. 
-        # end
 
         Cn[i], Ct[i], Cl[i], Cd[i], _ = DS.BLAD_coefficients(dsmodel, xs, u, chordvec[i], af, env.a)
-
-        # if i==n
-        #     @show u, alpha, Cn[i], Ct[i]
-        # end
 
         cphi = cos(ccout.phi[i])
         sphi = sin(ccout.phi[i])
         Cx[i] = Cl[i]*cphi + Cd[i]*sphi
-        Cy[i] = Cl[i]*sphi - Cd[i]*cphi
+        Cy[i] = -(Cl[i]*sphi - Cd[i]*cphi) #The loading is negative for Fy because the forces are reported positive in the negative direction. 
 
-        # N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo. Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? -> yes. yes it is. And ccout.W isn't the actual inflow velocity, it is just the sum of the.... wait.... it is... Line 304 of CCBlade.jl calculates the actual inflow velocity. 
-        # T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
     end
     return Cx, Cy, Cn, Ct, Cl, Cd
 end

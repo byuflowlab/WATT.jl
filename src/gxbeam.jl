@@ -4,7 +4,7 @@ Also some code to run GXBeam in the way that I'm doing it in the aerostructural 
 
 =#
 function retrieve_eulerangles(R)
-    return [atan(R[3,2], R[3,3]), asin(-R[3,1]), atan(R[2,1], R[1,1])]
+    return SVector{3}([atan(R[3,2], R[3,3]), asin(-R[3,1]), atan(R[2,1], R[1,1])])
 end
 
 function WMPtoangle(c)
@@ -301,7 +301,7 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, assembly; fit=DS.Li
 
     #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. )
     Fzfit = fit(rvec, -Fx) #Todo: I need to nail down behavior outside of the aero node regions. 
-    Fyfit = fit(rvec, -Fy) #The loading is negative for Fy because the forces are reported positive in the negative direction. 
+    Fyfit = fit(rvec, Fy) 
     Mxfit = fit(rvec, Mx)
 
 

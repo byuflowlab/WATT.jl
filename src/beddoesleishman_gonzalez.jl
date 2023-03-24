@@ -6,12 +6,12 @@ Code to interact with the DynamicStallModels Package, specifically for the Beddo
 
 #Todo: I need to come through and unify some of these names and use multiple dispatch. 
 function initializeBLAG(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishman, solver::Solver, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
-
-    if turbine
-        thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] #TODO: I wonder if I should do this in the simulate section. 
-    else
-        thetavec = [((twistvec[i] + pitch) - phivec[i]) for i = 1:na]
-    end
+    # thetavec
+    # if turbine
+    #     thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] #TODO: I wonder if I should do this in the simulate section. 
+    # else
+    #     thetavec = [((twistvec[i] + pitch) - phivec[i]) for i = 1:na]
+    # end
 
     ns = DS.numberofstates(dsmodel)
     np = DS.numberofparams(dsmodel)
@@ -28,7 +28,13 @@ function initializeBLAG(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishma
         xidx = ns*(i-1)+1:i*ns
         pidx = np*(i-1)+1:i*np
         # @show xidx, pidx 
-        xds[1,xidx], _, pds[pidx] = DS.initialize_ADG([Vxvec[i]], [thetavec[i]], tvec, dsmodel.airfoils[i], chordvec[i], a) #It appears that I'm inputing the correct p vector. 
+        if turbine
+            theta = -((twistvec[i] + pitch) - phivec[i]) #TODO: I wonder if I should do this in the simulate section. 
+        else
+            theta = ((twistvec[i] + pitch) - phivec[i])
+        end
+        #Todo: It looks like I'm initializing a vector to be passed in. I could probably change how p is organized and only pass in a value. 
+        xds[1,xidx], _, pds[pidx] = DS.initialize_ADG([Vxvec[i]], [theta], tvec, dsmodel.airfoils[i], chordvec[i], a) #It appears that I'm inputing the correct p vector. 
     end
 
     # @show xds #This looks correct. 
@@ -103,7 +109,7 @@ function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twis
     # @show x
     for i = 1:n
         idx = ns*(i-1)
-        xs = x[1+idx:idx+ns] 
+        xs = view(x, 1+idx:idx+ns)
         af = dsmodel.airfoils[i]
 
         u = ccout.W[i]
@@ -120,7 +126,7 @@ function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twis
         cphi = cos(ccout.phi[i])
         sphi = sin(ccout.phi[i])
         Cx[i] = Cl[i]*cphi + Cd[i]*sphi
-        Cy[i] = Cl[i]*sphi - Cd[i]*cphi
+        Cy[i] = -(Cl[i]*sphi - Cd[i]*cphi) #The loading is negative for Fy because the forces are reported positive in the negative direction. 
 
         # N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo. Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? -> Yes this is dimensionoalized by the total inflow velocity (both CCBlade and OpenFAST do that.)
         # T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
@@ -128,4 +134,51 @@ function extractloads_BLAG(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twis
     return Cx, Cy, Cn, Ct, Cl, Cd, Cm
 end
 
+
+function extractloads_BLAG!(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twistvec, pitch, blade::Blade, env::Environment, Cx, Cy, Cn, Ct, Cl, Cd, Cm) #TODO: This should probably be an inplace function. #TODO: The blade seems like it has repetitive data, the airfoils and radial node locations.... So I either need to rely on it more, or just get rid of it. 
+    n = dsmodel.n
+
+    # println("Using BLA extract loads")
+
+    # Cl = Array{eltype(chordvec)}(undef, n) #TODO: This needs to be changed to an inplace function. 
+    # Cd = Array{eltype(chordvec)}(undef, n)
+    # Cn = Array{eltype(chordvec)}(undef, n)
+    # Ct = Array{eltype(chordvec)}(undef, n)
+    # Cx = Array{eltype(chordvec)}(undef, n)
+    # Cy = Array{eltype(chordvec)}(undef, n)
+    # Cm = Array{eltype(chordvec)}(undef, n)
+    # N = Array{eltype(chordvec)}(undef, n)
+    # T = Array{eltype(chordvec)}(undef, n)
+
+    ns = DS.numberofstates(dsmodel) #Todo: If I'm generalizing like this, I wonder if I just need a single function, not one for each coupling? 
+    np = DS.numberofparams(dsmodel)
+    # nst = DS.numberofstates_total(dsmodel)
+
+    # @show x
+    for i = 1:n
+        idx = ns*(i-1)
+        xs = view(x, 1+idx:idx+ns)
+        af = dsmodel.airfoils[i]
+
+        u = ccout.W[i]
+        # alpha = -((twistvec[i] + pitch) - ccout.phi[i]) #TODO: Make this work for a turbine or a propeller. 
+        # if i==2
+        #     @show alpha #This appears to be slightly off. -> It could be off cause I might be starting from a different azimuthal angle. 
+        # end
+
+        Cn[i], Ct[i], Cl[i], Cd[i], Cm[i] = DS.BLADG_coefficients(dsmodel, xs, u, chordvec[i], af, env.a) #TODO: I might be able to use multiple dispatch here. 
+
+        # if i==n
+        #     @show u, alpha, Cn[i], Ct[i]
+        # end
+        cphi = cos(ccout.phi[i])
+        sphi = sin(ccout.phi[i])
+        Cx[i] = Cl[i]*cphi + Cd[i]*sphi
+        Cy[i] = -(Cl[i]*sphi - Cd[i]*cphi) #The loading is negative for Fy because the forces are reported positive in the negative direction. 
+
+        # N[i] = Cn[i]*0.5*env.rho*u^2*chordvec[i] #Todo. Is this going to need to be dimensionalized by the actual velocity (including induced velocities)? -> Yes this is dimensionoalized by the total inflow velocity (both CCBlade and OpenFAST do that.)
+        # T[i] = Ct[i]*0.5*env.rho*u^2*chordvec[i]
+    end
+    # return Cx, Cy, Cn, Ct, Cl, Cd, Cm
+end
 
