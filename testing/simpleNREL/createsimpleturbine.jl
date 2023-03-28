@@ -7,7 +7,7 @@ Adam Cardoza 01/23/23
 =#
 
 
-using OpenFASTsr, Rotors, DynamicStallModels
+using OpenFASTsr, Rotors, DynamicStallModels, FLOWMath
 
 of = OpenFASTsr
 
@@ -27,7 +27,7 @@ bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
 bddriver = of.read_bddriver("NREL5MW_bddriver.inp", ofpath)
 
 ### Simulation control
-tmax = 1.0
+tmax = 5.0
 dt = 0.001
 dt_out = 0.001 # "\"default\""
 
@@ -152,10 +152,19 @@ let
     n = Int(sum(members[:,2]) - nelem + 1)
     rvec = collect(range(rhub, rtip, length=n))
     rfrac = (rvec .- rhub)/(rtip-rhub)
-    chordvec = ones(n)
+    rnew = rvec.-rhub
+    # chordvec = ones(n)
     twistvec = zeros(n)
     # twistvec = -ones(n).*3.0  
-    AFID = ones(n).*8
+    # AFID = ones(n).*8
+    chordfit = Akima(adblade["BlSpn"], adblade["BlChord"])
+    chordvec = chordfit.(rnew)
+    AFID = of.integerfit(adblade["BlSpn"], adblade["BlAFID"], rnew)
+    for i = 1:n
+        if AFID[i]<3
+            AFID[i]=3
+        end
+    end
 
 
 

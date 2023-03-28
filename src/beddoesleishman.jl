@@ -5,7 +5,7 @@ Code to interact with the DynamicStallModels Package, specifically for the Risø
 
 
 
-function initializeDSmodel(dsmodel::DS.BeddoesLeishman, dsmodelinit::ModelInit, solver::Solver, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
+function initializeDSmodel(dsmodel::DS.BeddoesLeishman, dsmodelinit::ModelInit, solver::Solver, turbine::Bool, nt, na, tvec, ccstate, Vxdotvec, chordvec, twistvec, pitch, a) 
 
     if isa(dsmodel.detype, DS.Functional)
         error("The Beddoes-Leishman functional form isn't ready yet. ")
@@ -16,12 +16,12 @@ function initializeDSmodel(dsmodel::DS.BeddoesLeishman, dsmodelinit::ModelInit, 
             error("Original Beddoes-Leishman model not yet ready.")
 
         elseif dsmodel.version==2 #AeroDyn Original
-            return initializeBLA(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
+            return initializeBLA(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, ccstate, Vxdotvec, chordvec, twistvec, pitch, a) 
 
         elseif dsmodel.version==3 #AeroDyn Gonzalez
             # error("The AreoDyn Gonzalez implementation isn't ready yet.")
             # println("Got to initializing Gonzalez model") #Got here, but I can't figure out where it goes. 
-            return initializeBLAG(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
+            return initializeBLAG(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, ccstate, Vxdotvec, chordvec, twistvec, pitch, a) 
 
         elseif dsmodel.version==4 #AeroDyn Minema
             error("The AeroDyn Minema implementation needs work. Try a different model.")

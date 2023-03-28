@@ -180,6 +180,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
         checkforwarnings(rvec, twistvec, rhub, rtip, pitch, precone, tilt, yaw)
     end
 
+    #TODO: I need to put something in to be able to disable the dynamic stall model (near the hub). 
     #TODO: I might put some checks in to help with problems caused by having rvec[i]~=rhub or rvec[i]~=rtip. 
     #TODO: I might put some checks in to see if the airfoils are in degrees or radians. 
     #TODO: I might put some checks in to see if twist or pitch is in degrees or radians. 
@@ -193,7 +194,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
     t0 = tvec[1]
 
     ### Prepare data storage
-    Vxvec = Array{eltype(chordvec)}(undef, na) #Todo: These might be too type specific. 
+    Vxvec = Array{eltype(chordvec)}(undef, na) #TODO: These might be too type specific. 
     Vyvec = Array{eltype(chordvec)}(undef, na)
     azimuth = Array{eltype(chordvec)}(undef, nt)
     # Vxvec = @SVector zeros(eltype(chordvec), na)  #Note: I guess static arrays are immutable... even though the docs say they aren't. 
@@ -215,7 +216,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
     sections = Array{CCBlade.Section{eltype(rvec)}, 1}(undef, na)
     operatingpoints = Array{CCBlade.OperatingPoint{eltype(rvec)}, 1}(undef, na)
-    cchistory = Array{Array{CCBlade.Outputs{eltype(rvec)}, 1}, 1}(undef, nt) #[cchistory[1] for i = 1:nt]
+    cchistory = Array{CCBlade.Outputs{eltype(rvec)}, 2}(undef, nt, na) #[cchistory[1] for i = 1:nt] #Todo: I might be able to initialize this further, meaning initialize exactly how many input entries I need. 
     gxhistory = Array{GXBeam.AssemblyState{eltype(rvec), Vector{GXBeam.PointState{eltype(rvec)}}, Vector{GXBeam.ElementState{eltype(rvec)}}}}(undef, nt)
 
 
@@ -234,7 +235,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
         operatingpoints[i] = CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a)
     end
 
-    cchistory[1] = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
+    cchistory[1,:] = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
 
 
 
@@ -252,17 +253,17 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
     # Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #TODO: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. 
 
-    ode, xds, p_ds = initializeDSmodel(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, cchistory[1].W, Wdotvec, chordvec, twistvec, cchistory[1].phi, pitch, env.a) 
+    ode, xds, p_ds = initializeDSmodel(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, cchistory[1, :], Wdotvec, chordvec, twistvec, pitch, env.a)
 
 
     # Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:], Cm[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env) #Todo: I might need to individual rotations for the stations. 
     #Todo: Why am I storing Cl, Cn, and Cx? 
-    extractloads!(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env, view(Cx, 1, :), view(Cy, 1, :), view(Cn, 1, :), view(Ct, 1, :), view(Cl, 1, :), view(Cd, 1, :), view(Cm, 1, :))
+    extractloads!(dsmodel, xds[1,:], cchistory[1, :], chordvec, twistvec, pitch, blade, env, view(Cx, 1, :), view(Cy, 1, :), view(Cn, 1, :), view(Ct, 1, :), view(Cl, 1, :), view(Cd, 1, :), view(Cm, 1, :))
     
     ### Dimensionalize #TODO: Could probably make a function out of this. 
     #Todo: These loads may need to be rotated from a local frame to a hub frame. 
     for j = 1:na
-        u_1 = cchistory[1].W[j]
+        u_1 = cchistory[1, j].W
         qinf_1 = 0.5*env.rho*u_1^2
         N[1,j] = Cn[1,j]*qinf_1*chordvec[j] 
         T[1,j] = Ct[1,j]*qinf_1*chordvec[j]
@@ -279,7 +280,7 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
     # rgx = [assembly.elements[i].x[1] for i in 1:nelem]
 
     distributed_loads = Dict{Int64, GXBeam.DistributedLoads{eltype(rvec)}}()
-    update_forces!(distributed_loads, Fx[1,:], Fy[1,:], Mx[1,:], rvec, assembly)
+    update_forces!(distributed_loads, view(Fx, 1,:), view(Fy, 1,:), view(Mx, 1,:), rvec, assembly)
 
 
 
@@ -337,11 +338,11 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
         end
 
         ### Solve BEM
-        cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
+        cchistory[i, :] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
 
 
-        ### Update Dynamic Stall model inputs 
-        update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i].W, cchistory[i].phi, twistvec, pitch, env, t)
+        ### Update Dynamic Stall model inputs #TODO: Could potentially decrease the number of calls to getproperty by getting the inflow velocity out once, then passing it to the update aero parameters function and the extract loads function. 
+        update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i, :].W, cchistory[i, :].phi, twistvec, pitch, env, t)
 
 
 
@@ -358,19 +359,13 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
         ### Extract loads 
         # Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:], Cm[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env)
-        # Cxi = 
-        # Cyi = 
-        # Cni = 
-        # Cti = 
-        # Cli = 
-        # Cdi = 
-        # Cmi = 
-        extractloads!(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env, view(Cx, i, :), view(Cy, i, :), view(Cn, i, :), view(Ct, i, :), view(Cl, i, :), view(Cd, i, :), view(Cm, i, :))
+    
+        extractloads!(dsmodel, view(xds, i,:), cchistory[i, :], chordvec, twistvec, pitch, blade, env, view(Cx, i, :), view(Cy, i, :), view(Cn, i, :), view(Ct, i, :), view(Cl, i, :), view(Cd, i, :), view(Cm, i, :))
     
         
         ### Dimensionalize
         for j = 1:na
-            u_i = cchistory[i].W[j] #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
+            u_i = cchistory[i,j].W #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
             qinf = 0.5*env.rho*u_i^2
             N[i,j] = Cn[i,j]*qinf*chordvec[j] 
             T[i,j] = Ct[i,j]*qinf*chordvec[j]
@@ -385,13 +380,13 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
         ### Update GXBeam loads #Todo. This is also not accounting for gravitational loads. 
         ##Todo. Does GXBeam account for actual angular movement when keeping the states and what not? Does it integrate and find the new position? -> i.e. changing the gravity. -> I don't believe it does. So I will need to. 
-        update_forces!(distributed_loads, Fx[i-1,:], Fy[i-1,:], Mx[i-1,:], rvec, assembly) 
+        update_forces!(distributed_loads, view(Fx, i-1,:), Fy[i-1,:], Mx[i-1,:], rvec, assembly) 
 
         Omega = SVector(0.0, 0.0, -env.RS(t))
         gravity = SVector(g*sin(azimuth[i-1]), -g*cos(azimuth[i-1]), 0.0)
 
 
-        ### Solve GXBeam for time step
+        ### Solve GXBeam for time step #Todo: This function is taking a lot of time. 
         system, localhistory, converged = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? 
 
 

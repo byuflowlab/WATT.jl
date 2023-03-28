@@ -5,12 +5,12 @@ Code to interact with the DynamicStallModels Package, specifically for the Beddo
 
 
 
-function initializeBLA(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishman, solver::Solver, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
+function initializeBLA(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishman, solver::Solver, turbine::Bool, nt, na, tvec, ccstate, Vxdotvec, chordvec, twistvec, pitch, a) 
 
     if turbine
-        thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] #TODO: I wonder if I should do this in the simulate section. 
+        thetavec = [-((twistvec[i] + pitch) - ccstate[i].phi) for i = 1:na] #TODO: I wonder if I should do this in the simulate section. 
     else
-        thetavec = [((twistvec[i] + pitch) - phivec[i]) for i = 1:na]
+        thetavec = [((twistvec[i] + pitch) - ccstate[i].phi) for i = 1:na]
     end
 
     ns = DS.numberofstates(dsmodel)
@@ -24,7 +24,7 @@ function initializeBLA(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishman
         xidx = 22*(i-1)+1:i*22
         pidx = 18*(i-1)+1:i*18
         # @show xidx, pidx 
-        xds[1,xidx], _, pds[pidx] = DS.initialize_ADO([Vxvec[i]], [thetavec[i]], tvec, dsmodel.airfoils[i], chordvec[i], a) #It appears that I'm inputing the correct p vector. 
+        xds[1,xidx], _, pds[pidx] = DS.initialize_ADO([ccstate[i].W], [thetavec[i]], tvec, dsmodel.airfoils[i], chordvec[i], a) #It appears that I'm inputing the correct p vector. 
     end
 
     # @show xds #This looks correct. 

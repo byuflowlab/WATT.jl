@@ -5,13 +5,15 @@ Code to interact with the DynamicStallModels Package, specifically for the Beddo
 
 
 #Todo: I need to come through and unify some of these names and use multiple dispatch. 
-function initializeBLAG(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishman, solver::Solver, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
+function initializeBLAG(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishman, solver::Solver, turbine::Bool, nt, na, tvec, ccstate, Vxdotvec, chordvec, twistvec, pitch, a) 
     # thetavec
     # if turbine
     #     thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] #TODO: I wonder if I should do this in the simulate section. 
     # else
     #     thetavec = [((twistvec[i] + pitch) - phivec[i]) for i = 1:na]
     # end
+
+    
 
     ns = DS.numberofstates(dsmodel)
     np = DS.numberofparams(dsmodel)
@@ -29,12 +31,12 @@ function initializeBLAG(dsmodel::DS.BeddoesLeishman, dsmodelinit::BeddoesLeishma
         pidx = np*(i-1)+1:i*np
         # @show xidx, pidx 
         if turbine
-            theta = -((twistvec[i] + pitch) - phivec[i]) #TODO: I wonder if I should do this in the simulate section. 
+            theta = -((twistvec[i] + pitch) - ccstate[i].phi) #TODO: I wonder if I should do this in the simulate section. 
         else
-            theta = ((twistvec[i] + pitch) - phivec[i])
+            theta = ((twistvec[i] + pitch) - ccstate[i].phi)
         end
         #Todo: It looks like I'm initializing a vector to be passed in. I could probably change how p is organized and only pass in a value. 
-        xds[1,xidx], _, pds[pidx] = DS.initialize_ADG([Vxvec[i]], [theta], tvec, dsmodel.airfoils[i], chordvec[i], a) #It appears that I'm inputing the correct p vector. 
+        xds[1,xidx], _, pds[pidx] = DS.initialize_ADG([ccstate[i].W], [theta], tvec, dsmodel.airfoils[i], chordvec[i], a) #It appears that I'm inputing the correct p vector. 
     end
 
     # @show xds #This looks correct. 
@@ -160,7 +162,7 @@ function extractloads_BLAG!(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twi
         xs = view(x, 1+idx:idx+ns)
         af = dsmodel.airfoils[i]
 
-        u = ccout.W[i]
+        u = ccout[i].W #Todo: This line is taking a long time. Or rather is getting called a lot. 
         # alpha = -((twistvec[i] + pitch) - ccout.phi[i]) #TODO: Make this work for a turbine or a propeller. 
         # if i==2
         #     @show alpha #This appears to be slightly off. -> It could be off cause I might be starting from a different azimuthal angle. 
@@ -171,8 +173,8 @@ function extractloads_BLAG!(dsmodel::DS.BeddoesLeishman, x, ccout, chordvec, twi
         # if i==n
         #     @show u, alpha, Cn[i], Ct[i]
         # end
-        cphi = cos(ccout.phi[i])
-        sphi = sin(ccout.phi[i])
+        cphi = cos(ccout[i].phi)
+        sphi = sin(ccout[i].phi)
         Cx[i] = Cl[i]*cphi + Cd[i]*sphi
         Cy[i] = -(Cl[i]*sphi - Cd[i]*cphi) #The loading is negative for Fy because the forces are reported positive in the negative direction. 
 

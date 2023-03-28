@@ -306,7 +306,26 @@ if runflag
     runflag = false
 end
 
-@time Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+
+# tvecsample = 0:0.001:0.5
+
+# Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+
+# @time Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+
+# nothing
+# using Profile
+
+# @profile Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+
+# open("./prof.txt", "w") do s
+    
+#     Profile.print(IOContext(s); combine=true)
+# end
+
+# using Profile, ProfileSVG
+
+# ProfileSVG.@profview Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
     
 nothing
 
@@ -383,13 +402,13 @@ using Plots, LaTeXStrings
 
 tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=:outerright)
 plot!(tvec, fxmat[:,end], lab=L"$F_x$ - OF", seriescolor=:blue)
-plot!(tvec, fymat[:,end], lab=L"$F_y$ - OF", seriescolor=:red)
+plot!(tvec, -fymat[:,end], lab=L"$F_y$ - OF", seriescolor=:red)
 # plot!(tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
 plot!(tvec, loads.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
 plot!(tvec, loads.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
 # plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
-display(tiploads)
-# savefig("/Users/adamcardoza/Desktop/SimpleNRELTipLoads_10seconds_020823.png")
+# display(tiploads)
+# savefig("/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_10seconds_032723.png")
 
 
 # Uplt = plot(xaxis="Time (s)", yaxis="Tip Velocity (m/s)", legend=:outerright)
@@ -413,8 +432,8 @@ plot!(tvec, tipdz, lab=L"\delta z - OF", linestyle=:dash)
 plot!(tvec, -tipdef_z, lab=L"\delta x - GX")
 plot!(tvec, tipdef_y, lab=L"\delta y - GX")
 plot!(tvec, tipdef_x, lab=L"\delta z - GX")
-display(tipdefs2)
-# savefig("/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_10seconds_031523.png")
+# display(tipdefs2)
+# savefig("/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_10seconds_032723.png")
 
 
 
