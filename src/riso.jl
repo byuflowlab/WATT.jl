@@ -46,53 +46,53 @@ function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Steady, solver::RK4, t
     return dsmodel, xds, pds
 end
 
-function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Hansen, solver::DiffEQ, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
+# function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Hansen, solver::DiffEQ, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
 
-    if turbine
-        thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] 
-    else
-        thetavec = [((twistvec[i] + pitch) - phivec[i]) for i = 1:na]
-    end
+#     if turbine
+#         thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] 
+#     else
+#         thetavec = [((twistvec[i] + pitch) - phivec[i]) for i = 1:na]
+#     end
 
-    pds = vcat(Vxvec, Vxdotvec, thetavec, zeros(na), chordvec)
+#     pds = vcat(Vxvec, Vxdotvec, thetavec, zeros(na), chordvec)
 
 
-    # ode = createrisoode(blade)
+#     # ode = createrisoode(blade)
 
-    xds = zeros(nt, 4*na)
-    xds[1,4:4:4*na] .= 1
+#     xds = zeros(nt, 4*na)
+#     xds[1,4:4:4*na] .= 1
 
-    prob = DE.ODEProblem{false}(dsmodel, xds[1,:], (tvec[1], tvec[end]), pds)
-    integrator = DE.init(prob, solver.algorithm)
+#     prob = DE.ODEProblem{false}(dsmodel, xds[1,:], (tvec[1], tvec[end]), pds)
+#     integrator = DE.init(prob, solver.algorithm)
 
-    return integrator, xds, pds
-end
+#     return integrator, xds, pds
+# end
 
-function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Steady, solver::DiffEQ, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
+# function initializeDSmodel(dsmodel::DS.Riso, dsmodelinit::Steady, solver::DiffEQ, turbine::Bool, nt, na, tvec, Vxvec, Vxdotvec, chordvec, twistvec, phivec, pitch, a) 
 
-    if turbine
-        thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] 
-    else
-        thetavec = [((twistvec[i] + pitch) - phivec[i]) for i = 1:na]
-    end
+#     if turbine
+#         thetavec = [-((twistvec[i] + pitch) - phivec[i]) for i = 1:na] 
+#     else
+#         thetavec = [((twistvec[i] + pitch) - phivec[i]) for i = 1:na]
+#     end
 
-    pds = vcat(Vxvec, Vxdotvec, thetavec, zeros(na), chordvec)
+#     pds = vcat(Vxvec, Vxdotvec, thetavec, zeros(na), chordvec)
 
-    # ode = createrisoode(blade)
+#     # ode = createrisoode(blade)
 
-    xds = zeros(nt, 4*na) 
-    xds[1,4:4:4*na] .= 1
+#     xds = zeros(nt, 4*na) 
+#     xds[1,4:4:4*na] .= 1
 
-    prob = DE.SteadyStateProblem{false}(dsmodel, xds[1,:], pds)
-    sol = DE.solve(prob)
+#     prob = DE.SteadyStateProblem{false}(dsmodel, xds[1,:], pds)
+#     sol = DE.solve(prob)
 
-    xds[1,:] = sol.u
+#     xds[1,:] = sol.u
 
-    prob = DE.ODEProblem{false}(dsmodel, xds[1,:], (tvec[1], tvec[end]), pds)
-    integrator = DE.init(prob, solver.algorithm)
+#     prob = DE.ODEProblem{false}(dsmodel, xds[1,:], (tvec[1], tvec[end]), pds)
+#     integrator = DE.init(prob, solver.algorithm)
 
-    return integrator, xds, pds
-end
+#     return integrator, xds, pds
+# end
 
 function update_aero_parameters!(dsmodel::DS.Riso, turbine::Bool, pds, na, rvec, Wvec, phivec, twistvec, pitch, env, t)
     # pds = vcat(Vxvec, Vxdotvec, v, vdot, thetavec, thetadot, chordvec)

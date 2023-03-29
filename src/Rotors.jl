@@ -1,10 +1,11 @@
 module Rotors
 
-using DifferentialEquations, FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, CurveFit, NLsolve, DynamicStallModels
+using FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, CurveFit, NLsolve, DynamicStallModels
 #Todo: Why do I have plots as a dependency? 
 
 DS = DynamicStallModels
-DE = DifferentialEquations #Todo: I'm not sure that I need this as a dependency
+# using DifferentialEquations
+# DE = DifferentialEquations #Todo: I'm not sure that I need this as a dependency
 
 ### Structs, solvers, and whatnot. 
 include("./types.jl")

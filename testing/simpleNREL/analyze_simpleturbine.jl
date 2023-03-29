@@ -307,13 +307,13 @@ if runflag
 end
 
 
-# tvecsample = 0:0.001:0.5
+tvecsample = 0:0.001:0.5
 
-# Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
 
-# @time Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+@time Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
 
-# nothing
+nothing
 # using Profile
 
 # @profile Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)

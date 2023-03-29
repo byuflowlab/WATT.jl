@@ -390,6 +390,8 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
         system, localhistory, converged = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? 
 
 
+        # println(typeof(localhistory))
+
 
         ### Extract GXBeam outputs
         gxhistory[i] = localhistory[end] 

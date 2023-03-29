@@ -153,18 +153,18 @@ let
     rvec = collect(range(rhub, rtip, length=n))
     rfrac = (rvec .- rhub)/(rtip-rhub)
     rnew = rvec.-rhub
-    # chordvec = ones(n)
+    chordvec = ones(n)
     twistvec = zeros(n)
     # twistvec = -ones(n).*3.0  
-    # AFID = ones(n).*8
-    chordfit = Akima(adblade["BlSpn"], adblade["BlChord"])
-    chordvec = chordfit.(rnew)
-    AFID = of.integerfit(adblade["BlSpn"], adblade["BlAFID"], rnew)
-    for i = 1:n
-        if AFID[i]<3
-            AFID[i]=3
-        end
-    end
+    AFID = ones(n).*8
+    # chordfit = Akima(adblade["BlSpn"], adblade["BlChord"])
+    # chordvec = chordfit.(rnew)
+    # AFID = of.integerfit(adblade["BlSpn"], adblade["BlAFID"], rnew)
+    # for i = 1:n
+    #     if AFID[i]<3
+    #         AFID[i]=3
+    #     end
+    # end
 
 
 
