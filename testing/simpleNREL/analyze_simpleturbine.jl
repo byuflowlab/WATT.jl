@@ -407,7 +407,7 @@ plot!(tvec, -fymat[:,end], lab=L"$F_y$ - OF", seriescolor=:red)
 plot!(tvec, loads.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
 plot!(tvec, loads.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
 # plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
-# display(tiploads)
+display(tiploads)
 # savefig("/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_10seconds_032723.png")
 
 
@@ -432,7 +432,7 @@ plot!(tvec, tipdz, lab=L"\delta z - OF", linestyle=:dash)
 plot!(tvec, -tipdef_z, lab=L"\delta x - GX")
 plot!(tvec, tipdef_y, lab=L"\delta y - GX")
 plot!(tvec, tipdef_x, lab=L"\delta z - GX")
-# display(tipdefs2)
+display(tipdefs2)
 # savefig("/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_10seconds_032723.png")
 
 

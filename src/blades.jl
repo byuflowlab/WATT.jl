@@ -6,7 +6,7 @@ struct Blade{TF} #TODO: Do I want structural information in this? Or a different
     rhub::TF
     rtip::TF
     rR::Array{TF,1}
-    airfoils::Array{DS.Airfoil, 1}
+    airfoils::AbstractVector{<:DS.Airfoil}
 end
 
 

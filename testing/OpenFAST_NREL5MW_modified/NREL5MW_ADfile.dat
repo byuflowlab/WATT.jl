@@ -92,6 +92,8 @@ True          SumPrint            - Generate a summary file listing input option
 "B1Azimuth"
 "B2Azimuth"
 "B3Azimuth" 
+"RtFldFxg"
+"RtFldMxg"
 END of OutList section (the word "END" must appear in the first 3 columns of the last OutList line)
 ====== Outputs for all blade stations (same ending as above for B1N1.... =========================== [optional section]
    1              BldNd_BladesOut     - Number of blades to output all node information at.  Up to number of blades on turbine. (-)
@@ -117,5 +119,3 @@ END of OutList section (the word "END" must appear in the first 3 columns of the
 "Ct"
 END (the word "END" must appear in the first 3 columns of this last OutList line in the optional nodal output section)
 
-"RtAeroFxh"
-"RtAeroMxh"

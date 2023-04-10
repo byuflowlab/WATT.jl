@@ -88,7 +88,7 @@ afs = aftypes[af_idx]
 n = length(rvec)
 airfoils = Vector{DS.Airfoil}(undef, n)
 for i = 1:n
-    airfoils[i] = make_dsairfoil(afs[i])
+    airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
 end
 
 rR = rvec./rtip
@@ -100,7 +100,7 @@ blade = Rotors.Blade(rhub, rtip, rR, airfoils) #TODO: Weird that this won't expo
 
 env = environment(rho, mu, a, vinf, omega, shearexp)
 
-dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
+# dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
 dsmodelinit = Rotors.BeddoesLeishman()
 
 
@@ -111,15 +111,16 @@ dsmodelinit = Rotors.BeddoesLeishman()
 tspan = (0.0, addriver["Tmax_mat"][1]) #(0.0, 0.02) #
 dt = addriver["dT_mat"][1] #0.01
 
-tvec = tspan[1]:dt:tspan[2]
+# tvec = collect(tspan[1]:dt:tspan[2])
+tvec = collect(tspan[1]:dt:tspan[2]-dt)
 
 
 # @show twistvec #Todo. Take Pcopy out. 
-loads, coefs, cchistory, xds, azi_time = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=0, tipcorrection=nothing) #
+loads, coefs, cchistory, xds, azi_time = simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodelinit, azimuth0=0, tipcorrection=nothing) #
 
-loads2, coefs2, cchistory2, xds2, azi_time2 = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=2*pi/3, tipcorrection=nothing)
+loads2, coefs2, cchistory2, xds2, azi_time2 = simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodelinit, azimuth0=2*pi/3, tipcorrection=nothing)
 
-loads3, coefs3, cchistory3, xds3, azi_time3 = simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodel, dsmodelinit, azimuth0=4*pi/3, tipcorrection=nothing)
+loads3, coefs3, cchistory3, xds3, azi_time3 = simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodelinit, azimuth0=4*pi/3, tipcorrection=nothing)
 
 na = length(rvec)
 nt = length(tvec)
@@ -462,6 +463,14 @@ rof = adblade["BlSpn"] .+ rhub
 fxblade = cchistory[tix].Np.*cos(precone)
 fyblade = cchistory[tix].Tp
 
+fxerr = zero(tvec)
+fyerr = zero(tvec)
+
+for i in eachindex(tvec)
+    fxerr[i] = absavg(errfun.(loads.Fx[i,:], fxmat[i,:]))
+    fyerr[i] = absavg(errfun.(loads.Fy[i,:], -fymat[i,:]))
+end
+
 
 loadplt = plot(xaxis="Radius (m)", yaxis="Distributed Load", leg=:topleft, title="Time Step $tix")
 plot!(rvec, loads.Fx[tix,:], lab="Fx - Unsteady") #, markershape=:circle)
@@ -473,13 +482,20 @@ plot!(rvec, fyblade, lab="Fy - CCBlade", markershape=:cross)
 # display(loadplt)
 
 
-coefplt = plot(xaxis="Radius (m)", yaxis="Load Coefficient", leg=:topright, title="Time Step $tix")
-plot!(rvec, coefs.Cn[tix,:], lab=L"$C_n$ - Rotors") #, markershape=:circle)
-plot!(rvec, coefs.Ct[tix,:], lab=L"$C_t$ - Rotors") #, markershape=:circle)
-plot!(rof, cnmat[tix,:], markershape=:x, lab=L"$C_n$ - OpenFAST")
-plot!(rof, ccmat[tix,:], markershape=:x, lab=L"$C_t$ - OpenFAST")
+# coefplt = plot(xaxis="Radius (m)", yaxis="Load Coefficient", leg=:topright, title="Time Step $tix")
+# plot!(rvec, coefs.Cn[tix,:], lab=L"$C_n$ - Rotors") #, markershape=:circle)
+# plot!(rvec, coefs.Ct[tix,:], lab=L"$C_t$ - Rotors") #, markershape=:circle) #Todo: Need a way to get Ct out. 
+# plot!(rof, cnmat[tix,:], markershape=:x, lab=L"$C_n$ - OpenFAST")
+# plot!(rof, ccmat[tix,:], markershape=:x, lab=L"$C_t$ - OpenFAST")
 # display(coefplt)
 # savefig(coefplt, "radialloads_timestep$tix.png")
+
+loadingerrplt = plot(xaxis="Time (s)", yaxis="Relative Error (%)", title="Blade average Loading Error", ylims=(0,0.3))
+plot!(tvec, fxerr, lab="Fx")
+plot!(tvec, fyerr, lab="Fy")
+display(loadingerrplt)
+
+#Note: The error has increased from the coefficients here because there is a slight error on phi between CCBlade and OpenFAST (even though they use the same method, they have slightly different tolerances). This slight error is incorporated here through the inflow velocity (which is used to dimensionalize the loadings) in a exponential relationship which increases the error. 
 
 
 
@@ -503,12 +519,12 @@ for i = 1:nt
     Tcc[i], Qcc[i] = thrusttorque(rotor, sections, cchistory[i])
 end
 
-Terr = zeros(nt-1) #ends with 0.15% error on thrust
-Qerr = zeros(nt-1) #ends with -0.10% error on torque
+Terr = zeros(nt-1) #max error is 0.121%
+Qerr = zeros(nt-1) #Max error is 0.515%. 
 
 for i = 1:nt-1
-    Terr[i] = errfun(T[i], outs["RtAeroFxh"][i])
-    Qerr[i] = errfun(Q[i], outs["RtAeroMxh"][i])
+    Terr[i] = errfun(T[i], outs["RtFldFxg"][i])
+    Qerr[i] = errfun(Q[i], -outs["RtFldMxg"][i])
 end
 
 
@@ -516,15 +532,15 @@ end
 thrustplt = plot(xaxis="Time (s)", yaxis="Thrust (N)")
 plot!(tvec, T, lab="Rotors")
 plot!(tvec, Tcc, lab="CCBlade")
-plot!(tvec_of, outs["RtAeroFxh"], lab="OpenFAST")
+plot!(tvec_of, outs["RtFldFxg"], lab="OpenFAST")
 display(thrustplt)  
 # savefig(thrustplt, "thrust_loosely_BLADG_010623.png") 
 
 
 torqueplt = plot(xaxis="Time (s)", yaxis=L"Torque $\left(N\cdot m\right)$")
-plot!(tvec, Q, lab="Rotors")
+plot!(tvec, -Q, lab="Rotors")
 plot!(tvec, Qcc, lab="CCBlade")
-plot!(tvec_of, outs["RtAeroMxh"], lab="OpenFAST")
+plot!(tvec_of, outs["RtFldMxg"], lab="OpenFAST")
 display(torqueplt) 
 # savefig(torqueplt, "torque_loosely_BLADG_010623.png")
 

@@ -19,6 +19,7 @@ include("./environments.jl")
 
 
 ### Dynamic stall models. 
+include("./dynamicstallmodels.jl")
 include("./riso.jl") 
 include("./beddoesleishman_aerodyn.jl")
 include("./beddoesleishman_gonzalez.jl")
