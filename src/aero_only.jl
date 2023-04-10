@@ -25,7 +25,7 @@ Simulate the rotor's response for a given rotor and environmental condition.
 
 ### Notes
 """
-function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, tipcorrection=CCBlade.PrandtlTipHub(), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
+function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, tipcorrection=CCBlade.PrandtlTipHub(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
 
 
     if verbose
@@ -113,7 +113,7 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
 
     cchistory[1] = ccout
     # Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:], Cm[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env)
-    extract_ds_loads!(airfoils::AbstractVector{<:Airfoil}, view(xds, 1, :), xds_idxs, cchistory[1], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :))
+    extract_ds_loads!(airfoils, view(xds, 1, :), xds_idxs, cchistory[1], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :))
     
 
     ### Dimensionalize
@@ -171,7 +171,7 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
 
         ### Extract loads #TODO: I don't think that I need to keep all of this data. I can probably define a function that calculates all the different loads. -> If my vectors are predefined, it shouldn't matter how many I keep. 
         # Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:], Cm[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env) 
-        extract_ds_loads!(airfoils::AbstractVector{<:Airfoil}, view(xds, i, :), xds_idxs, cchistory[i], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
+        extract_ds_loads!(airfoils, view(xds, i, :), xds_idxs, cchistory[i], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
 
 
 

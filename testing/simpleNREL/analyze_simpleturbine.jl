@@ -285,15 +285,15 @@ afs = aftypes[af_idx]
 n = length(rvec)
 airfoils = Vector{DS.Airfoil}(undef, n)
 for i = 1:n
-    airfoils[i] = make_dsairfoil(afs[i])
+    airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
 end
 
 rR = rvec./rtip
 blade = Rotors.Blade(rhub, rtip, rR, airfoils)
 
 
-dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
-dsmodelinit = Rotors.BeddoesLeishman()
+# dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
+# dsmodelinit = Rotors.BeddoesLeishman()
 
 if !@isdefined(runflag)
     runflag = true
@@ -302,16 +302,16 @@ end
 
 if runflag
     # tvec_r = range(0, 50, length=50001)
-    loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+    loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
     runflag = false
 end
 
 
-tvecsample = 0:0.001:0.5
+# tvecsample = 0:0.001:0.5
 
-Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+# Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
 
-@time Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+# @time Rotors.simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvecsample; verbose=true, dsmodel, dsmodelinit, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
 
 nothing
 # using Profile

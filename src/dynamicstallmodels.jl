@@ -10,13 +10,19 @@ function initialize_DS_model(airfoils::AbstractVector{<:Airfoil}, turbine::Bool,
     stateidx = Vector{Int}(undef, n)
     tempx = 1
     # loads = Array{eltype(Udotvec), 2}(undef, nt, 3n)
-
+    # println("Got here. ")
+    # @show typeof(ccstate)
+    # @show fieldnames(typeof(ccstate))
+    # @show ccstate.indices
+    # @show ccstate.phi
+    # @show typeof(ccstate[1])
+    # @show size(ccstate)
     for i in eachindex(airfoils)
         stateidx[i] = tempx
         nsi1, nsi2 = DS.state_indices(airfoils[i].model, stateidx[i])
         # loadidx = 3*(i-1)+1:3i
         paramidx = 4*(i-1)+1:4*i 
-
+        # println("Making it here. ")
         if turbine
             theta = -((twistvec[i] + pitch) - ccstate[i].phi) #TODO: I wonder if I should do this in the simulate section. 
         else
@@ -32,7 +38,7 @@ function initialize_DS_model(airfoils::AbstractVector{<:Airfoil}, turbine::Bool,
         states[1,nsi1:nsi2], _ = DS.initialize(airfoils[i], tvec, ys) 
         tempx += DS.numberofstates(airfoils[i].model)
     end
-
+    # println(" Got here. 2.0")
     return states, stateidx, y
 end
 
@@ -71,6 +77,7 @@ end
 function extract_ds_loads!(airfoils::AbstractVector{<:Airfoil}, states, state_idxs, ccstate, p_ds, Cx, Cy, Cm)
 
     loads = [0.0, 0.0, 0.0] #Todo: I need to figure out a way to return just the values. (Inside DSM)
+    # @show typeof(ccstate)
 
     for j in eachindex(airfoils)
         nsi1, nsi2 = DS.state_indices(airfoils[j].model, state_idxs[j])

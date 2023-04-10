@@ -170,7 +170,8 @@ end
 #TODO: It might be a good idea to make a version that is completely in place. (Pass in data storage and riso ode.)
 
 #TODO: Function headers
-function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), tipcorrection=CCBlade.PrandtlTipHub(), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
+function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; turbine::Bool=true, tipcorrection=CCBlade.PrandtlTipHub(), solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
+    #Todo: Move the DSM initialization type (the current ModelInit struct) to DSM. 
     # println("Why isn't it printing inside the function.")
     if verbose
         println("Rotors.jl initializing solution...")
@@ -193,6 +194,9 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
     t0 = tvec[1]
 
+    airfoils = blade.airfoils
+    chordvec = airfoils.c
+
     ### Prepare data storage
     Vxvec = Array{eltype(chordvec)}(undef, na) #TODO: These might be too type specific. 
     Vyvec = Array{eltype(chordvec)}(undef, na)
@@ -202,10 +206,10 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
     # azimuth = @SVector zeros(eltype(chordvec), nt) 
     Cx = Array{eltype(rvec)}(undef,(nt, na))
     Cy = Array{eltype(rvec)}(undef,(nt, na))
-    Cl = Array{eltype(rvec)}(undef,(nt, na))
-    Cd = Array{eltype(rvec)}(undef,(nt, na))
-    Cn = Array{eltype(rvec)}(undef,(nt, na))
-    Ct = Array{eltype(rvec)}(undef,(nt, na))
+    # Cl = Array{eltype(rvec)}(undef,(nt, na))
+    # Cd = Array{eltype(rvec)}(undef,(nt, na))
+    # Cn = Array{eltype(rvec)}(undef,(nt, na))
+    # Ct = Array{eltype(rvec)}(undef,(nt, na))
     Cm = Array{eltype(rvec)}(undef,(nt, na))
 
     N = Array{eltype(rvec)}(undef,(nt, na))
@@ -247,26 +251,30 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
     # Wdotvec = SVector{na}(zeros(na)) #Todo: Typing
     Wdotvec = zeros(eltype(rvec), na)
+    alphadotvec = zeros(eltype(rvec), na)
     for i = 1:na
         Wdotvec[i] = sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2)
     end
 
     # Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #TODO: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. 
 
-    ode, xds, p_ds = initializeDSmodel(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, cchistory[1, :], Wdotvec, chordvec, twistvec, pitch, env.a)
+    # ode, xds, p_ds = initializeDSmodel(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, cchistory[1, :], Wdotvec, chordvec, twistvec, pitch, env.a)
+    xds, xds_idxs, p_ds = initialize_DS_model(airfoils, turbine, nt, tvec, cchistory[1, :], Wdotvec, alphadotvec, twistvec, pitch)
 
 
     # Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:], Cm[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env) #Todo: I might need to individual rotations for the stations. 
     #Todo: Why am I storing Cl, Cn, and Cx? 
-    extractloads!(dsmodel, xds[1,:], cchistory[1, :], chordvec, twistvec, pitch, blade, env, view(Cx, 1, :), view(Cy, 1, :), view(Cn, 1, :), view(Ct, 1, :), view(Cl, 1, :), view(Cd, 1, :), view(Cm, 1, :))
+    # extractloads!(dsmodel, xds[1,:], cchistory[1, :], chordvec, twistvec, pitch, blade, env, view(Cx, 1, :), view(Cy, 1, :), view(Cn, 1, :), view(Ct, 1, :), view(Cl, 1, :), view(Cd, 1, :), view(Cm, 1, :))
+
+    extract_ds_loads!(airfoils, view(xds, 1, :), xds_idxs, cchistory[1, :], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :))
     
     ### Dimensionalize #TODO: Could probably make a function out of this. 
     #Todo: These loads may need to be rotated from a local frame to a hub frame. 
     for j = 1:na
         u_1 = cchistory[1, j].W
         qinf_1 = 0.5*env.rho*u_1^2
-        N[1,j] = Cn[1,j]*qinf_1*chordvec[j] 
-        T[1,j] = Ct[1,j]*qinf_1*chordvec[j]
+        # N[1,j] = Cn[1,j]*qinf_1*chordvec[j] 
+        # T[1,j] = Ct[1,j]*qinf_1*chordvec[j]
         Fx[1,j] = Cx[1,j]*qinf_1*chordvec[j] 
         Fy[1,j] = Cy[1,j]*qinf_1*chordvec[j] 
         Mx[1,j] = Cm[1,j]*qinf_1*chordvec[j]^2 #The coefficient of moment is positive about the negative Z aero axis, so we need the negative of this to move it to the structural X axis. 
@@ -342,33 +350,36 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
 
 
         ### Update Dynamic Stall model inputs #TODO: Could potentially decrease the number of calls to getproperty by getting the inflow velocity out once, then passing it to the update aero parameters function and the extract loads function. 
-        update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i, :].W, cchistory[i, :].phi, twistvec, pitch, env, t)
+        # update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i, :].W, cchistory[i, :].phi, twistvec, pitch, env, t)
+        update_ds_inputs!(airfoils, p_ds, cchistory[i,:].W, cchistory[i,:].phi, twistvec, pitch, dt, turbine)
 
 
 
 
         ### Integrate Dynamic Stall model
-        if isa(dsmodel.detype, DS.Indicial)
-            # xds[i,:] = ode(xds[i-1,:], p_ds, t, dt) 
-            ode(xds[i-1,:], view(xds, i,:), p_ds, t, dt) #Inplace function definition. 
-        else 
-            xds[i,:] = solver(ode, xds[i-1,:], p_ds, t, dt)
-        end
+        # if isa(dsmodel.detype, DS.Indicial)
+        #     # xds[i,:] = ode(xds[i-1,:], p_ds, t, dt) 
+        #     ode(xds[i-1,:], view(xds, i,:), p_ds, t, dt) #Inplace function definition. 
+        # else 
+        #     xds[i,:] = solver(ode, xds[i-1,:], p_ds, t, dt)
+        # end
+        update_ds_states!(solver, airfoils, view(xds, i-1, :), view(xds, i, :), xds_idxs, p_ds, t, dt)
 
 
 
         ### Extract loads 
         # Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:], Cm[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env)
     
-        extractloads!(dsmodel, view(xds, i,:), cchistory[i, :], chordvec, twistvec, pitch, blade, env, view(Cx, i, :), view(Cy, i, :), view(Cn, i, :), view(Ct, i, :), view(Cl, i, :), view(Cd, i, :), view(Cm, i, :))
+        # extractloads!(dsmodel, view(xds, i,:), cchistory[i, :], chordvec, twistvec, pitch, blade, env, view(Cx, i, :), view(Cy, i, :), view(Cn, i, :), view(Ct, i, :), view(Cl, i, :), view(Cd, i, :), view(Cm, i, :))
+        extract_ds_loads!(airfoils, view(xds, i, :), xds_idxs, cchistory[i,:], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
     
         
         ### Dimensionalize
         for j = 1:na
             u_i = cchistory[i,j].W #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
             qinf = 0.5*env.rho*u_i^2
-            N[i,j] = Cn[i,j]*qinf*chordvec[j] 
-            T[i,j] = Ct[i,j]*qinf*chordvec[j]
+            # N[i,j] = Cn[i,j]*qinf*chordvec[j] 
+            # T[i,j] = Ct[i,j]*qinf*chordvec[j]
             Fx[i,j] = Cx[i,j]*qinf*chordvec[j] 
             Fy[i,j] = Cy[i,j]*qinf*chordvec[j] 
             Mx[i,j] = Cm[i,j]*qinf*chordvec[j]^2
@@ -428,5 +439,6 @@ function simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone
         end
     end
 
-    return (N=N, T=T, Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, def_thetax
+    # return (N=N, T=T, Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, def_thetax
+    return (Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, def_thetax
 end
