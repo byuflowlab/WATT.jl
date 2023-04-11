@@ -76,7 +76,7 @@ end
 
 function extract_ds_loads!(airfoils::AbstractVector{<:Airfoil}, states, state_idxs, ccstate, p_ds, Cx, Cy, Cm)
 
-    loads = [0.0, 0.0, 0.0] #Todo: I need to figure out a way to return just the values. (Inside DSM)
+    # loads = [0.0, 0.0, 0.0] #Todo: I need to figure out a way to return just the values. (Inside DSM)
     # @show typeof(ccstate)
 
     for j in eachindex(airfoils)
@@ -85,11 +85,11 @@ function extract_ds_loads!(airfoils::AbstractVector{<:Airfoil}, states, state_id
         ys = view(p_ds, 4*(j-1)+1:4*j)
 
         
-        DS.get_loads!(airfoils[j].model, airfoils[j], xs, loads, ys) 
+        Cl, Cd, Cm[j] = DS.get_loads(airfoils[j].model, airfoils[j], xs, ys) 
 
-        Cl = loads[1]
-        Cd = loads[2]
-        Cm[j] = loads[3]
+        # Cl = loads[1]
+        # Cd = loads[2]
+        # Cm[j] = loads[3]
 
         cphi = cos(ccstate[j].phi)
         sphi = sin(ccstate[j].phi)

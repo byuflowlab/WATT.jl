@@ -13,5 +13,5 @@ using Test, Rotors
         xgold = 0.0
 
         @test isapprox(x0, xgold, atol=1e-6)
-    end
+    end #End testing solvers
 end
