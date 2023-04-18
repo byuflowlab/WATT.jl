@@ -154,11 +154,15 @@ let
     rfrac = (rvec .- rhub)/(rtip-rhub)
     rnew = rvec.-rhub
     # chordvec = ones(n)
-    twistvec = zeros(n)
+    # twistvec = zeros(n)
     # twistvec = -ones(n).*3.0  
     # AFID = ones(n).*8
     chordfit = Akima(adblade["BlSpn"], adblade["BlChord"])
+    twistfit = Akima(adblade["BlSpn"], adblade["BlTwist"])
+
     chordvec = chordfit.(rnew)
+    twistvec = twistfit.(rnew)
+
     AFID = of.integerfit(adblade["BlSpn"], adblade["BlAFID"], rnew)
     for i = 1:n
         if AFID[i]<3

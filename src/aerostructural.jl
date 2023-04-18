@@ -304,9 +304,7 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
     #TODO: Create a function to initialize the behavior. One for starting from no loading, one from steady state as below. Look at that, I wrote that down already. 
 
     ### GXBeam initial solution #TODO: I might make it an option to initialize from rest, or from steady state at the intial conditions (as current).
-    # system, converged = GXBeam.steady_state_analysis(assembly; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, linear = false, angular_velocity = Omega, gravity=gravity0) 
 
-    # gxhistory[1] = AssemblyState(system, assembly; prescribed_conditions = prescribed_conditions)
 
     system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:1]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0) 
 
@@ -321,12 +319,7 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
 
 
 
-
-    # @show Vxvec[end], Vyvec[end]
-    # @show maximum(N[1,:]), maximum(T[1,:])
-
-
-    ### Iterate through time #Todo. As is, I'm solving the i+1 structural state based on the i+1 aerodynamic state. -> I think that I fixed it, but I'm open to being wrong. :| #Todo. The final loading isn't getting assigned. -> Changed back to looking back to the i-1 state, but made it so I wasn't updating the structurs with the new aero states. 
+    ### Iterate through time 
     for i = 2:nt
         t = tvec[i]
         dt = tvec[i] - tvec[i-1]
@@ -349,28 +342,19 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
         cchistory[i, :] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
 
 
-        ### Update Dynamic Stall model inputs #TODO: Could potentially decrease the number of calls to getproperty by getting the inflow velocity out once, then passing it to the update aero parameters function and the extract loads function. 
-        # update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i, :].W, cchistory[i, :].phi, twistvec, pitch, env, t)
+        ### Update Dynamic Stall model inputs 
         update_ds_inputs!(airfoils, p_ds, cchistory[i,:].W, cchistory[i,:].phi, twistvec, pitch, dt, turbine)
 
 
 
 
         ### Integrate Dynamic Stall model
-        # if isa(dsmodel.detype, DS.Indicial)
-        #     # xds[i,:] = ode(xds[i-1,:], p_ds, t, dt) 
-        #     ode(xds[i-1,:], view(xds, i,:), p_ds, t, dt) #Inplace function definition. 
-        # else 
-        #     xds[i,:] = solver(ode, xds[i-1,:], p_ds, t, dt)
-        # end
         update_ds_states!(solver, airfoils, view(xds, i-1, :), view(xds, i, :), xds_idxs, p_ds, t, dt)
 
 
 
         ### Extract loads 
-        # Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:], Cm[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env)
-    
-        # extractloads!(dsmodel, view(xds, i,:), cchistory[i, :], chordvec, twistvec, pitch, blade, env, view(Cx, i, :), view(Cy, i, :), view(Cn, i, :), view(Ct, i, :), view(Cl, i, :), view(Cd, i, :), view(Cm, i, :))
+        
         extract_ds_loads!(airfoils, view(xds, i, :), xds_idxs, cchistory[i,:], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
     
         
@@ -378,8 +362,6 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
         for j = 1:na
             u_i = cchistory[i,j].W #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
             qinf = 0.5*env.rho*u_i^2
-            # N[i,j] = Cn[i,j]*qinf*chordvec[j] 
-            # T[i,j] = Ct[i,j]*qinf*chordvec[j]
             Fx[i,j] = Cx[i,j]*qinf*chordvec[j] 
             Fy[i,j] = Cy[i,j]*qinf*chordvec[j] 
             Mx[i,j] = Cm[i,j]*qinf*chordvec[j]^2
@@ -389,8 +371,7 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
 
 
 
-        ### Update GXBeam loads #Todo. This is also not accounting for gravitational loads. 
-        ##Todo. Does GXBeam account for actual angular movement when keeping the states and what not? Does it integrate and find the new position? -> i.e. changing the gravity. -> I don't believe it does. So I will need to. 
+        ### Update GXBeam loads  
         update_forces!(distributed_loads, view(Fx, i-1,:), Fy[i-1,:], Mx[i-1,:], rvec, assembly) 
 
         Omega = SVector(0.0, 0.0, -env.RS(t))
@@ -399,9 +380,6 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
 
         ### Solve GXBeam for time step #Todo: This function is taking a lot of time. 
         system, localhistory, converged = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? 
-
-
-        # println(typeof(localhistory))
 
 
         ### Extract GXBeam outputs
@@ -421,10 +399,6 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
         if verbose & (mod(i-1, speakiter)==0)
             println("")
             println("Simulation time: ", t)
-            # @show Vxvec[end], Vyvec[end] 
-            # @show aeroV[end]
-            # @show azimuth[i], localhistory[end].elements[end].V
-            # @show maximum(N[i,:]), maximum(T[i,:])
         end
 
         if plotbool & (mod(i-1, plotiter)==0)
@@ -439,6 +413,5 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
         end
     end
 
-    # return (N=N, T=T, Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, def_thetax
     return (Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, def_thetax
 end

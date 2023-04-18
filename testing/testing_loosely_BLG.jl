@@ -92,7 +92,8 @@ for i = 1:n
 end
 
 rR = rvec./rtip
-blade = Rotors.Blade(rhub, rtip, rR, airfoils) #TODO: Weird that this won't export. ???? What did I mean by this? 
+# blade = Rotors.Blade(rhub, rtip, rR, airfoils) #TODO: Weird that this won't export. ???? What did I mean by this? 
+blade = Blade(rvec, twistvec, airfoils; rhub, rtip)
 
 
 
@@ -101,7 +102,9 @@ blade = Rotors.Blade(rhub, rtip, rR, airfoils) #TODO: Weird that this won't expo
 env = environment(rho, mu, a, vinf, omega, shearexp)
 
 # dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
-dsmodelinit = Rotors.BeddoesLeishman()
+# dsmodelinit = Rotors.BeddoesLeishman()
+turbine = true
+rotor_r = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
 
 
 
@@ -116,11 +119,11 @@ tvec = collect(tspan[1]:dt:tspan[2]-dt)
 
 
 # @show twistvec #Todo. Take Pcopy out. 
-loads, coefs, cchistory, xds, azi_time = simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodelinit, azimuth0=0, tipcorrection=nothing) #
+loads, coefs, cchistory, xds, azi_time = simulate(rotor_r, blade, env, tvec; verbose=true, azimuth0=0) #
 
-loads2, coefs2, cchistory2, xds2, azi_time2 = simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodelinit, azimuth0=2*pi/3, tipcorrection=nothing)
+loads2, coefs2, cchistory2, xds2, azi_time2 = simulate(rotor_r, blade, env, tvec; verbose=true, azimuth0=2*pi/3)
 
-loads3, coefs3, cchistory3, xds3, azi_time3 = simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, tvec; verbose=true, dsmodelinit, azimuth0=4*pi/3, tipcorrection=nothing)
+loads3, coefs3, cchistory3, xds3, azi_time3 = simulate(rotor_r, blade, env, tvec; verbose=true, azimuth0=4*pi/3)
 
 na = length(rvec)
 nt = length(tvec)
@@ -195,7 +198,7 @@ fysteady = [cchistory[i].Tp[end]cos(precone) for i in 1:length(tvec)]
 
 
 ########## CCBlade simulation. 
-rotor = Rotor(rhub, rtip, B, precone=precone, turbine=true, tip=nothing)
+rotor = CCBlade.Rotor(rhub, rtip, B, precone=precone, turbine=true, tip=nothing)
 
 aft = Array{AlphaAF}(undef, 8)
 aft[1] = AlphaAF(aftypes[1].aoa.*(pi/180), aftypes[1].cl, aftypes[1].cd)
@@ -278,7 +281,7 @@ index = 3
 ofidx = index #+ 4 #Currently they are the same indices. 
 nt = length(tvec)
 
-phi = [cchistory[i].phi[index]*180/pi for i = 1:nt]  
+phi = [cchistory[i, index].phi*180/pi for i = 1:nt]  
 
 if ofidx<10
     num = "00$ofidx"
@@ -379,15 +382,15 @@ Wrotmat = Array{Float64}(undef, nt, na)
 # end
 
 for i = 1:nt
-    alpharotmat[i, :] = cchistory[i].alpha
-    Wrotmat[i,:] = cchistory[i].W
+    alpharotmat[i, :] = cchistory[i, :].alpha
+    Wrotmat[i,:] = cchistory[i, :].W
 end
 
 
 tix = 50
 
 ### Check the inflow angle. 
-phitplt = plot(rvec, cchistory[tix].phi.*(180/pi), lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Inflow angle (deg)", title="Time Step $tix")
+phitplt = plot(rvec, cchistory[tix, :].phi.*(180/pi), lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Inflow angle (deg)", title="Time Step $tix")
 plot!(rof, phimat[tix,:], lab="OpenFAST")
 # display(phitplt)
 
@@ -404,7 +407,7 @@ plot!(rof, phimat[tix,:], lab="OpenFAST")
 W0 = @. sqrt(vinf^2 + (rvec*omega)^2)
 
 
-velocitytplt = plot(rvec, cchistory[tix].W, lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Inflow Velocity (m/s)", title="Time Step $tix", leg=:bottomright)
+velocitytplt = plot(rvec, cchistory[tix, :].W, lab="CCBlade", markershape=:x, xaxis="Radius (m)", yaxis="Inflow Velocity (m/s)", title="Time Step $tix", leg=:bottomright)
 # plot!(rof, Wmat[tix,:], lab="OpenFAST", markershape=:circle, markeralpha=0.2) #I think this is the rotational and freestream, affected by windshear, with no induced velocity. 
 # plot!(rof, Wdmat[tix,:], lab="OF dis", markershape=:utriangle, markeralpha=0.2) # I think this is the inflow affected by windshear, but no induced velocity. 
 plot!(rof, Vrelmat[tix,:], lab="OpenFAST", markershape=:rect, markeralpha=0.2)
@@ -434,8 +437,8 @@ sp1 = plot(tvec, states[:,index], lab="Rotors", title="State $state, Index $inde
 
 
 
-fxblade = cchistory[tix].Np.*cos(precone)
-fyblade = cchistory[tix].Tp.*cos(precone)
+fxblade = cchistory[tix, :].Np.*cos(precone)
+fyblade = cchistory[tix, :].Tp.*cos(precone)
 
 
 loadplt = plot(xaxis="Radius (m)", yaxis="Distributed Load", leg=:topleft, title="Time $tix")
@@ -460,8 +463,8 @@ absavg(xvec) = sum(abs.(xvec))/length(xvec)
 
 # tix = 30
 rof = adblade["BlSpn"] .+ rhub
-fxblade = cchistory[tix].Np.*cos(precone)
-fyblade = cchistory[tix].Tp
+fxblade = cchistory[tix, :].Np.*cos(precone)
+fyblade = cchistory[tix, :].Tp
 
 fxerr = zero(tvec)
 fyerr = zero(tvec)
@@ -516,11 +519,11 @@ Tcc = zero(tvec)
 Qcc = zero(tvec)
 
 for i = 1:nt
-    Tcc[i], Qcc[i] = thrusttorque(rotor, sections, cchistory[i])
+    Tcc[i], Qcc[i] = thrusttorque(rotor, sections, cchistory[i, :])
 end
 
-Terr = zeros(nt-1) #max error is 0.121%
-Qerr = zeros(nt-1) #Max error is 0.515%. 
+Terr = zeros(nt-1) #max error is 0.121% #Todo: My error went up by .2
+Qerr = zeros(nt-1) #Max error is 0.515%. #Todo: My error went up by .3
 
 for i = 1:nt-1
     Terr[i] = errfun(T[i], outs["RtFldFxg"][i])

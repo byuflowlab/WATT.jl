@@ -299,10 +299,12 @@ if !@isdefined(runflag)
     runflag = true
 end
 
+twist_rotors = twistvec.*(pi/180)
+
 
 if runflag
     # tvec_r = range(0, 50, length=50001)
-    loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+    loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rvec, twist_rotors, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
     runflag = false
 end
 
@@ -408,7 +410,7 @@ plot!(tvec, loads.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
 plot!(tvec, loads.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
 # plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
 display(tiploads)
-# savefig("/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_10seconds_032723.png")
+# savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_5seconds_041223.png")
 
 
 # Uplt = plot(xaxis="Time (s)", yaxis="Tip Velocity (m/s)", legend=:outerright)
@@ -433,7 +435,7 @@ plot!(tvec, -tipdef_z, lab=L"\delta x - GX")
 plot!(tvec, tipdef_y, lab=L"\delta y - GX")
 plot!(tvec, tipdef_x, lab=L"\delta z - GX")
 display(tipdefs2)
-# savefig("/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_10seconds_032723.png")
+# savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_5seconds_041223.png")
 
 
 

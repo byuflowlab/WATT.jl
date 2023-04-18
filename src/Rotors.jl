@@ -1,36 +1,35 @@
 module Rotors
 
-using FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, CurveFit, NLsolve, DynamicStallModels
+using FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, CurveFit, NLsolve, DynamicStallModels, ImplicitAD
 #Todo: Why do I have plots as a dependency? 
+#Todo: Why do I have NLsolve as a dependency? -> I think for the BDF solvers... but I don't know if I need that. 
 
 DS = DynamicStallModels
+IAD = ImplicitAD
 # using DifferentialEquations
-# DE = DifferentialEquations #Todo: I'm not sure that I need this as a dependency
+# DE = DifferentialEquations #Todo. I'm not sure that I need this as a dependency
 
-### Structs, solvers, and whatnot. 
-include("./types.jl")
+### Structs, solvers, and base models. 
 include("./solvers.jl")
 include("./utils.jl")
-
-
-### Base model
-include("./blades.jl")
+include("./types.jl")
 include("./environments.jl")
-
-
-### Dynamic stall models. 
+include("./bem.jl")
 include("./dynamicstallmodels.jl")
-include("./riso.jl") 
-include("./beddoesleishman_aerodyn.jl")
-include("./beddoesleishman_gonzalez.jl")
-include("./beddoesleishman.jl")
+include("./gxbeam.jl")
+
+### Dynamic Stall Model
+# include("./riso.jl") 
+# include("./beddoesleishman_aerodyn.jl")
+# include("./beddoesleishman_gonzalez.jl")
+# include("./beddoesleishman.jl")
 
 
 
 ### Structures
 # include("../dev/gxbeam.jl") #Todo: Need to get the relavent functions out. Then remove the file. -> Or just simplify the file. 
 #Todo: I need to unify the structural and aerodynamic reference frames. 
-include("./gxbeam.jl")
+# include("./gxbeam.jl")
 
 
 ### Couplings
@@ -39,7 +38,7 @@ include("./aerostructural.jl")
 
 # include("../dev/indicialgxbeam.jl")
 
-include("./static.jl") #Todo: Need to update to not use BEM struct and Riso struct and the like. 
+include("./static.jl")  
 
 
 end # module

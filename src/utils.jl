@@ -1,3 +1,5 @@
+
+
 function nearestto(xvec, x)
     mins = abs.(xvec.-x)
     minval, minidx = findmin(mins)
@@ -8,6 +10,30 @@ end
 function getfieldnames(obj)
     return fieldnames(typeof(obj))
 end
+
+function compare_fieldnames(obj1, obj2)
+    
+    names = getfieldnames(obj1)
+    flags = Vector{Bool}(undef, length(names))
+
+    if !isa(obj1, typeof(obj2))
+        @warn("compare_fieldnames(): the objects are not of the same type.")
+        flags .= false
+        return flags
+    end
+
+    for i in eachindex(names)
+        i1 = getproperty(obj1, names[i])
+        i2 = getproperty(obj2, names[i])
+        if isapprox(i1, i2)
+            flags[i] = true
+        else
+            flags[i] = false
+        end
+    end
+    return flags
+end
+
 
 function isnanvec(vec)
     for i=1:length(vec)
@@ -266,4 +292,27 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
             
     end #End convergence iterations
     return b, (fb, maxiter)
+end
+
+function rotate_vector(x, y, z, theta_x, theta_y, theta_z; forward::Bool=true)
+    cx = cos(theta_x)
+    cy = cos(theta_y)
+    cz = cos(theta_z)
+    sx = sin(theta_x)
+    sy = sin(theta_y)
+    sz = sin(theta_z)
+
+    if forward
+        x_new = x*(cz*cy) + y*(cz*sy*sx - sz*cx) + z*(cz*sy*cx + sz*sx)
+        y_new = x*(cy*sz) + y*(sx*sy*sz + cx*cz) + z*(cx*sy*sz - sx*cz)
+        z_new = x*(-sy) + y*(sx*cy) + z*(cx*cy)
+        return x_new, y_new, z_new
+    else
+        # error("rotate_vector: Reverse transformation not implemented yet.")
+        x_new = x*(cz*cy) + y*(cy*sz) + z*(-sy)
+        y_new = x*(cz*sy*sx - sz*cx) + y*(sx*sy*sz + cx*cz) + z*(sx*cy)
+        z_new = x*(cz*sy*cx + sz*sx) + y*(cx*sy*sz - sx*cz) + z*(cx*cy)
+        return x_new, y_new, z_new
+    end
+
 end

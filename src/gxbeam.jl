@@ -8,8 +8,9 @@ function retrieve_eulerangles(R)
 end
 
 function WMPtoangle(c)
-    R = GXBeam.wiener_milenkovic(c)'
-    return retrieve_eulerangles(R)
+    # R = GXBeam.wiener_milenkovic(c)'
+    # return retrieve_eulerangles(R)
+    return GXBeam.wiener_milenkovic(c)'
 end
 
 function update_assembly(assembly; compliance=nothing, stiffness=nothing)

@@ -25,7 +25,9 @@ Simulate the rotor's response for a given rotor and environmental condition.
 
 ### Notes
 """
-function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, tipcorrection=CCBlade.PrandtlTipHub(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
+# function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, tipcorrection=CCBlade.PrandtlTipHub(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
+
+function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
 
 
     if verbose
@@ -51,11 +53,25 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
     #TODO. It might be a good idea to check rvec, chordvec, and twistvec to get the design variables to get the right types. -> I'm going to have different functions for optimization. I'm going to break it up into functions that calculate by each step. 
 
     ### Initialization information
-    na = length(rvec)
+    na = length(blade.r)
     nt = length(tvec)
 
     t0 = tvec[1]
 
+    tilt = rotor.tilt
+    yaw = rotor.yaw
+    turbine = rotor.turbine
+    # tipcorrection = rotor.tip
+    # B = rotor.B
+
+    rvec = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
+    twistvec = blade.twist
+    # rhub = blade.rhub
+    # rtip = blade.rtip
+    hubht = rotor.hubht
+    # pitch = 0.0 #Todo: Where should I put the pitch? -> Either in the rotor or the environment... At first I was thinking in the rotor struct, but now I think maybe in the environment, or as a separate input... that way I can easily couple in a controller later down the line. 
+    precone = 0.0 #Part of the blade build step. 
+    
     airfoils = blade.airfoils
     chordvec = airfoils.c
 
@@ -66,8 +82,11 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
     azimuth = Array{eltype(chordvec)}(undef, nt)
     azimuth[1] = azimuth0
 
-    rotor = Rotor(rhub, rtip, B; precone, turbine, tip=tipcorrection)
-    sections = [CCBlade.Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i = 1:na]
+    cchistory = Array{CCBlade.Outputs{eltype(rvec)}, 2}(undef, nt, na)
+
+    # rotor = Rotor(rhub, rtip, B; precone, turbine, tip=tipcorrection)
+    # sections = [CCBlade.Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i = 1:na]
+    xcc = zeros(11) #Todo: Typing
 
 
 
@@ -75,9 +94,12 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
         Vxvec[i], Vyvec[i] = get_aero_velocities(env, t0, rvec[i], azimuth[1], precone, tilt, yaw, hubht)
     end
     
-    operatingpoints = [CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a) for i in 1:na]
+    # operatingpoints = [CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a) for i in 1:na]
 
-    ccout = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
+    # ccout = CCBlade.solve.(Ref(rotor), sections, operatingpoints) 
+    for j = 1:na
+    cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
+    end
 
 
 
@@ -89,14 +111,14 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
     alphadotvec = zero(Wdotvec) #TODO: 
 
     
-    xds, xds_idxs, p_ds = initialize_DS_model(airfoils, turbine, nt, tvec, ccout, Wdotvec, alphadotvec, twistvec, pitch)
+    xds, xds_idxs, p_ds = initialize_DS_model(airfoils, turbine, nt, tvec, cchistory[1,:], Wdotvec, alphadotvec, twistvec, pitch)
 
 
 
 
 
     ### Prepare data storage
-    cchistory = Array{Array{Outputs{eltype(rvec)}, 1}, 1}(undef, nt) #[ccout for i = 1:nt]
+    # cchistory = Array{Array{Outputs{eltype(rvec)}, 1}, 1}(undef, nt) #[ccout for i = 1:nt]
     # Cl = Array{eltype(rvec)}(undef,(nt, na))
     # Cd = Array{eltype(rvec)}(undef,(nt, na))
     # Cn = Array{eltype(rvec)}(undef,(nt, na))
@@ -111,14 +133,14 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
     Fy = Array{eltype(rvec)}(undef,(nt, na))
 
 
-    cchistory[1] = ccout
+    # cchistory[1] = ccout
     # Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:], Cm[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env)
-    extract_ds_loads!(airfoils, view(xds, 1, :), xds_idxs, cchistory[1], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :))
+    extract_ds_loads!(airfoils, view(xds, 1, :), xds_idxs, cchistory[1,:], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :))
     
 
     ### Dimensionalize
     for j = 1:na
-        u_1 = cchistory[1].W[j]
+        u_1 = cchistory[1, j].W
         # N[1,j] = Cn[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
         # T[1,j] = Ct[1,j]*0.5*env.rho*u_1^2*chordvec[j]
         Fx[1,j] = Cx[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
@@ -142,19 +164,22 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
         ### Update BEM inputs
         for j = 1:na
             Vxvec[j], Vyvec[j] = get_aero_velocities(env, t, rvec[j], azimuth[i], precone, tilt, yaw, hubht)
-            operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
+            # operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
         end
 
 
 
         ### Solve BEM
-        cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
+        # cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
         # cchistory[i] = fixedpointbem.(Ref(rotor), sections, operatingpoints, cchistory[i-1].phi)
+        for j = 1:na
+            cchistory[i, j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
+        end
 
         
         ### Update Dynamic Stall model inputs
         # update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i].W, cchistory[i].phi, twistvec, pitch, env, t)
-        update_ds_inputs!(airfoils, p_ds, cchistory[i].W, cchistory[i].phi, twistvec, pitch, dt, turbine) #Todo: There is probably a more efficient way of passing in W, and Phi. Maybe I keep a running vector of W and phi that I just update. That way I'm not allocating every iteration. Better yet. I wonder if I should just copy out code from CCBlade and get rid of the Outputs struct and just store it in a matrix. 
+        update_ds_inputs!(airfoils, p_ds, cchistory[i, :].W, cchistory[i, :].phi, twistvec, pitch, dt, turbine) #Todo: There is probably a more efficient way of passing in W, and Phi. Maybe I keep a running vector of W and phi that I just update. That way I'm not allocating every iteration. Better yet. I wonder if I should just copy out code from CCBlade and get rid of the Outputs struct and just store it in a matrix. 
 
 
         ### Integrate Dynamic Stall model
@@ -171,13 +196,13 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
 
         ### Extract loads #TODO: I don't think that I need to keep all of this data. I can probably define a function that calculates all the different loads. -> If my vectors are predefined, it shouldn't matter how many I keep. 
         # Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:], Cm[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env) 
-        extract_ds_loads!(airfoils, view(xds, i, :), xds_idxs, cchistory[i], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
+        extract_ds_loads!(airfoils, view(xds, i, :), xds_idxs, cchistory[i, :], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
 
 
 
         ### Dimensionalize
         for j = 1:na
-            u_i = cchistory[i].W[j] #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
+            u_i = cchistory[i, j].W #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
             # N[i,j] = Cn[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
             # T[i,j] = Ct[i,j]*0.5*env.rho*u_i^2*chordvec[j]
             Fx[i,j] = Cx[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
