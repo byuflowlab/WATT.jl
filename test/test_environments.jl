@@ -88,7 +88,7 @@ cd(localpath)
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -108,7 +108,7 @@ cd(localpath)
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -129,7 +129,7 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -151,7 +151,7 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -173,7 +173,7 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -199,7 +199,7 @@ cd(localpath)
         # println("")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
@@ -234,7 +234,7 @@ cd(localpath)
         # println("")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
@@ -269,7 +269,7 @@ cd(localpath)
         # println("")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
         # @show Vx, Vy
@@ -306,7 +306,7 @@ cd(localpath)
         # println("")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz)
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
         # @show Vx, Vy

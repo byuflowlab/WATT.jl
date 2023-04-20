@@ -5,144 +5,6 @@
 
 
 
-
-
-
-
-"""
-    find_paired_points(points, r)
-
-Finds the two structural points before and after the given aerodynamic node. 
-
-### Inputs
-- points - the points vector from the assembly object. Each point is a SVector{3}. 
-- r - the radial location of the aerodynamic point of interest
-
-### Outputs
-- pair - a tuple containing the indices of the point before and after the aerodynamic point (before, after)
-"""
-function find_paired_points(points, r)
-    ngx = length(points)
-    rgx = [points[i][1] for i = 1:ngx]
-    for i = 1:length(points)-1
-        if rgx[i]>r
-            return (i-1, i)
-        end
-    end
-    return (ngx-1, ngx)
-end
-
-function find_interpolation_value(points, pair, r)
-    ngx = length(points)
-    rgx = [points[i][1] for i = 1:ngx]
-    a = r - rgx[pair[1]]
-    b = rgx[pair[2]] - r
-    L = a + b
-    return a/L
-end
-
-"""
-    InterpolationPoint(pair, percent)
-
-A struct to quickly interpolate the new radial location of an aerodynamic node. 
-"""
-struct InterpolationPoint #Todo: Move to types
-    pair::Tuple{Int64, Int64}
-    percent::Float64
-end
-
-"""
-    create_interpolationpoints(assembly, rvec)
-
-### Inputs
-- assembly - A GXBeam assembly
-- rvec - The radial location of the aerodynamic nodes
-
-### Outputs
-- interpvals
-
-### Notes
-- This assumes that the structural points are in order and go from root to tip. Additionally, the aerodynamic points follow a similar order. 
-"""
-function create_interpolationpoints(assembly, rvec)
-    na = length(rvec)
-    pairs = [find_paired_points(assembly.points, rvec[i]) for i = 1:na]
-    percents = [find_interpolation_value(assembly.points, pairs[i], rvec[i]) for i =1:na]
-
-    return [InterpolationPoint(pairs[i], percents[i]) for i = 1:na]
-end
-
-
-"""
-    interpolate_position(ip, assembly, state)
-
-Get the position of aerodynamic nodes from the interpolation struct and the structural structs. 
-"""
-function interpolate_position(ip, assembly, state)  
-    rgx = [assembly.points[i][1] + state.points[i].u[1] for i = 1:length(assembly.points)]
-    return (1-ip.percent)*rgx[ip.pair[1]] + ip.percent*rgx[ip.pair[2]]
-end
-
-"""
-    interpolate_velocity(ip, assembly, state, env)
-
-Get the relative velocity of an aerodynamic point. 
-"""
-function interpolate_velocity(ip, assembly, state) #Note: This is probably a very poor approximation. But it'll have to do for now. Maybe there is a better way to get the velocity of the points. -> Taylor said that a linear interpolation should work fine. 
-    ne = length(assembly.elements)
-    np = ne + 1
-
-    # V = state.elements[ip.pair[1]].V  #Get the velocity of the element 
-    # Omega = state.elements[ip.pair[1]].Omega #Question. If I'm doing what I'm currently doing.... why don't I just calculate the distance from the element node to the aerodynamic node? #Todo. This is probably not going to work, cause I'm going to guess that it has the same problem that the angular displacement has. -> I think I'lll update to the new version of GXBeam. I won't have to interpolate the velocities using Omega, and I'll be able to use GXBeam's internal damping. (Which should be a little more theoretically correct)
-    # p1 = assembly.points[ip.pair[1]] #TODO. Should I include the deflected point location? 
-    # p2 = assembly.points[ip.pair[2]]
-    # e = assembly.elements[ip.pair[1]].x
-
-    # r1 = p1 - e #The position vector from the element point to the starting point
-    # r2 = p2 - e #The position vector from the element point to the stopping point
-
-    # # ra = assembly.elements[ip.pair[1]].L*ip.percent + assembly.points[ip.pair[1]][1]
-    
-    # v1 = V + cross(Omega, r1)
-    # v2 = V + cross(Omega, r2)
-
-    v1 = state.points[ip.pair[1]].V
-    v2 = state.points[ip.pair[2]].V
-
-    return (1-ip.percent)*v1 + ip.percent*v2
-end
-
-function interpolate_angle(ip, assembly, state) #Todo: I need to see if I should be interpolating or doing what is being done here. 
-    # thetagx = [state.points[i].theta[1] for i = 1:length(assembly.points)]
-    # return (1-ip.percent)*thetagx[ip.pair[1]] + ip.percent*thetagx[ip.pair[2]]
-
-    # return state.elements[ip.pair[1]].theta[1] #Assume that the twist at the closest elemental node is the twist at the aerodynamic node. -> Didn't make much of a difference.
-
-    theta1 = WMPtoangle(state.points[ip.pair[1]].theta)
-    theta2 = WMPtoangle(state.points[ip.pair[2]].theta) #Todo: I should see if I should interpolate, then convert to angle, or do as I'm doing. 
-
-    return (1-ip.percent)*theta1[1] + ip.percent*theta2[1]
-end
-
-
-
-
-function get_aerostructural_velocities(env::Environment, aeroV, t, r, azimuth, precone, tilt, yaw, hubht)
-
-    ### Extract the aero velocities due to the environment, precone, tilt, taw, and shear. 
-    vxenv, vyenv = get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-    ### Get the relative structural velocities
-    vxrel = aeroV[3] 
-    vyrel = aeroV[2] + env.RS(t)*r  #Todo. Why do I add the rotational velocity into the structural? -> Oh, that's right, the rotational velocities are included in the GXBeam output velocity. So to get the relative velocities, I need to subtract out the rotational component. But the rotational component is negative in the structural frame, so subtract a negative is add the rotational velocity back in. 
-    
-
-    ### Return the total x and y velocities (x and y in the aerodynamic frame)
-    # If the structure is moving in the negative y direction, then the airfoil should see a faster velocity. 
-    return vxenv+vxrel, vyenv-vyrel
-end
-
-
 function checkforwarnings(rvec, twistvec, rhub, rtip, pitch, precone, tilt, yaw)
     if minimum(rvec)<=rhub
         @warn("A member of rvec is less than or equal to rhub. This will cause problems with the hub corrections.")
@@ -206,14 +68,8 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
     # azimuth = @SVector zeros(eltype(chordvec), nt) 
     Cx = Array{eltype(rvec)}(undef,(nt, na))
     Cy = Array{eltype(rvec)}(undef,(nt, na))
-    # Cl = Array{eltype(rvec)}(undef,(nt, na))
-    # Cd = Array{eltype(rvec)}(undef,(nt, na))
-    # Cn = Array{eltype(rvec)}(undef,(nt, na))
-    # Ct = Array{eltype(rvec)}(undef,(nt, na))
     Cm = Array{eltype(rvec)}(undef,(nt, na))
 
-    N = Array{eltype(rvec)}(undef,(nt, na))
-    T = Array{eltype(rvec)}(undef,(nt, na))
     Fx = Array{eltype(rvec)}(undef,(nt, na))
     Fy = Array{eltype(rvec)}(undef,(nt, na))
     Mx = Array{eltype(rvec)}(undef,(nt, na)) #Moment about the aero Z axis is the moment about the structural X axis. 
@@ -314,7 +170,11 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
 
     ### Points to interpolate velocity, deflections, from structural to aerodynamic nodes. 
     interpolationpoints = create_interpolationpoints(assembly, rvec) 
-    aeroV = [interpolate_velocity(interpolationpoints[j], assembly, gxhistory[1]) for j = 1:na]  
+
+    delta = [interpolate_deflections(interpolationpoints[j], assembly, gxhistory[1]) for j = 1:na]
+
+    aeroV = [convert_velocities(blade, env, assembly, gxhistory[1], interpolationpoints, t, j) for j = 1:na]  
+    
     def_thetax = [interpolate_angle(interpolationpoints[j], assembly, gxhistory[1]) for j = 1:na] 
 
 
@@ -390,8 +250,12 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
 
         ### Update aero inputs from structures.
         for j = 1:na
-            aeroV[j] = interpolate_velocity(interpolationpoints[j], assembly, localhistory[end])
-            def_thetax[j] = interpolate_angle(interpolationpoints[j], assembly, localhistory[end]) 
+            #Todo: Add a interpolate deflection function. 
+            delta[j] = interpolate_deflection(interpolationpoints[j], assembly, gxhistory[i])
+
+            aeroV[j] = convert_velocities(blade, env, assembly, gxhistory[i], interpolationpoints, t, j)
+
+            def_thetax[j] = interpolate_angle(interpolationpoints[j], assembly, gxhistory[i]) 
         end
 
 

@@ -93,7 +93,7 @@ end
 
 rR = rvec./rtip
 # blade = Rotors.Blade(rhub, rtip, rR, airfoils) #TODO: Weird that this won't export. ???? What did I mean by this? 
-blade = Blade(rvec, twistvec, airfoils; rhub, rtip)
+blade = Blade(rvec, twistvec, airfoils; rhub, rtip, precone)
 
 
 
@@ -522,8 +522,10 @@ for i = 1:nt
     Tcc[i], Qcc[i] = thrusttorque(rotor, sections, cchistory[i, :])
 end
 
-Terr = zeros(nt-1) #max error is 0.121% #Todo: My error went up by .2
-Qerr = zeros(nt-1) #Max error is 0.515%. #Todo: My error went up by .3
+Terr = zeros(nt-1) #max error is 0.121% 
+Qerr = zeros(nt-1) #Max error is 0.515%. 
+
+
 
 for i = 1:nt-1
     Terr[i] = errfun(T[i], outs["RtFldFxg"][i])

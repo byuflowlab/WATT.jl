@@ -58,19 +58,10 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pit
 
     t0 = tvec[1]
 
-    tilt = rotor.tilt
-    yaw = rotor.yaw
     turbine = rotor.turbine
-    # tipcorrection = rotor.tip
-    # B = rotor.B
 
     rvec = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
     twistvec = blade.twist
-    # rhub = blade.rhub
-    # rtip = blade.rtip
-    hubht = rotor.hubht
-    # pitch = 0.0 #Todo: Where should I put the pitch? -> Either in the rotor or the environment... At first I was thinking in the rotor struct, but now I think maybe in the environment, or as a separate input... that way I can easily couple in a controller later down the line. 
-    precone = 0.0 #Part of the blade build step. 
     
     airfoils = blade.airfoils
     chordvec = airfoils.c
@@ -83,31 +74,19 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pit
     azimuth[1] = azimuth0
 
     cchistory = Array{CCBlade.Outputs{eltype(rvec)}, 2}(undef, nt, na)
-
-    # rotor = Rotor(rhub, rtip, B; precone, turbine, tip=tipcorrection)
-    # sections = [CCBlade.Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i]) for i = 1:na]
     xcc = zeros(11) #Todo: Typing
 
 
-
     for i = 1:na
-        Vxvec[i], Vyvec[i] = get_aero_velocities(env, t0, rvec[i], azimuth[1], precone, tilt, yaw, hubht)
-    end
-    
-    # operatingpoints = [CCBlade.OperatingPoint(Vxvec[i], Vyvec[i], env.rho, pitch, env.mu, env.a) for i in 1:na]
+        Vxvec[i], Vyvec[i] = get_aero_velocities(rotor, blade, env, t0, i, azimuth[1])
 
-    # ccout = CCBlade.solve.(Ref(rotor), sections, operatingpoints) 
-    for j = 1:na
-    cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
+        cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
     end
 
 
 
-
-
-
-    ### Initialize DS solution
-    Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #TODO: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. -> Currently not used by BLADG. 
+    ### Initialize DS solution #Todo: Create a get Wdot function (from the environment struct. )
+    Wdotvec = zeros(na) #[sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #TODO: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. -> Currently not used by BLADG. 
     alphadotvec = zero(Wdotvec) #TODO: 
 
     
@@ -118,38 +97,23 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pit
 
 
     ### Prepare data storage
-    # cchistory = Array{Array{Outputs{eltype(rvec)}, 1}, 1}(undef, nt) #[ccout for i = 1:nt]
-    # Cl = Array{eltype(rvec)}(undef,(nt, na))
-    # Cd = Array{eltype(rvec)}(undef,(nt, na))
-    # Cn = Array{eltype(rvec)}(undef,(nt, na))
-    # Ct = Array{eltype(rvec)}(undef,(nt, na))
     Cx = Array{eltype(rvec)}(undef,(nt, na))
     Cy = Array{eltype(rvec)}(undef,(nt, na))
     Cm = Array{eltype(rvec)}(undef,(nt, na))
 
-    # N = Array{eltype(rvec)}(undef,(nt, na))
-    # T = Array{eltype(rvec)}(undef,(nt, na))
     Fx = Array{eltype(rvec)}(undef,(nt, na))
     Fy = Array{eltype(rvec)}(undef,(nt, na))
 
 
-    # cchistory[1] = ccout
-    # Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:], Cm[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env)
     extract_ds_loads!(airfoils, view(xds, 1, :), xds_idxs, cchistory[1,:], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :))
     
 
     ### Dimensionalize
     for j = 1:na
         u_1 = cchistory[1, j].W
-        # N[1,j] = Cn[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
-        # T[1,j] = Ct[1,j]*0.5*env.rho*u_1^2*chordvec[j]
         Fx[1,j] = Cx[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
         Fy[1,j] = Cy[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
     end
-
-
-
-
 
 
 
@@ -161,50 +125,34 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pit
         #update azimuthal position
         azimuth[i] = env.RS(t)*dt + azimuth[i-1] #Euler step for azimuthal position. 
 
-        ### Update BEM inputs
+        ### Update BEM inputs & solve BEM
         for j = 1:na
-            Vxvec[j], Vyvec[j] = get_aero_velocities(env, t, rvec[j], azimuth[i], precone, tilt, yaw, hubht)
-            # operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
-        end
+            Vxvec[j], Vyvec[j] = get_aero_velocities(rotor, blade, env, t, j, azimuth[i])
 
-
-
-        ### Solve BEM
-        # cchistory[i] = CCBlade.solve.(Ref(rotor), sections, operatingpoints) #TODO: Write a solver that is initialized with the previous inflow angle. 
-        # cchistory[i] = fixedpointbem.(Ref(rotor), sections, operatingpoints, cchistory[i-1].phi)
-        for j = 1:na
             cchistory[i, j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
         end
 
+
         
         ### Update Dynamic Stall model inputs
-        # update_aero_parameters!(dsmodel, turbine, p_ds, na, rvec, cchistory[i].W, cchistory[i].phi, twistvec, pitch, env, t)
         update_ds_inputs!(airfoils, p_ds, cchistory[i, :].W, cchistory[i, :].phi, twistvec, pitch, dt, turbine) #Todo: There is probably a more efficient way of passing in W, and Phi. Maybe I keep a running vector of W and phi that I just update. That way I'm not allocating every iteration. Better yet. I wonder if I should just copy out code from CCBlade and get rid of the Outputs struct and just store it in a matrix. 
 
 
         ### Integrate Dynamic Stall model
-        # if isa(dsmodel.detype, DS.Indicial)
-        #     xds[i,:] = ode(xds[i-1,:], p_ds, t, dt) 
-        # else 
-        #     xds[i,:] = solver(ode, xds[i-1,:], p_ds, t, dt)
-        # end
         update_ds_states!(solver, airfoils, view(xds, i-1, :), view(xds, i, :), xds_idxs, p_ds, t, dt)
 
 
 
 
 
-        ### Extract loads #TODO: I don't think that I need to keep all of this data. I can probably define a function that calculates all the different loads. -> If my vectors are predefined, it shouldn't matter how many I keep. 
-        # Cx[i,:], Cy[i,:], Cn[i,:], Ct[i,:], Cl[i,:], Cd[i,:], Cm[i,:] = extractloads(dsmodel, xds[i,:], cchistory[i], chordvec, twistvec, pitch, blade, env) 
+        ### Extract loads 
         extract_ds_loads!(airfoils, view(xds, i, :), xds_idxs, cchistory[i, :], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
 
 
 
         ### Dimensionalize
         for j = 1:na
-            u_i = cchistory[i, j].W #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
-            # N[i,j] = Cn[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
-            # T[i,j] = Ct[i,j]*0.5*env.rho*u_i^2*chordvec[j]
+            u_i = cchistory[i, j].W 
             Fx[i,j] = Cx[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
             Fy[i,j] = Cy[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
         end
@@ -214,10 +162,9 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pit
         if verbose & (mod(i, speakiter)==0)
             println("Simulation time: ", t)
         end
-    end
+    end #End iterating through time. 
 
 
-    # return (N=N, T=T, Fx=Fx, Fy=Fy), (Cx=Cx, Cy=Cy, Cn=Cn, Ct=Ct, Cl=Cl, Cd=Cd, Cm=Cm), cchistory, xds, azimuth 
     return (Fx=Fx, Fy=Fy), (Cx=Cx, Cy=Cy, Cm=Cm), cchistory, xds, azimuth 
 end
 
