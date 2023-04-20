@@ -92,7 +92,7 @@ cd(localpath)
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
-        println("")
+        # println("")
 
         ### Test at a different azimuthal angle
         t = 4.5
@@ -134,6 +134,8 @@ cd(localpath)
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
 
+        #Todo: Test Precone at a different azimuthal angle. 
+
 
 
         ### Test with tilt
@@ -164,30 +166,10 @@ cd(localpath)
         tilt = 5*pi/180
         azimuth = omega*t #assume constant rotation rate
 
+        # println("")
+        # @show (azimuth)*180/pi
+
         rotor = Rotors.Rotor(B, hubht, turbine; tilt)
-        blade = Blade(rvec, twistvec, airfoils; precone)
-        env = environment(rho, mu, a, vinf, omega, shearexp)
-
-        idx = 10
-        r = rvec[idx]
-
-        op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
-        
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-        @test isapprox(Vx, op.Vx)
-        @test isapprox(Vy, op.Vy)
-
-
-
-        ### Test with yaw
-        t = 0.0
-        precone = 0.0
-        tilt = 0.0
-        yaw = 5*pi/180
-        azimuth = omega*t #assume constant rotation rate
-
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -211,6 +193,40 @@ cd(localpath)
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
+
+
+
+        ### Test with yaw
+        t = 0.0
+        precone = 0.0
+        tilt = 0.0
+        yaw = 5*pi/180
+        azimuth = omega*t #assume constant rotation rate
+
+        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        blade = Blade(rvec, twistvec, airfoils; precone)
+        env = environment(rho, mu, a, vinf, omega, shearexp)
+
+        idx = 10
+        r = rvec[idx]
+
+        op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
+
+        println("")
+        println("My code: ")
+        
+        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
+
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+
+        # @show Vxo, Vyo
+
+        # @test isapprox(Vx, op.Vx)
+        # @test isapprox(Vy, op.Vy)
 
 
 

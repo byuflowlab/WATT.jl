@@ -71,9 +71,9 @@ The blade struct... what else is there to say.
 struct Blade{TF}  
     rhub::TF
     rtip::TF
-    rx::AbstractVector{<:TF}
-    ry::AbstractVector{<:TF}
-    rz::AbstractVector{<:TF} 
+    rx::AbstractVector{<:TF} #Lead-lag direction (freestream)
+    ry::AbstractVector{<:TF} #Flapwise direction 
+    rz::AbstractVector{<:TF} #Radial direction
     r::AbstractVector{<:TF} #Todo: Decide if I want this in here, or if I'll just use the norm of the vectorized version. 
     rR::AbstractVector{<:TF}
     twist::AbstractVector{<:TF}
@@ -129,32 +129,12 @@ function Blade(rvec, twist, airfoils::AbstractVector{<:DS.Airfoil}; rhub=rvec[1]
     rz = zero(rvec)
     rR = rvec./rtip
 
-    # rx[1] = zero(rhub)
-    # ry[1] = rvec[1] #Note:TODO: This could cause a problem if rvec[1] != rhub, what if they want to apply some curve, precone, etc and their point is not located at rhub. 
-    # # rz[2] = zero(rhub)
-    # for i in 2:n
-    #     dr = rvec[i]-rvec[i-1] #Note: That this method causes a gradual loss of accuracy, over a 63 meter blade, there was a 1.44 mm error the tip x position from a 2 degree precone. 
-    #     dx = dr*sin(curve[i-1])
-    #     dy = dr*cos(curve[i-1])*cos(sweep[i-1])
-    #     dz = -dr*sin(sweep[i-1])
-    #     rx[i]  = rx[i-1]+dx
-    #     ry[i]  = ry[i-1]+dy
-    #     rz[i]  = rz[i-1]+dz
-    # end
-
     for i in eachindex(airfoils)
         rx[i] = rvec[i]*sin(curve[i])
-        ry[i] = rvec[i]*cos(curve[i])*cos(sweep[i])
-        rz[i] = -rvec[i]*sin(sweep[i])
-        rx[i], ry[i], rz[i] = rotate_vector(rx[i], ry[i], rz[i], 0, 0, -precone)
+        ry[i] = rvec[i]*sin(sweep[i])
+        rz[i] = rvec[i]*cos(curve[i])*cos(sweep[i])
+        rx[i], ry[i], rz[i] = rotate_vector(rx[i], ry[i], rz[i], 0, precone, 0)
     end
-
-    # for i in eachindex(airfoils) #Todo. Should precone shorten the blade? -> yes. It should shorten the radial location, but not the structural length. 
-        # ry[i] -= rhub
-        # rx[i], ry[i], rz[i] = rotate_vector(rx[i], ry[i], rz[i], 0, 0, -precone) #Precone is negative because the of the positive definition w.r.t. the coordinate system.
-        # ry[i] += rhub 
-    # end
-
 
     return Blade(rhub, rtip, rx, ry, rz, rvec, rR, twist, airfoils)
 end

@@ -195,8 +195,8 @@ function convert_velocities(blade::Blade, env::Environment, assembly, state, int
 
     #Rotational velocities
     # urx = 0.0
-    ury = -omega*raz #Todo: This ain't right. -> I just realized that I extended the blade in the Y direction in the aero frame ( Y direction is the same for aerodynamic and structural frames), and the X direction (Z aero) for the structural frame.
-    urz = omega*ray
+    ury = omega*raz 
+    urz = -omega*ray
 
     # @show ray, raz
 

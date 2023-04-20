@@ -206,7 +206,8 @@ cd(localpath)
             prescribed_conditions,
             distributed_loads,
             angular_velocity,
-            gravity) 
+            gravity,
+            steady=false) 
 
         state = history[end]
 
@@ -215,10 +216,7 @@ cd(localpath)
         delta = [Rotors.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
         dtheta = [Rotors.interpolate_angle(ips[i], assembly, state) for i in 1:na]
         V = [Rotors.interpolate_velocity(ips[i], assembly, state) for i in 1:na]
-        aeroV = [Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i) for i in 1:na]
-
-        @show aeroV[1]
-        @show V[1], state.points[1].V
+        aeroV = [norm(Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i)) for i in 1:na]
 
 
         theta_root = Rotors.WMPtoangle(state.points[1].theta)
@@ -232,6 +230,7 @@ cd(localpath)
         @test isapprox(dtheta[1], theta_root[1])
         @test isapprox(V[1], state.points[1].V)
 
+
         #Tip (There is a tolerance because the tip aero node is 0.0001 m off of the structural node).
         @test isapprox(blade.r[end], assembly.points[end][1], rtol=0.0001)
         @test isapprox(delta[end], state.points[end].u, rtol=0.0001)
@@ -239,6 +238,30 @@ cd(localpath)
         @test isapprox(V[end], state.points[end].V, rtol=0.0001)
 
         ## Check an intermediate point 
+        @test !any(i->i<0, aeroV[2:end])
+
+
+
+
+        ### Test that the the structural velocity goes to zero at the steady state solution.
+        system, history, converged = GXBeam.time_domain_analysis(assembly, tvec;
+            prescribed_conditions,
+            distributed_loads,
+            angular_velocity,
+            gravity,
+            steady=true) 
+
+        state = history[end]
+        aeroV = [Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i) for i in 1:na]
+
+
+        steadyflag = true
+        for i in 1:na
+            if any(i->!isapprox(i, 0.0, atol=1e-12), aeroV[i])
+                steadyflag = false
+            end
+        end
+        @test steadyflag
     end
 
 end #End Mesh Tests

@@ -295,12 +295,9 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
 end
 
 function rotate_vector(x, y, z, theta_x, theta_y, theta_z; forward::Bool=true)
-    cx = cos(theta_x)
-    cy = cos(theta_y)
-    cz = cos(theta_z)
-    sx = sin(theta_x)
-    sy = sin(theta_y)
-    sz = sin(theta_z)
+    sx, cx = sincos(theta_x)
+    sy, cy = sincos(theta_y)
+    sz, cz = sincos(theta_z)
 
     if forward
         x_new = x*(cz*cy) + y*(cz*sy*sx - sz*cx) + z*(cz*sy*cx + sz*sx)

@@ -60,8 +60,8 @@ cd(localpath)
         ### Test blade with no curvature
         blade = Blade(rvec, twistvec, airfoils)
         @test isapprox(mean(blade.rx), 0.0)
-        @test mean(blade.ry)>0.0
-        @test isapprox(mean(blade.rz), 0.0)
+        @test isapprox(mean(blade.ry), 0.0)
+        @test mean(blade.rz)>0.0
 
 
 
@@ -70,7 +70,7 @@ cd(localpath)
         precone=2*pi/180
         blade = Blade(rvec, twistvec, airfoils; precone)
         @test mean(blade.rx)>0
-        @test mean(blade.rz)==0
+        @test mean(blade.ry)==0
 
         preconeflag = true
         for i in 2:n
@@ -90,7 +90,7 @@ cd(localpath)
         blade = Blade(rvec, twistvec, airfoils; curve)
 
         @test mean(blade.rx)>0
-        @test mean(blade.rz)==0
+        @test mean(blade.ry)==0
 
         curveflag = true
         for i in 2:n
@@ -111,7 +111,7 @@ cd(localpath)
         blade = Blade(rvec, twistvec, airfoils; curve)
 
         @test mean(blade.rx)>0
-        @test mean(blade.rz)==0
+        @test mean(blade.ry)==0
 
         #Test that the dx is indeed increasing. 
         curveflag = true
@@ -133,18 +133,18 @@ cd(localpath)
         sweep = 2*pi/180
         blade = Blade(rvec, twistvec, airfoils; sweep)
 
-        @test mean(blade.rz)<0
+        @test mean(blade.ry)>0
         @test mean(blade.rx)==0
+
 
         sweepflag = true
         for i in 2:n
-            if blade.rz[i]>=blade.rz[i-1]
+            if blade.ry[i]<=blade.ry[i-1]
                 sweepflag = false
             end
         end
         @test sweepflag
-        # @test isapprox(blade.rz[end], -(blade.rtip-blade.rhub)*sin(sweep))
-        @test isapprox(blade.rz[end], -(blade.rtip)*sin(sweep))
+        @test isapprox(blade.ry[end], (blade.rtip)*sin(sweep))
 
 
 
@@ -154,21 +154,21 @@ cd(localpath)
         sweep = collect(range(0, 10*pi/180, length=n))
         blade = Blade(rvec, twistvec, airfoils; sweep)
 
-        @test mean(blade.rz)<0  
+        @test mean(blade.ry)>0  
         @test mean(blade.rx)==0
         bladelength = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
-        # @show bladelength
-        # @show rvec #Todo: It looks like there is a slight loss in total blade length here. 
 
-        #Test that the dz is indeed increasing. 
+
+
+        #Test that the dy is indeed increasing. 
         sweepflag = true
-        dz_old = [0.0]
+        dy_old = [0.0]
         for i in 3:n
-            dz = abs(blade.rz[i] - blade.rz[i-1])
-            if dz<dz_old[1]
+            dy = abs(blade.ry[i] - blade.ry[i-1])
+            if dy<dy_old[1]
                 sweepflag = false
             end
-            dz_old[1] = dz
+            dy_old[1] = dy
         end
         @test sweepflag #Note: Test depends on linearly spaced rvec
 

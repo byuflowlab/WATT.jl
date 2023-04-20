@@ -75,7 +75,7 @@ function get_aero_velocities(env::Environment, t, r, azimuth, precone, tilt, yaw
     Vwind_x = V * ((cos_yaw*sin_tilt*cos_azimuth + sine_yaw*sin_azimuth)*sin_precone + cos_yaw*cos_tilt*cos_precone)
     Vwind_y = V * (cos_yaw*sin_tilt*sin_azimuth - sine_yaw*cos_azimuth)
 
-    @show Vwind_x, Vwind_y
+    # @show Vwind_x, Vwind_y
 
     # wind from rotation to blade c.s.
     Vrot_x = -env.RS(t)*y_az*sin_precone
@@ -123,23 +123,23 @@ Calculate the velocities in the airfoil reference frame based on the flow-field,
 function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, idx, azimuth)
 
     ### Unpack
-    yaw = -rotor.yaw
+    yaw = rotor.yaw
     tilt = rotor.tilt
     hubht = rotor.hubht
 
-    rax = blade.rx[idx]
-    ray = blade.ry[idx]
-    raz = blade.rz[idx]
+    rax = blade.rx[idx] #Leadlag
+    ray = blade.ry[idx] #Flapwise
+    raz = blade.rz[idx] #Radial
     # @show rax, ray, raz
 
     omega = env.RS(t)
+    azimuth -= pi/2 #zero azimuth is measured from the Y axis, and the blade is extending in the Z direction. 
+
+    # @show azimuth
 
     ### Get the velocities from the freestream. 
     # Rotate the positions into the global reference frame
-    rgx, rgy, rgz = rotate_vector(rax, ray, raz, azimuth, yaw, tilt) #Translate the blade up to the location where it is attached to the top of the tower. 
-    # rgx, rgy, rgz = rotate_vector(rax, ray, raz, azimuth, 0.0, 0.0) 
-    # rgx, rgy, rgz = rotate_vector(rgx, rgy, rgz, 0.0, yaw, tilt) 
-    # rgx, rgy, rgz = rotate_vector(rgx, rgy, rgz, azimuth, 0.0, 0.0) 
+    rgx, rgy, rgz = rotate_vector(rax, ray, raz, azimuth, yaw, tilt; forward=true) #Translate the blade up to the location where it is attached to the top of the tower. 
     rgy += hubht 
 
     # Retrieve the flow field velocities
@@ -148,18 +148,17 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
     # @show Ug 
 
     # Rotate the freestream velocities into the aerodynamic frame (where the YZ plane aligns with the rotor plane)
-    uax_wind, uay_wind, uaz_wind = rotate_vector(Ug[1], Ug[2], Ug[3], azimuth, yaw, tilt; forward=false) #Todo: I'm a couple of millimeters of on the z velocity which is propogating down (When I do multiple rotations at once.)
-    # uax_wind, uay_wind, uaz_wind = rotate_vector(Ug[1], Ug[2], Ug[3], azimuth, 0.0, 0.0; forward=false)
-    # uax_wind, uay_wind, uaz_wind = rotate_vector(uax_wind, uay_wind, uay_wind, 0.0, 0.0, tilt; forward=false)
-    # uax_wind, uay_wind, uaz_wind = rotate_vector(uax_wind, uay_wind, uay_wind, 0.0, yaw, 0.0; forward=false)
+    uax_wind, uay_wind, uaz_wind = rotate_vector(Ug[1], Ug[2], Ug[3], -azimuth, -yaw, -tilt; forward=false) #Todo: I'm a couple of millimeters of on the z velocity which is propogating down (When I do multiple rotations at once.) 
+    
+  
 
     # @show uax_wind, uay_wind, uaz_wind
 
 
     ### Get the velocities from the rotation.
     # uax_rot = 0.0
-    uay_rot = -omega*raz #Todo: Changing the sign of this doesn't seem to affect the outcome... :|
-    uaz_rot = omega*ray
+    uay_rot = omega*raz 
+    uaz_rot = omega*ray #Todo: Changing the sign of this doesn't seem to affect the outcome... :|
 
     # @show uay_rot, uaz_rot
 
@@ -168,15 +167,19 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
     uay = uay_wind + uay_rot
     uaz = uaz_wind + uaz_rot
 
-    theta_x = atan(raz, ray) #TODO: Potentially store these to avoid calculating them every iteration. 
-    theta_y = 0.0
-    theta_z = atan(rax, ray)
+    theta_x = atan(ray, raz) #TODO: Potentially store these to avoid calculating them every iteration. 
+    theta_y = atan(rax, raz)
+    theta_z = 0.0 
 
     # @show uax, uay, uaz
     # @show theta_x, theta_y, theta_z
 
-    Vx, _, Vy = rotate_vector(uax, uay, uaz, theta_x, theta_y, theta_z; forward=true) #Normal velocity, radial velocity, tangential velocity
+    Vx, Vy, _ = rotate_vector(uax, uay, uaz, theta_x, theta_y, theta_z; forward=false) #Normal velocity, radial velocity, tangential velocity
+    # uxtemp, uytemp, uztemp = rotate_vector(uax, uay, uaz, 0.0, theta_y, 0.0; forward=false) #Normal velocity, radial velocity, tangential velocity
+    # Vx, Vy, _ = rotate_vector(uxtemp, uytemp, uztemp, theta_x, 0.0, 0.0; forward=true) #Normal velocity, radial velocity, tangential velocity
     #Todo: Changing forward to true or to false doesn't have any affect on the outcome!!! -> That's because the section that I've been testing it on doesn't have precone... but I don't know how it passed the precone tests.... but... 
+
+    # @show Vx, Vy, Vz
     
     return Vx, Vy
 end
