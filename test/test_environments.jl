@@ -87,20 +87,20 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("Nothing: ")
-        println("My code: ")
+        # println("")
+        # println("Nothing: ")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -123,19 +123,19 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("Azimuthal")
-        println("My code: ")
+        # println("")
+        # println("Azimuthal")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -158,19 +158,19 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("precone")
-        println("My code:")
+        # println("")
+        # println("precone")
+        # println("My code:")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -192,19 +192,19 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("precone azimuth:")
-        println("My code: ")
+        # println("")
+        # println("precone azimuth:")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -228,19 +228,19 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("Tilted flow:")
-        println("My code: ")
+        # println("")
+        # println("Tilted flow:")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -265,19 +265,19 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("tilt with azimuth")
-        println("My code: ")
+        # println("")
+        # println("tilt with azimuth")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -303,19 +303,19 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("yaw")
-        println("My code: ")
+        # println("")
+        # println("yaw")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -339,19 +339,19 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("yaw with azimuth")
-        println("My code: ")
+        # println("")
+        # println("yaw with azimuth")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -360,7 +360,7 @@ cd(localpath)
 
 
 
-        ### Test with sweep
+        ### Test with sweep #Todo:
 
 
 
@@ -381,20 +381,20 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("Tilt and yaw")
-        println("My code: ")
+        # println("")
+        # println("Tilt and yaw")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         # @show op.Vx, op.Vy
 
@@ -420,20 +420,20 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("Tilt, yaw, and azimuth")
-        println("My code: ")
+        # println("")
+        # println("Tilt, yaw, and azimuth")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
+        # @show Vx, Vy
+        # println("")
+        # println("Dr. Ning's code: ")
 
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
-        @show Vxo, Vyo
+        # @show Vxo, Vyo
 
         # @show op.Vx, op.Vy
 
@@ -459,21 +459,21 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("tilt, yaw, and precone")
-        println("My code: ")
+        # println("")
+        # println("tilt, yaw, and precone")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
-
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        @show Vxo, Vyo
+        # @show Vx, Vy
         # println("")
+        # println("Dr. Ning's code: ")
+
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+
+        # @show Vxo, Vyo
+        # # println("")
 
         @test isapprox(Vx, op.Vx) #, rtol=0.0001
         @test isapprox(Vy, op.Vy) #, rtol=0.02
@@ -498,21 +498,21 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        println("")
-        println("tilt, yaw, precone, and azimuth")
-        println("My code: ")
+        # println("")
+        # println("tilt, yaw, precone, and azimuth")
+        # println("My code: ")
         
         Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        @show Vx, Vy
-        println("")
-        println("Dr. Ning's code: ")
-
-        Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        @show Vxo, Vyo
+        # @show Vx, Vy
         # println("")
+        # println("Dr. Ning's code: ")
+
+        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+
+        # @show Vxo, Vyo
+        # # println("")
 
         @test isapprox(Vx, op.Vx) #, rtol=0.0001
         @test isapprox(Vy, op.Vy) #, rtol=0.02

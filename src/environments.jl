@@ -58,35 +58,35 @@ function get_aero_velocities(env::Environment, t, r, azimuth, precone, tilt, yaw
     sin_precone = sin(precone)
     cos_precone = cos(precone)
 
-    @show azimuth
+    # @show azimuth
 
     # coordinate in azimuthal coordinate system
     x_az = -r*sin(precone)
     z_az = r*cos(precone)
     y_az = 0.0  # could omit (the more general case allows for presweep so this is nonzero) #Todo: If I include those velocities, I'd need to augment this. 
-    @show x_az, y_az, z_az
+    # @show x_az, y_az, z_az
 
     # get section heights in wind-aligned coordinate system
     heightFromHub = (y_az*sin_azimuth + z_az*cos_azimuth)*cos_tilt - x_az*sin_tilt
 
-    @show heightFromHub
+    # @show heightFromHub
 
     ### velocity with shear
     factor = (1 + heightFromHub/hubht)^env.shearexp
     V = env.Vinf(t)*factor
-    @show V, factor
+    # @show V, factor
 
     # transform wind to blade c.s.
     Vwind_x = V * ((cos_yaw*sin_tilt*cos_azimuth + sine_yaw*sin_azimuth)*sin_precone + cos_yaw*cos_tilt*cos_precone)
     Vwind_y = V * (cos_yaw*sin_tilt*sin_azimuth - sine_yaw*cos_azimuth)
 
-    @show Vwind_x, Vwind_y
+    # @show Vwind_x, Vwind_y
 
     # wind from rotation to blade c.s.
     Vrot_x = -env.RS(t)*y_az*sin_precone
     Vrot_y = env.RS(t)*z_az
 
-    @show Vrot_x, Vrot_y
+    # @show Vrot_x, Vrot_y
 
     # total velocity
     Vx = Vwind_x + Vrot_x
@@ -109,7 +109,7 @@ A function to retrieve the free-stream velocity vector of a simple environment. 
 function evaluate_flowfield_velocity(env::SimpleEnvironment, hubht, x, y, z, t)
     factor = (z/hubht)^env.shearexp
     # @show y/hubht
-    @show factor
+    # @show factor
 
     # dely = sqrt(x^2 + y^2 + z^2)
     # factor = (1 + dely/hubht)^env.shearexp
@@ -146,179 +146,57 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
     tilt = rotor.tilt
     hubht = rotor.hubht
 
+    #extract the local node coordinates
     rax = blade.rx[idx] #Leadlag
     ray = blade.ry[idx] #Flapwise
     raz = blade.rz[idx] #Radial
     
-    # @show azimuth
 
     # omega = SVector(env.RS(t), 0, 0)
-    omega = env.RS(t)
-    sweep = -atan(ray, raz) #TODO: Potentially store these to avoid calculating them every iteration. 
+    # omega = env.RS(t)
+    sweep = -atan(ray, raz) #The sweep is negative in the given reference frame 
     precone = atan(rax, raz)
-    # theta_z = 0.0 #pi/4
 
-    @show precone, sweep, yaw, tilt
-    @show azimuth, azimuth*180/pi
-    # @show blade_azimuth
-    # @show tilt, yaw
-
-    R_azimuth = rotate_x(azimuth)
-    R_sweep = rotate_x(sweep)
-    R_tilt = rotate_y(tilt)
-    R_yaw = rotate_z(yaw)
-    R_cone = rotate_y(precone)
 
     ### Get the velocities from the freestream. 
     #Rotate the blade positions from the hub reference frame to the global. 
+    rtx, rty, rtz = rotate_x(rax, ray, raz, azimuth; T=true)
+    rtx, rty, rtz = rotate_y(rtx, rty, rtz, tilt; T=true)
+    rgx, rgy, rgz = rotate_z(rtx, rty, rtz, yaw; T=true)
     #Note: Precone and sweep should be inherent in blade rx, ry, and rz
-
-    #= Tests passed
-    A1, B1, C1 = 17/25
-    A4, B7, C1 = 17/25
-    A6, B7, C1 = 18/25
-    A6, B8, C1 = 17/25
-    A6, B1, C1 = 17/25
-    A5, B8, C1 = 16/25
-    A6, B5, C1 = 16/25
-    A6, B9, C1 = 23/25
-    A7, B9, C1 = 23/25
-    =#
-
-
-    ###### Rotation A
-    # R_rothub_g = R_yaw*R_tilt*R_azimuth #1
-    # R_rothub_g = R_yaw*R_azimuth*R_tilt #2
-    # R_rothub_g = R_tilt*R_azimuth*R_yaw #3
-    # R_rothub_g = R_tilt*R_yaw*R_azimuth #4
-    # R_rothub_g = R_azimuth*R_yaw*R_tilt #5
-    # R_rothub_g = R_azimuth*R_tilt*R_yaw #6
-    R_rothub_g = R_yaw'*R_tilt'*R_azimuth' #7
-    
-
-
-    rrh = [rax, ray, raz]
-
-    rg = R_rothub_g*rrh
-
-    rgx, rgy, rgz = rg
-
-    # @show rax, ray, raz
-    # rgx, rgy, rgz = rotate_x(rax, ray, raz, azimuth; T=false)
-    # @show "azimuthed: ", rgx, rgy, rgz
-    # rgx, rgy, rgz = rotate_y(rgx, rgy, rgz, tilt; T=false)
-    # @show "tilted: ", rgx, rgy, rgz
-    # rgx, rgy, rgz = rotate_z(rgx, rgy, rgz, yaw; T=false)
-    # @show "yawed: ", rgx, rgy, rgz
-
-    # @show hubht
-    @show rax, ray, raz
-    @show rgx, rgy, rgz
-    @show rgz+hubht
-
 
 
     # Retrieve the flow field velocities
     Ug = evaluate_flowfield_velocity(env, hubht, rgx, rgy, rgz + hubht, t) 
     # I added hubht to rgz to translate the vector to the top of the tower. 
 
-    @show Ug 
+    #Rotate the velocity into the local frame 
+    uxt, uyt, uzt = rotate_z(Ug..., yaw)
+    uxt, uyt, uzt = rotate_y(uxt, uyt, uzt, tilt)
+    uxt, uyt, uzt = rotate_x(uxt, uyt, uzt, azimuth)
+    uxt, uyt, uzt = rotate_x(uxt, uyt, uzt, sweep; T=true)
+    ulx_wind, uly_wind, _ = rotate_y(uxt, uyt, uzt, precone; T=true)
 
 
 
-    ###Rotate the velocity into the local frame 
-    ######### Rotation B
-    # R_g_l = R_yaw*R_tilt*R_cone*R_sweep*R_azimuth #1
-    # R_g_l = R_yaw*R_tilt*R_cone*R_azimuth*R_sweep #2
-    # R_g_l = R_yaw*R_tilt*R_sweep*R_cone*R_azimuth #3
-    # R_g_l = R_yaw*R_tilt*R_sweep*R_azimuth*R_cone #4
-    # R_g_l = R_yaw*R_tilt*R_azimuth*R_cone*R_sweep #5
-    # R_g_l = R_yaw*R_tilt*R_azimuth*R_sweep*R_cone #6
-    # R_g_l = R_tilt*R_yaw*R_cone*R_sweep*R_azimuth #7
-    # R_g_l = R_tilt*R_yaw*R_azimuth*R_cone*R_sweep #8
-    R_g_l = R_cone'*R_sweep'*R_azimuth*R_tilt*R_yaw #9
-
-    # R_g_l = (R_tilt*R_yaw*R_azimuth)' 
-
-    ul_wind = R_g_l*Ug
-
-    ulx_wind, uly_wind, ulz_wind = ul_wind
-
-    # uax_w, uay_w, uaz_w = rotate_x(Ug..., azimuth; T=true)
-    # println("Azimuthed flow: ", uax_w, ", ",  uay_w, ", ", uaz_w)
-
-    # uax_w, uay_w, uaz_w = rotate_x(uax_w, uay_w, uaz_w, sweep; T=true)
-    # println("Swept flow: ", uax_w, ", ",  uay_w, ", ", uaz_w)
-
-    # uax_w, uay_w, uaz_w = rotate_y(uax_w, uay_w, uaz_w, precone; T=true)
-    # println("Coned flow: ", uax_w, ", ",  uay_w, ", ", uaz_w)
-
-    # uax_w, uay_w, uaz_w = rotate_y(uax_w, uay_w, uaz_w, tilt; T=true)
-    # println("Tilted flow: ", uax_w, ", ",  uay_w, ", ", uaz_w)
-
-    # ulx_wind, uly_wind, ulz_wind = rotate_z(uax_w, uay_w, uaz_w, yaw; T=true) # (u local x wind)
-
-
-
-    @show ulx_wind, uly_wind, ulz_wind
-
-
-
-    ##### -------- Rotating Omega
+    ### Get the rotational velocities
     Omega_a = (env.RS(t), 0, 0)
 
+    #Convert angular velocity to linear velocity
     vx_rot, vy_rot, vz_rot = cross(Omega_a, (rax, ray, raz))
-    @show vx_rot, vy_rot, vz_rot
 
-    ########## Rotation C
-    R_rh_l = R_cone*R_sweep                 #1
-    # R_rh_l = R_cone*R_sweep*R_azimuth     #2
-    # R_rh_l = R_cone*R_azimuth*R_sweep     #3
-    # R_rh_l = R_sweep*R_cone               #4
-    # R_rh_l = R_sweep*R_azimuth*R_cone     #5
-    # R_rh_l = R_sweep*R_cone*R_azimuth     #6
-    # R_rh_l = R_azimuth*R_cone*R_sweep     #7
-    # R_rh_l = R_azimuth*R_sweep*R_cone     #8
+    #Convert from the hub frame to the local airfoil frame
+    ulx_rot, uly_rot, _ = rotate_y(rotate_x(vx_rot, vy_rot, vz_rot, sweep)..., precone)
 
-    # R_rh_l = I
-
-    v_rot = [vx_rot, vy_rot, vz_rot]
-    ul_rot = R_rh_l*v_rot
-
-    ulx_rot, uly_rot, ulz_rot = ul_rot
-
-    # vgx, vgy, vgz = rotate_x(vx_rot, vy_rot, vz_rot, azimuth; T=true)
-    # println("Azimuthed flow: ", vgx, ", ",  vgy, ", ", vgz)
-
-    # vgx, vgy, vgz = rotate_x(vx_rot, vy_rot, vz_rot, sweep; T=false)
-    # println("Swept flow: ", vgx, ", ",  vgy, ", ", vgz)
-
-    # ulx_rot, uly_rot, ulz_rot = rotate_y(vgx, vgy, vgz, precone; T=false)
-    # println("Coned flow: ", ulx_rot, ", ",  uly_rot, ", ", ulz_rot)
-
-
-
-
-    @show ulx_rot, uly_rot, ulz_rot
     
 
-    ### Sum and rotate into the airfoil reference frame. 
+    ### Sum the velocities in the airfoil reference frame. 
     Vx = ulx_wind - ulx_rot
     Vy = uly_wind - uly_rot
-    Vz = ulz_wind - ulz_rot
+    # Vz = ulz_wind - ulz_rot
     #Note: The rotational velocities are subtracted rather than added because that's
     #converting from structural velocity to the aerodynamic velocity. 
 
-    # V = [Vx, Vy, Vz]
-    # @show V
-    # R_h_l = R_cone*R_sweep
-    # Vl = R_h_l*V
-    # Vx, Vy, Vz = Vl
-
-    @show Vx, Vy, Vz
-
-    
-    
     return Vx, Vy
 end
 
