@@ -94,13 +94,14 @@ function create_interpolationpoints(assembly::GXBeam.Assembly, blade::Blade)
 
     ### Find the beam length 
     #Note: I can't just do the norm of the points because position-wise you might come back, and the find_point_indices() function depends on the 1D mesh being monatonically increasing.
-    ns = length(assembly.points)
-    rgx = zeros(ns)
-    rgx[1] = norm(assembly.points[1])
-    for i = 2:ns
-        delr = assembly.points[i] - assembly.points[i-1]
-        rgx[i] = rgx[i-1] + norm(delr)
-    end
+    # ns = length(assembly.points)
+    # rgx = zeros(ns)
+    # rgx[1] = norm(assembly.points[1])
+    # for i = 2:ns
+    #     delr = assembly.points[i] - assembly.points[i-1]
+    #     rgx[i] = rgx[i-1] + norm(delr)
+    # end
+    rgx = get_bladelength_vector(assembly)
 
     for i = 1:na
         pair = find_point_indices(rgx, blade.r[i])

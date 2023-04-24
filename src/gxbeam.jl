@@ -12,6 +12,17 @@ function WMPtoangle(c)
     return retrieve_eulerangles(R)
 end
 
+function get_bladelength_vector(assembly::GXBeam.Assembly)
+    ns = length(assembly.points)
+    rgx = zeros(ns)
+    rgx[1] = norm(assembly.points[1])
+    for i = 2:ns
+        delr = assembly.points[i] - assembly.points[i-1]
+        rgx[i] = rgx[i-1] + norm(delr)
+    end
+    return rgx
+end
+
 function update_assembly(assembly; compliance=nothing, stiffness=nothing)
 
     points = assembly.points

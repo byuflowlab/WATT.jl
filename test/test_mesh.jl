@@ -237,7 +237,22 @@ cd(localpath)
         @test isapprox(dtheta[end], theta_tip[1], rtol=0.0001)
         @test isapprox(V[end], state.points[end].V, rtol=0.0001)
 
+        
         ## Check an intermediate point 
+        idx = 2
+        r = blade.r[idx]
+
+        rgx = Rotors.get_bladelength_vector(assembly)
+        pair = Rotors.find_point_indices(rgx, r)
+        percent = Rotors.find_interpolation_percent(rgx, pair, r)
+
+        V_gold = state.points[pair[1]].V*(1-percent) + percent*state.points[pair[2]].V
+
+        @test V[2]==V_gold
+
+        
+
+        ## All point checks
         @test !any(i->i<0, aeroV[2:end])
 
 

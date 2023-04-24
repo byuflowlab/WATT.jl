@@ -194,7 +194,8 @@ function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, ya
             sections[j] = CCBlade.Section(rvec[j], chordvec[j], twist_displaced, blade.airfoils[j]) #Not displacing rvec because CCBlade uses that to calculate the tip and hub corrections, and the value should be based on relative to the distance along the blade to the hub or tip. (Although in dynamic movement, the tip losses would change dramatically.)
 
             ### Update base inflow velocities
-            Vxvec[j], Vyvec[j] = get_aerostructural_velocities(env, aeroV[j], t, rvec[j], azimuth[i], precone, tilt, yaw, hubht) #Todo: This should probably see the deflected radius. -> Or I could not subtract out the angular portion of the structural velocity.... then it would automatically see the deflected radius. 
+            # Vxvec[j], Vyvec[j] = get_aerostructural_velocities(env, aeroV[j], t, rvec[j], azimuth[i], precone, tilt, yaw, hubht) #Todo: This should probably see the deflected radius. -> Or I could not subtract out the angular portion of the structural velocity.... then it would automatically see the deflected radius. 
+            Vxvec[i], Vyvec[i] = Rotors.get_aerostructural_velocities(rotor, blade, env, t, i, azimuth, delta[i], aeroV[i])
             operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
         end
 

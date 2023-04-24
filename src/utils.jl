@@ -294,6 +294,111 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
     return b, (fb, maxiter)
 end
 
+function rotate_x(alpha_x)
+    return [
+        1.0     0.0             0.0;
+        0.0     cos(alpha_x)   -sin(alpha_x);
+        0.0     sin(alpha_x)    cos(alpha_x)]
+end
+
+"""
+    rotate_x(x, y, z, theta; T=false) -> xnew, ynew, znew
+
+Rotate the vector x, y, z by theta about the X axis.
+Use T to calculate the transpose (inverse). 
+
+**Arguments**
+- `x`, `y`, `z::Number`: The x, y, and z components of the vector
+- `theta::Number`: The rotation angle (radians). 
+- `T::Bool`: A flag of whether to calculate the rotation or inverse rotation. 
+"""
+function rotate_x(x, y, z, theta; T::Bool=false)
+
+    st, ct = sincos(theta)
+
+    if T
+        xnew = 1*x + 0*y + 0*z
+        ynew = 0*x + ct*y + st*z
+        znew = 0*x - st*y + ct*z
+        return xnew, ynew, znew
+    else
+        xnew = 1*x + 0*y + 0*z
+        ynew = 0*x + ct*y - st*z
+        znew = 0*x + st*y + ct*z
+        return xnew, ynew, znew
+    end
+end
+
+function rotate_y(alpha_y)
+    return [cos(alpha_y) 0 sin(alpha_y);
+            0.0 1.0 0.0;
+            -sin(alpha_y) 0 cos(alpha_y)]
+end
+
+"""
+    rotate_y(x, y, z, theta; T=false) -> xnew, ynew, znew
+
+Rotate the vector x, y, z by theta about the Y axis.
+Use T to calculate the transpose (inverse). 
+
+**Arguments**
+- `x`, `y`, `z::Number`: The x, y, and z components of the vector
+- `theta::Number`: The rotation angle (radians). 
+- `T::Bool`: A flag of whether to calculate the rotation or inverse rotation. 
+"""
+function rotate_y(x, y, z, theta; T::Bool=false)
+
+    st, ct = sincos(theta)
+
+    if T
+        xnew = ct*x + 0*y - st*z
+        ynew = 0*x + 1*y + 0*z
+        znew = st*x + 0*y + ct*z
+        return xnew, ynew, znew
+    else
+        xnew = ct*x + 0*y + st*z
+        ynew = 0*x + 1*y + 0*z
+        znew = -st*x + 0*y + ct*z
+        return xnew, ynew, znew
+    end
+end
+
+function rotate_z(alpha_z)
+    return [cos(alpha_z) -sin(alpha_z) 0.0;
+            sin(alpha_z) cos(alpha_z) 0.0;
+            0.0 0.0 1.0]
+end
+
+"""
+    rotate_z(x, y, z, theta; T=false) -> xnew, ynew, znew
+
+Rotate the vector x, y, z by theta about the Z axis.
+Use T to calculate the transpose (inverse). 
+
+**Arguments**
+- `x`, `y`, `z::Number`: The x, y, and z components of the vector
+- `theta::Number`: The rotation angle (radians). 
+- `T::Bool`: A flag of whether to calculate the rotation or inverse rotation. 
+"""
+function rotate_z(x, y, z, theta; T::Bool=false)
+
+    st, ct = sincos(theta)
+
+    if T #Calculate the transposed rotation. 
+        xnew = ct*x + st*y + 0*z
+        ynew = -st*x + ct*y + 0*z
+        znew = 0*x + 0*y + 1*z
+        return xnew, ynew, znew
+    else
+        xnew = ct*x - st*y + 0*z
+        ynew = st*x + ct*y + 0*z
+        znew = 0*x + 0*y + 1*z
+        return xnew, ynew, znew
+    end
+end
+
+
+
 function rotate_vector(x, y, z, theta_x, theta_y, theta_z; forward::Bool=true)
     sx, cx = sincos(theta_x)
     sy, cy = sincos(theta_y)
@@ -312,4 +417,11 @@ function rotate_vector(x, y, z, theta_x, theta_y, theta_z; forward::Bool=true)
         return x_new, y_new, z_new
     end
 
+end
+
+function cross(a, b) #Todo: Test this
+    i = a[2]*b[3] - a[3]*b[2]
+    j = a[3]*b[1] - a[1]*b[3]
+    k = a[1]*b[2] - a[2]*b[1]
+    return i, j, k
 end
