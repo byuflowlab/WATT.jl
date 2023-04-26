@@ -192,14 +192,66 @@ function convert_velocities(blade::Blade, env::Environment, assembly, state, int
     ray = blade.ry[idx] + dy
     raz = blade.rz[idx] + dz
 
+    
+
     omega = env.RS(t)
 
     #Rotational velocities
     # urx = 0.0
     ury = omega*raz 
     urz = -omega*ray
+    
 
     # @show ray, raz
+    # if idx == 1
+    #     @show blade.ry[idx], blade.rz[idx]
+    #     @show ray, raz
+    #     @show assembly.points[1]
+    #     @show delta
+    #     @show usx, usy, usz
+    #     @show ury, urz
+    #     @show omega
+    # end
 
     return (usx, usy-ury, usz-urz)
+end
+
+
+
+function transform_BC_G(rhr_x, rhr_y, rhr_z, azimuth, precone, tilt, yaw)
+
+    rtx, rty, rtz = rotate_y(rhr_x, rhr_y, rhr_z, precone; T=false)
+    rtx, rty, rtz = rotate_x(rtx, rty, rtz, azimuth; T=true)
+    rtx, rty, rtz = rotate_y(rtx, rty, rtz, tilt; T=true)
+    rg_x, rg_y, rg_z = rotate_z(rtx, rty, rtz, yaw; T=true)
+
+    return rg_x, rg_y, rg_z
+end
+
+function transform_BC_HR(rbc_x, rbc_y, rbc_z, precone)
+
+    rhr_x, rhr_y, rhr_z = rotate_y(rbc_x, rbc_y, rbc_z, precone; T=false)
+
+    return rhr_x, rhr_y, rhr_z
+end
+
+function transform_HR_L(rhr_x, rhr_y, rhr_z, curve, sweep, precone)
+
+    rt_x, rt_y, rt_z = rotate_x(rhr_x, rhr_y, rhr_z, sweep; T=true)
+    rt_x, rt_y, rt_z = rotate_y(rt_x, rt_y, rt_z, curve; T=true)
+    rl_x, rl_y, rl_z = rotate_y(rt_x, rt_y, rt_z, precone; T=false)
+
+    return rl_x, rl_y, rl_z
+end
+
+function transform_G_L(rg_x, rg_y, rg_z, azimuth, curve, precone, sweep, tilt, yaw)
+
+    rt_x, rt_y, rt_z = rotate_z(rg_x, rg_y, rg_z, yaw)
+    rt_x, rt_y, rt_z = rotate_y(rt_x, rt_y, rt_z, tilt)
+    rt_x, rt_y, rt_z = rotate_x(rt_x, rt_y, rt_z, azimuth)
+    rt_x, rt_y, rt_z = rotate_x(rt_x, rt_y, rt_z, sweep; T=true)
+    rt_x, rt_y, rt_z = rotate_y(rt_x, rt_y, rt_z, curve; T=true)
+    rl_x, rl_y, rl_z = rotate_y(rt_x, rt_y, rt_z, precone; T=true)
+
+    return rl_x, rl_y, rl_z
 end

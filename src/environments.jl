@@ -64,7 +64,7 @@ function get_aero_velocities(env::Environment, t, r, azimuth, precone, tilt, yaw
     x_az = -r*sin(precone)
     z_az = r*cos(precone)
     y_az = 0.0  # could omit (the more general case allows for presweep so this is nonzero) #Todo: If I include those velocities, I'd need to augment this. 
-    # @show x_az, y_az, z_az
+    @show x_az, y_az, z_az
 
     # get section heights in wind-aligned coordinate system
     heightFromHub = (y_az*sin_azimuth + z_az*cos_azimuth)*cos_tilt - x_az*sin_tilt
@@ -86,7 +86,9 @@ function get_aero_velocities(env::Environment, t, r, azimuth, precone, tilt, yaw
     Vrot_x = -env.RS(t)*y_az*sin_precone
     Vrot_y = env.RS(t)*z_az
 
-    # @show Vrot_x, Vrot_y
+    @show y_az*sin_precone
+
+    @show Vrot_x, Vrot_y
 
     # total velocity
     Vx = Vwind_x + Vrot_x
@@ -146,24 +148,19 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
     tilt = rotor.tilt
     hubht = rotor.hubht
 
-    #extract the local node coordinates
-    rax = blade.rx[idx] #Leadlag
-    ray = blade.ry[idx] #Flapwise
-    raz = blade.rz[idx] #Radial
+    #extract the local node coordinates (in the Hub-rotating reference frame)
+    rbc_x = blade.rx[idx] #Leadlag
+    rbc_y = blade.ry[idx] #Flapwise
+    rbc_z = blade.rz[idx] #Radial
     
-
-    # omega = SVector(env.RS(t), 0, 0)
-    # omega = env.RS(t)
-    sweep = -atan(ray, raz) #The sweep is negative in the given reference frame 
-    precone = atan(rax, raz)
+    sweep = -blade.thetax[idx]  #The sweep is negative in the given reference frame 
+    curve = blade.thetay[idx]
+    precone = blade.precone 
 
 
     ### Get the velocities from the freestream. 
-    #Rotate the blade positions from the hub reference frame to the global. 
-    rtx, rty, rtz = rotate_x(rax, ray, raz, azimuth; T=true)
-    rtx, rty, rtz = rotate_y(rtx, rty, rtz, tilt; T=true)
-    rgx, rgy, rgz = rotate_z(rtx, rty, rtz, yaw; T=true)
-    #Note: Precone and sweep should be inherent in blade rx, ry, and rz
+    #Rotate the blade positions from the blade center reference frame to the global. 
+    rgx, rgy, rgz = transform_BC_G(rbc_x, rbc_y, rbc_z, azimuth, precone, tilt, yaw)
 
 
     # Retrieve the flow field velocities
@@ -171,22 +168,20 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
     # I added hubht to rgz to translate the vector to the top of the tower. 
 
     #Rotate the velocity into the local frame 
-    uxt, uyt, uzt = rotate_z(Ug..., yaw)
-    uxt, uyt, uzt = rotate_y(uxt, uyt, uzt, tilt)
-    uxt, uyt, uzt = rotate_x(uxt, uyt, uzt, azimuth)
-    uxt, uyt, uzt = rotate_x(uxt, uyt, uzt, sweep; T=true)
-    ulx_wind, uly_wind, _ = rotate_y(uxt, uyt, uzt, precone; T=true)
+    ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone, sweep, tilt, yaw)
 
 
 
     ### Get the rotational velocities
-    Omega_a = (env.RS(t), 0, 0)
+    rhr_x, rhr_y, rhr_z = transform_BC_HR(rbc_x, rbc_y, rbc_z, precone)
+    Omega_hr = (env.RS(t), 0, 0) #Angular velocity in hub-rotating reference frame
 
-    #Convert angular velocity to linear velocity
-    vx_rot, vy_rot, vz_rot = cross(Omega_a, (rax, ray, raz))
+    #Convert angular velocity to linear velocity 
+    vx_rot, vy_rot, vz_rot = cross(Omega_hr, (rhr_x, rhr_y, rhr_z))
 
-    #Convert from the hub frame to the local airfoil frame
-    ulx_rot, uly_rot, _ = rotate_y(rotate_x(vx_rot, vy_rot, vz_rot, sweep)..., precone)
+
+    #Convert from the hub-rotating frame to the local airfoil frame
+    ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone)
 
     
 
@@ -217,7 +212,8 @@ end
 
 
 """
-    get_aerostructural_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz, vsx, vsy, vsz)
+    get_aerostructural_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz, vsx, vsy, vsz) -> Vx, Vy
+
 Calculate the velocities in the airfoil reference frame based on the flow-field, blade geometry, and structural deflections and motions at the given time step. 
 
 *Arguments*
@@ -243,64 +239,52 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     dy = delta[2]
     dz = delta[1]
 
-    rax = blade.rx[idx] + dx #Leadlag
-    ray = blade.ry[idx] + dy #Flapwise
-    raz = blade.rz[idx] + dz #Radial
-    # @show rax, ray, raz
+    rbc_x = blade.rx[idx] + dx #Leadlag
+    rbc_y = blade.ry[idx] + dy #Flapwise
+    rbc_z = blade.rz[idx] + dz #Radial
+    
+    sweep = -blade.thetax[idx]  #The sweep is negative in the given reference frame 
+    curve = blade.thetay[idx]
+    precone = blade.precone 
 
-    omega = env.RS(t)
-    azimuth -= pi/2
-
-    # @show azimuth
 
     ### Get the velocities from the freestream. 
-    # Rotate the positions into the global reference frame
-    rgx, rgy, rgz = rotate_vector(rax, ray, raz, azimuth, yaw, tilt) #Translate the blade up to the location where it is attached to the top of the tower. 
-    # rgx, rgy, rgz = rotate_vector(rax, ray, raz, azimuth, 0.0, 0.0) 
-    # rgx, rgy, rgz = rotate_vector(rgx, rgy, rgz, 0.0, yaw, tilt) 
-    # rgx, rgy, rgz = rotate_vector(rgx, rgy, rgz, azimuth, 0.0, 0.0) 
-    rgy += hubht 
+    #Rotate the blade positions from the hub reference frame to the global. 
+    rgx, rgy, rgz = transform_BC_G(rbc_x, rbc_y, rbc_z, azimuth, precone, tilt, yaw)
 
     # Retrieve the flow field velocities
-    Ug = evaluate_flowfield_velocity(env, hubht, rgx, rgy, rgz, t)
+    Ug = evaluate_flowfield_velocity(env, hubht, rgx, rgy, rgz + hubht, t) 
+    # I added hubht to rgz to translate the vector to the top of the tower.
 
-    # @show Ug 
+    #Rotate the velocity into the local frame 
+    ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone, sweep, tilt, yaw)
 
-    # Rotate the freestream velocities into the aerodynamic frame (where the YZ plane aligns with the rotor plane)
-    uax_wind, uay_wind, uaz_wind = rotate_vector(Ug[1], Ug[2], Ug[3], -azimuth, -yaw, -tilt; forward=false) #Todo: I'm a couple of millimeters of on the z velocity which is propogating down (When I do multiple rotations at once.)
-    # uax_wind, uay_wind, uaz_wind = rotate_vector(Ug[1], Ug[2], Ug[3], azimuth, 0.0, 0.0; forward=false)
-    # uax_wind, uay_wind, uaz_wind = rotate_vector(uax_wind, uay_wind, uay_wind, 0.0, 0.0, tilt; forward=false)
-    # uax_wind, uay_wind, uaz_wind = rotate_vector(uax_wind, uay_wind, uay_wind, 0.0, yaw, 0.0; forward=false)
-
-    # @show uax_wind, uay_wind, uaz_wind
+    
 
 
-    ### Get the velocities from the rotation.
-    uax_rot = 0.0
-    uay_rot = omega*raz #Todo: Changing the sign of this doesn't seem to affect the outcome... :|
-    uaz_rot = omega*ray
+    ### Get the rotational velocities
+    rhr_x, rhr_y, rhr_z = transform_BC_HR(rbc_x, rbc_y, rbc_z, precone)
+    Omega_hr = (env.RS(t), 0, 0) #Angular velocity in hub-rotating reference frame
 
-    # @show uay_rot, uaz_rot
+    #Convert angular velocity to linear velocity 
+    vx_rot, vy_rot, vz_rot = cross(Omega_hr, (rhr_x, rhr_y, rhr_z))
 
-    # ### Transform the structural velocities into the aero frame
-    # usx = Vs[3]
-    # usy = -Vs[2] 
-    # usz = -Vs[1]
 
-    ### Sum and rotate into the airfoil reference frame. 
-    uax = uax_wind + uax_rot + Vs[1]
-    uay = uay_wind + uay_rot + Vs[2]
-    uaz = uaz_wind + uaz_rot + Vs[3]
+    #Convert from the hub-rotating frame to the local airfoil frame
+    ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone)
 
-    theta_x = atan(ray, raz) #TODO: Potentially store these to avoid calculating them every iteration. 
-    theta_y = atan(rax, raz)
-    theta_z = 0.0
 
-    # @show uax, uay, uaz
-    # @show theta_x, theta_y, theta_z
 
-    Vx, Vy, _ = rotate_vector(uax, uay, uaz, theta_x, theta_y, theta_z; forward=true) #Normal velocity, tangential velocity, radial velocity
-    #Todo: Changing forward to true or to false doesn't have any affect on the outcome!!! -> That's because the section that I've been testing it on doesn't have precone... but I don't know how it passed the precone tests.... but... 
+    ### Transform the structural velocities from the hub-rotating into the local frame
+    usx, usy, _ = transform_HR_L(Vs..., curve, sweep, precone)
+
+
+    ### Sum the velocities in the airfoil reference frame. 
+    Vx = ulx_wind - ulx_rot + usx
+    Vy = uly_wind - uly_rot + usy
+    # Vz = ulz_wind - ulz_rot + usz
+    #Note: The rotational velocities are subtracted rather than added because that's
+    #converting from structural velocity to the aerodynamic velocity. 
     
     return Vx, Vy
 end

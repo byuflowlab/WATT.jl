@@ -67,110 +67,126 @@ cd(localpath)
 
 
         ### Test blade with precone
+        azimuth = 0.0
+        tilt = 0.0
+        yaw = 0.0
         precone=2*pi/180
         blade = Blade(rvec, twistvec, airfoils; precone)
-        @test mean(blade.rx)>0
-        @test mean(blade.ry)==0
+        rx = zero(rvec)
+        ry = zero(rvec)
+        rz = zero(rvec)
+
+        for i in eachindex(rvec)
+            rx[i], ry[i], rz[i] = Rotors.transform_BC_G(blade.rx[i], blade.ry[i], blade.rz[i], azimuth, blade.precone, tilt, yaw)
+        end
+
+        @test mean(rx)>0
+        @test mean(ry)==0
 
         preconeflag = true
         for i in 2:n
-            if blade.rx[i]<=blade.rx[i-1]
+            if rx[i]<=rx[i-1]
                 preconeflag = false
             end
         end
         @test preconeflag
-        # @test isapprox(blade.rx[end], (blade.rtip-blade.rhub)*sin(precone))
-        @test isapprox(blade.rx[end], (blade.rtip)*sin(precone))
+        @test isapprox(rx[end], (blade.rtip)*sin(blade.precone))
 
-
-
-
-        ### Test blade with single curve value
-        curve = 2*pi/180
-        blade = Blade(rvec, twistvec, airfoils; curve)
-
-        @test mean(blade.rx)>0
-        @test mean(blade.ry)==0
-
-        curveflag = true
-        for i in 2:n
-            if blade.rx[i]<=blade.rx[i-1]
-                curveflag = false
-            end
-        end
-        @test curveflag
-        # @test isapprox(blade.rx[end], (blade.rtip-blade.rhub)*sin(curve))
-        @test isapprox(blade.rx[end], (blade.rtip)*sin(curve))
+        #Note: I keep balking at the fact that when you apply precone, the first rz value drops below rhub (if the first rz value is at the hub). But when I look at the OpenFAST documentation, the precone rotation clearly shows that the hub radius is transformed at an angle, which means that the z value of rhub is no longer rhub. 
 
 
 
 
 
-        ### Test blade with increasing curve
-        curve = collect(range(0, 10*pi/180, length=n))
-        blade = Blade(rvec, twistvec, airfoils; curve)
+        #Todo: I need to come up with a way to test the curve distance, and curve angles. 
+        # ### Test blade with single curve value
+        # curve = 2*pi/180
+        # blade = Blade(rvec, twistvec, airfoils; curve)
 
-        @test mean(blade.rx)>0
-        @test mean(blade.ry)==0
+        # @test mean(blade.rx)>0
+        # @test mean(blade.ry)==0
 
-        #Test that the dx is indeed increasing. 
-        curveflag = true
-        dx_old = [0.0]
-        for i in 3:n
-            dx = blade.rx[i] - blade.rx[i-1]
-            if dx<dx_old[1]
-                curveflag = false
-            end
-            dx_old[1] = dx
-        end
-        @test curveflag #Note: Test depends on linearly spaced rvec
-
-
-
-
-
-        ### Test blade with single sweep
-        sweep = 2*pi/180
-        blade = Blade(rvec, twistvec, airfoils; sweep)
-
-        @test mean(blade.ry)>0
-        @test mean(blade.rx)==0
-
-
-        sweepflag = true
-        for i in 2:n
-            if blade.ry[i]<=blade.ry[i-1]
-                sweepflag = false
-            end
-        end
-        @test sweepflag
-        @test isapprox(blade.ry[end], (blade.rtip)*sin(sweep))
+        # curveflag = true
+        # for i in 2:n
+        #     if blade.rx[i]<=blade.rx[i-1]
+        #         curveflag = false
+        #     end
+        # end
+        # @test curveflag
+        # # @test isapprox(blade.rx[end], (blade.rtip-blade.rhub)*sin(curve))
+        # @test isapprox(blade.rx[end], (blade.rtip)*sin(curve))
 
 
 
 
 
-        ### Test blade with increasing sweep
-        sweep = collect(range(0, 10*pi/180, length=n))
-        blade = Blade(rvec, twistvec, airfoils; sweep)
+        # ### Test blade with increasing curve
+        # curve = collect(range(0, 10*pi/180, length=n))
+        # blade = Blade(rvec, twistvec, airfoils; curve)
 
-        @test mean(blade.ry)>0  
-        @test mean(blade.rx)==0
-        bladelength = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
+        # @test mean(blade.rx)>0
+        # @test mean(blade.ry)==0
+
+        # #Test that the dx is indeed increasing. 
+        # curveflag = true
+        # dx_old = [0.0]
+        # for i in 3:n
+        #     dx = blade.rx[i] - blade.rx[i-1]
+        #     if dx<dx_old[1]
+        #         curveflag = false
+        #     end
+        #     dx_old[1] = dx
+        # end
+        # @test curveflag #Note: Test depends on linearly spaced rvec
 
 
 
-        #Test that the dy is indeed increasing. 
-        sweepflag = true
-        dy_old = [0.0]
-        for i in 3:n
-            dy = abs(blade.ry[i] - blade.ry[i-1])
-            if dy<dy_old[1]
-                sweepflag = false
-            end
-            dy_old[1] = dy
-        end
-        @test sweepflag #Note: Test depends on linearly spaced rvec
+
+
+        # ### Test blade with single sweep
+        # sweep = 2*pi/180
+        # blade = Blade(rvec, twistvec, airfoils; sweep)
+
+        # @test mean(blade.ry)>0
+        # @test mean(blade.rx)==0
+
+
+        # sweepflag = true
+        # for i in 2:n
+        #     if blade.ry[i]<=blade.ry[i-1]
+        #         sweepflag = false
+        #     end
+        # end
+        # @test sweepflag
+        # @test isapprox(blade.ry[end], (blade.rtip)*sin(sweep))
+
+
+
+
+
+        # ### Test blade with increasing sweep
+        # sweep = collect(range(0, 10*pi/180, length=n))
+        # blade = Blade(rvec, twistvec, airfoils; sweep)
+
+        # @test mean(blade.ry)>0  
+        # @test mean(blade.rx)==0
+        # bladelength = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
+
+
+
+        # #Test that the dy is indeed increasing. 
+        # sweepflag = true
+        # dy_old = [0.0]
+        # for i in 3:n
+        #     dy = abs(blade.ry[i] - blade.ry[i-1])
+        #     if dy<dy_old[1]
+        #         sweepflag = false
+        #     end
+        #     dy_old[1] = dy
+        # end
+        # @test sweepflag #Note: Test depends on linearly spaced rvec
+
+
 
         # @show curve
         # @show blade.rx

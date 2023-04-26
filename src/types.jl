@@ -65,41 +65,48 @@ The blade struct... what else is there to say.
 - ry::AbstractVector{<:TF} - The y position of the blade in the rotor plane (not including tilt and yaw, but including precone, curve, and sweep). 
 - rz::AbstractVector{<:TF} - The z position of the blade in the rotor plane (not including tilt and yaw, but including precone, curve, and sweep). 
 - rR::AbstractVector{<:TF} - The percent of the blade length that the aerodynamic node is located at. 
+- thetax::AbstractVector{<:TF} - The angular position of the local coordinate frame from the blade root reference frame about the X axis. Also known as the sweep angle.  
+- thetay::AbstractVector{<:TF} - The angular position of the local coordinate frame from the blade root reference frame about the Y axis. Also known as the curve angle.  
 - twist::AbstractVector{<:TF} - the twist distribution (radians). 
 - airfoils::AbstractVector{<:DynamicStallModels.Airfoil} - The vector of the airfoil structs (an airfoil for each node). 
 """
 struct Blade{TF}  
     rhub::TF
     rtip::TF
-    rx::AbstractVector{<:TF} #Lead-lag direction (freestream)
-    ry::AbstractVector{<:TF} #Flapwise direction 
+    rx::AbstractVector{<:TF} #Lead-lag direction (freestream) curve value
+    ry::AbstractVector{<:TF} #Flapwise direction (Sweep value)
     rz::AbstractVector{<:TF} #Radial direction
     r::AbstractVector{<:TF} #Todo: Decide if I want this in here, or if I'll just use the norm of the vectorized version. 
     rR::AbstractVector{<:TF}
+    thetax::AbstractVector{<:TF} #Sweep angle
+    thetay::AbstractVector{<:TF} #Curve angle
     twist::AbstractVector{<:TF}
+    precone::TF
     airfoils::AbstractVector{<:DS.Airfoil}
 end
 
 """
-    Blade(rvec, twist, airfoils; rhub=rvec[1], rtip=rvec[end], precone=0.0, sweep=0.0, curve=0.0)
+    Blade(rvec, twist, airfoils; rhub=rvec[1], rtip=rvec[end], precone=0.0, sweep=0.0, curve=0.0, rx=zero(rvec), ry=zero(rvec)) -> blade
 
 A convinience constructor for the blade struct. 
 
-### Inputs
-- rvec::AbstractVector{<:Float}
-- twist::AbstractVector{<:Float}
+**Arguments**
+- `span::AbstractVector{<:Float}`: The radial distances of the aerodynamic nodes. 
+- `twist::AbstractVector{<:Float}`
 - airfoils::AbstractVector{<:DynamicStallModels.Airfoil}
 - rhub::Float - the radial distance to the hub. 
 - rtip::Float - the total length of the blade. 
 - precone::Float - The precone angle of the entire blade.
 - sweep::Union{Float, AbstractVector{Float}} - The local sweep angle
-- curve::Union{Float, AbstractVector{Float}} - The local curve (precone) angle. 
+- curve::Union{Float, AbstractVector{Float}} - The local curve angle. 
+- `rx::Float`: The curve distances, or the distances in the X direction of the aerodynamic nodes.
+- `ry::Float`: The sweep distances, or the distances in the Y direction of the aerodynamic nodes.
 """
-function Blade(rvec, twist, airfoils::AbstractVector{<:DS.Airfoil}; rhub=rvec[1], rtip=rvec[end], precone=0.0, sweep=0.0, curve=0.0)
+function Blade(span, twist, airfoils::AbstractVector{<:DS.Airfoil}; rhub=span[1], rtip=span[end], precone=0.0, sweep=0.0, curve=0.0, rx=zero(span), ry=zero(span))
     n = length(airfoils)
 
-    if length(rvec)!=length(twist)!=n
-        error("Blade(): The number of airfoils and nodes (rvec) but be the same.")
+    if length(span)!=length(twist)!=n
+        error("Blade(): The number of airfoils and nodes (span) but be the same.")
     end
 
     if length(sweep)==1
@@ -124,24 +131,23 @@ function Blade(rvec, twist, airfoils::AbstractVector{<:DS.Airfoil}; rhub=rvec[1]
         error("Blade(): The curve angle(s) you provided appears to be degrees, not radians.")
     end
 
-    rx = zero(rvec)
-    ry = zero(rvec)
-    rz = zero(rvec)
-    rR = rvec./rtip
+    # rx = zero(span)
+    # ry = zero(span)
+    # rz = zero(span)
+    rvec = @. sqrt(rx^2 + ry^2 + span^2)
+    rR = span./rtip
 
-    for i in eachindex(airfoils)
-        rx[i] = rvec[i]*sin(curve[i])
-        ry[i] = rvec[i]*sin(sweep[i])
-        rz[i] = rvec[i]*cos(curve[i])*cos(sweep[i])
-        rx[i], ry[i], rz[i] = rotate_vector(rx[i], ry[i], rz[i], 0, precone, 0)
-    end
+    # for i in eachindex(airfoils)
+    #     rx[i] = span[i]*sin(curve[i])
+    #     ry[i] = span[i]*sin(sweep[i])
+    #     rz[i] = span[i]*cos(curve[i])*cos(sweep[i])
+    #     rx[i], ry[i], rz[i] = rotate_vector(rx[i], ry[i], rz[i], 0, precone, 0)
+    # end
 
-    return Blade(rhub, rtip, rx, ry, rz, rvec, rR, twist, airfoils)
+    return Blade(rhub, rtip, rx, ry, span, rvec, rR, sweep, curve,  twist, precone, airfoils)
 end
 
-function get_global_position(blade::Blade, azimuth)
-    return 1
-end
+
 
 
 

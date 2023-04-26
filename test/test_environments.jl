@@ -5,7 +5,7 @@ Test all of the environment constructors and functions
 =#
 
 using Test
-using Rotors, CCBlade, OpenFASTsr, DynamicStallModels
+using Rotors, CCBlade, OpenFASTsr, DynamicStallModels, GXBeam, StaticArrays
 
 DS = DynamicStallModels
 of = OpenFASTsr
@@ -360,7 +360,7 @@ cd(localpath)
 
 
 
-        ### Test with sweep #Todo:
+        # ### Test with sweep #Todo:
 
 
 
@@ -519,111 +519,123 @@ cd(localpath)
 
 
 
+        #----------------------------------------#
 
 
+        ### Test aerostructural velocities
+        precone = 0.0 # 3*pi/180
+        tilt = 0.0 #4*pi/180
+        yaw = 0.0 #5*pi/180
 
-        # ### Test aerostructural velocities
-        # precone = 3*pi/180
-        # tilt = 4*pi/180
-        # yaw = 5*pi/180
+        # Prep the ASD rotor and operating conditions 
+        ofpath = "../testing/OpenFAST_NREL5MW"
+        adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
+        edfile = of.read_edfile("NREL5MW_EDfile.dat", ofpath)
+        bdfile = of.read_bdfile("NREL5MW_BDfile.dat", ofpath)
+        bdblade = of.read_bdblade("NREL5MW_BDblade.dat", ofpath)
 
-        # # Prep the ASD rotor and operating conditions 
-        # ofpath = "../testing/OpenFAST_NREL5MW"
-        # adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
-        # edfile = of.read_edfile("NREL5MW_EDfile.dat", ofpath)
-        # bdfile = of.read_bdfile("NREL5MW_BDfile.dat", ofpath)
-        # bdblade = of.read_bdblade("NREL5MW_BDblade.dat", ofpath)
+        aftypes = Array{of.AirfoilInput}(undef, 8)
+        aftypes[1] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder1.dat") 
+        aftypes[2] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder2.dat") 
+        aftypes[3] = of.read_airfoilinput(ofpath*"/Airfoils/DU40_A17.dat") 
+        aftypes[4] = of.read_airfoilinput(ofpath*"/Airfoils/DU35_A17.dat") 
+        aftypes[5] = of.read_airfoilinput(ofpath*"/Airfoils/DU30_A17.dat") 
+        aftypes[6] = of.read_airfoilinput(ofpath*"/Airfoils/DU25_A17.dat") 
+        aftypes[7] = of.read_airfoilinput(ofpath*"/Airfoils/DU21_A17.dat") 
+        aftypes[8] = of.read_airfoilinput(ofpath*"/Airfoils/NACA64_A17.dat") 
 
-        # aftypes = Array{of.AirfoilInput}(undef, 8)
-        # aftypes[1] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder1.dat") 
-        # aftypes[2] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder2.dat") 
-        # aftypes[3] = of.read_airfoilinput(ofpath*"/Airfoils/DU40_A17.dat") 
-        # aftypes[4] = of.read_airfoilinput(ofpath*"/Airfoils/DU35_A17.dat") 
-        # aftypes[5] = of.read_airfoilinput(ofpath*"/Airfoils/DU30_A17.dat") 
-        # aftypes[6] = of.read_airfoilinput(ofpath*"/Airfoils/DU25_A17.dat") 
-        # aftypes[7] = of.read_airfoilinput(ofpath*"/Airfoils/DU21_A17.dat") 
-        # aftypes[8] = of.read_airfoilinput(ofpath*"/Airfoils/NACA64_A17.dat") 
+        # indices correspond to which airfoil is used at which station
+        af_idx = Int.(adblade["BlAFID"])
 
-        # # indices correspond to which airfoil is used at which station
-        # af_idx = Int.(adblade["BlAFID"])
+        # create airfoil array
+        afs = aftypes[af_idx]
 
-        # # create airfoil array
-        # afs = aftypes[af_idx]
+        chordvec = adblade["BlChord"]
+        twistvec = adblade["BlTwist"]
+        rhub = edfile["HubRad"]
+        rvec = adblade["BlSpn"] .+ rhub
+        hubht = 80.0
+        n = length(rvec)
 
-        # chordvec = adblade["BlChord"]
-        # twistvec = adblade["BlTwist"]
-        # rhub = edfile["HubRad"]
-        # rvec = adblade["BlSpn"] .+ rhub
-        # hubht = 80.0
-        # n = length(rvec)
+        rvec = collect(range(rvec[1], rvec[end], length=n))
 
-        # rvec = collect(range(rvec[1], rvec[end], length=n))
+        airfoils = Vector{DS.Airfoil}(undef, n)
+        for i = 1:n
+            airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
+        end
 
-        # airfoils = Vector{DS.Airfoil}(undef, n)
-        # for i = 1:n
-        #     airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
-        # end
+        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        blade = Blade(rvec, twistvec, airfoils; precone)
+        env = environment(rho, mu, a, vinf, omega, shearexp)
+        
+        # @show tilt, yaw, precone
 
-        # rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
-        # blade = Blade(rvec, twistvec, airfoils; precone)
-        # env = environment(rho, mu, a, vinf, omega, shearexp)
+        assembly = of.make_assembly(edfile, bdfile, bdblade)
 
-        # assembly = of.make_assembly(edfile, bdfile, bdblade)
+        ips = Rotors.create_interpolationpoints(assembly, blade)
 
-        # ips = Rotors.create_interpolationpoints(assembly, blade)
+        distributed_loads = Dict{Int64, DistributedLoads{Float64}}()
 
-        # distributed_loads = Dict{Int64, DistributedLoads{Float64}}()
+        nelem = length(assembly.elements)
 
-        # nelem = length(assembly.elements)
+        for ielem in 1:nelem
+            distributed_loads[ielem] = DistributedLoads(assembly, ielem;
+                fz_follower = (s) -> 10)
+        end
 
-        # for ielem in 1:nelem
-        #     distributed_loads[ielem] = DistributedLoads(assembly, ielem;
-        #         fz_follower = (s) -> 10)
-        # end
-
-        # # root section is fixed
-        # prescribed_conditions = Dict(
-        #     1 => PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) 
+        # root section is fixed
+        prescribed_conditions = Dict(
+            1 => PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) 
 
         
-        # angular_velocity = SVector(0.0, 0.0, -omega)
+        angular_velocity = SVector(0.0, 0.0, -omega)
 
-        # t = 0.2
-        # azimuth = omega*t
-        # g = 9.81
-        # gravity = SVector(g*sin(azimuth), -g*cos(azimuth), 0.0)
+        t = 0.2
+        azimuth = omega*t
+        g = 9.81
+        gravity = SVector(g*sin(azimuth), -g*cos(azimuth), 0.0)
 
-        # tvec = 0:0.1:t
+        tvec = 0:0.1:t
 
-        # system, history, converged = GXBeam.time_domain_analysis(assembly, tvec;
-        #     prescribed_conditions,
-        #     distributed_loads,
-        #     angular_velocity,
-        #     gravity,
-        #     steady=false) 
+        system, history, converged = GXBeam.time_domain_analysis(assembly, tvec;
+            prescribed_conditions,
+            distributed_loads,
+            angular_velocity,
+            gravity,
+            steady=false) 
 
-        # state = history[end]
+        state = history[end]
 
-        # na = length(blade.airfoils)
+        na = length(blade.airfoils)
 
-        # delta = [Rotors.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
-        # aeroV = [Rotors.convert_velocities(blade, env, assembly, state, ips, t, i) for i in 1:na]
+        delta = [Rotors.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
+        aeroV = [Rotors.convert_velocities(blade, env, assembly, state, ips, t, i) for i in 1:na]
 
-        # Vxvec = zeros(na)
-        # Vyvec = zeros(na)
+        # @show state.points[1].u
+        # @show state.points[1].V
+        # @show env.RS(0)
+        # @show env.RS(t)
+        # @show aeroV[1]
 
-        # for i = 1:na
-        #     Vxvec[i], Vyvec[i] = Rotors.get_aerostructural_velocities(rotor, blade, env, t, i, azimuth, delta[i], aeroV[i])
-        # end
+        Vxvec = zeros(na)
+        Vyvec = zeros(na)
 
-        # increasingflag = true
-        # for i = 2:na
-        #     if Vyvec[i-1]>=Vyvec[i]
-        #         increasingflag = false
-        #     end
-        # end
-        # @test increasingflag
-        #Todo: I don't know what other tests to do here because I don't know what the values should be... they look pretty good. I mean, I guess I could pull velocities out of OpenFAST and compare those. 
+        for i = 1:na
+            Vxvec[i], Vyvec[i] = Rotors.get_aerostructural_velocities(rotor, blade, env, t, i, azimuth, delta[i], aeroV[i])
+        end
+
+        # @show blade.r
+
+        increasingflag = true
+        for i = 2:na
+            if Vyvec[i-1]>=Vyvec[i]
+                increasingflag = false
+            end
+        end
+        @test increasingflag
+
+
+        ### #Todo: I don't know what other tests to do here because I don't know what the values should be... they look pretty good. I mean, I guess I could pull velocities out of OpenFAST and compare those. 
 
 
 
