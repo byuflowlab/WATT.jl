@@ -45,14 +45,14 @@ function solve_BEM(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, pi
     return solve_BEM!(rotor, blade, env, idx, Vx, Vy, pitch, xv; npts)
 end
 
-function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, pitch, xv; npts::Int=10)
+function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts::Int=10)
 
     airfoil = blade.airfoils[idx]
     rR = blade.rR[idx]
     # r = rR*(blade.rtip-blade.rhub)
     # r = sqrt(blade.rx[idx]^2 + blade.ry[idx]^2 + blade.rz[idx]^2)
     r = blade.r[idx]
-    twist = blade.twist[idx]
+    # twist = blade.twist[idx]
 
     # check if we are at hub/tip
     if isapprox(rR, 0.0, atol=1e-6) || isapprox(rR, 1.0, atol=1e-6)

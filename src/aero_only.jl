@@ -27,7 +27,9 @@ Simulate the rotor's response for a given rotor and environmental condition.
 """
 # function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, tipcorrection=CCBlade.PrandtlTipHub(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
 
-function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
+function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
+     pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter=100,
+     azimuth0=0.0)
 
 
     if verbose
@@ -60,7 +62,7 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pit
 
     turbine = rotor.turbine
 
-    rvec = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
+    # rvec = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
     twistvec = blade.twist
     
     airfoils = blade.airfoils
@@ -73,12 +75,12 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pit
     azimuth = Array{eltype(chordvec)}(undef, nt)
     azimuth[1] = azimuth0
 
-    cchistory = Array{CCBlade.Outputs{eltype(rvec)}, 2}(undef, nt, na)
+    cchistory = Array{CCBlade.Outputs{eltype(chordvec)}, 2}(undef, nt, na)
     xcc = zeros(11) #Todo: Typing
 
 
-    for i = 1:na
-        Vxvec[i], Vyvec[i] = get_aero_velocities(rotor, blade, env, t0, i, azimuth[1])
+    for j = 1:na
+        Vxvec[j], Vyvec[j] = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
 
         cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
     end
@@ -97,12 +99,12 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec; pit
 
 
     ### Prepare data storage
-    Cx = Array{eltype(rvec)}(undef,(nt, na))
-    Cy = Array{eltype(rvec)}(undef,(nt, na))
-    Cm = Array{eltype(rvec)}(undef,(nt, na))
+    Cx = Array{eltype(chordvec)}(undef,(nt, na))
+    Cy = Array{eltype(chordvec)}(undef,(nt, na))
+    Cm = Array{eltype(chordvec)}(undef,(nt, na))
 
-    Fx = Array{eltype(rvec)}(undef,(nt, na))
-    Fy = Array{eltype(rvec)}(undef,(nt, na))
+    Fx = Array{eltype(chordvec)}(undef,(nt, na))
+    Fy = Array{eltype(chordvec)}(undef,(nt, na))
 
 
     extract_ds_loads!(airfoils, view(xds, 1, :), xds_idxs, cchistory[1,:], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :))

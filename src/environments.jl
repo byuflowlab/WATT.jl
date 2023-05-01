@@ -227,7 +227,7 @@ Calculate the velocities in the airfoil reference frame based on the flow-field,
 - `delta::StaticArray{Number, 3}`: The structural defelctions of the node. 
 - `Vs::StaticArray{Number, 3}`: The structural velocities of the node. 
 """
-function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environment, t, idx, azimuth, delta, Vs)
+function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environment, t, idx, azimuth, delta, delta_theta, Vs)
 
     ### Unpack
     yaw = rotor.yaw
@@ -243,9 +243,9 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     rbc_y = blade.ry[idx] + dy #Flapwise
     rbc_z = blade.rz[idx] + dz #Radial
     
-    sweep = -blade.thetax[idx]  #The sweep is negative in the given reference frame 
-    curve = blade.thetay[idx]
-    precone = blade.precone 
+    sweep = -blade.thetax[idx] - delta_theta[3]  #The sweep is negative in the given reference frame 
+    curve = blade.thetay[idx] + delta_theta[2]
+    precone = blade.precone + delta_theta[1]
 
 
     ### Get the velocities from the freestream. 

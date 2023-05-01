@@ -1,6 +1,7 @@
 using Revise
 using OpenFASTsr, DelimitedFiles, GXBeam, Rotors, LinearAlgebra, DynamicStallModels
 using YAML
+# using Plots
 
 DS = DynamicStallModels
 of = OpenFASTsr
@@ -289,7 +290,11 @@ for i = 1:n
 end
 
 rR = rvec./rtip
-blade = Rotors.Blade(rhub, rtip, rR, airfoils)
+# blade = Rotors.Blade(rhub, rtip, rR, airfoils)
+blade = Rotors.Blade(rvec, twistvec, airfoils; rhub=rhub, rtip=rtip, precone)
+
+turbine = true
+rotor_r = Rotors.Rotor(Int(B), hubht, turbine; tilt, yaw)
 
 
 # dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
@@ -304,7 +309,8 @@ twist_rotors = twistvec.*(pi/180)
 
 if runflag
     # tvec_r = range(0, 50, length=50001)
-    loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rvec, twist_rotors, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=500, tipcorrection=nothing)
+    loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=true, plotiter=20)
+
     runflag = false
 end
 

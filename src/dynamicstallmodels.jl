@@ -67,6 +67,10 @@ function update_ds_inputs!(airfoils::AbstractVector{<:Airfoil}, p_ds, W, phivec,
         end
         alphadot = (alpha - p_ds[idx+3])/dt
 
+        # if W[j]<0
+        #     @show j, W[j]
+        # end
+
         p_ds[idx + 1] = W[j] #Update the inflow velocity
         p_ds[idx + 2] = Udot #Update the inflow acceleration
         p_ds[idx + 3] = alpha #Update the aoa

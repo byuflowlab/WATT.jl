@@ -308,17 +308,19 @@ function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
 end
 
 
-function update_forces!(distributed_loads, Fx, Fy, Mx, rvec, assembly; fit=DS.Linear)
+function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.Linear)
 
-    #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. )
-    Fzfit = fit(rvec, -Fx) #Todo: I need to nail down behavior outside of the aero node regions. 
-    Fyfit = fit(rvec, Fy) 
-    Mxfit = fit(rvec, Mx)
+    #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. ) #Todo: I need to nail down behavior outside of the aero node regions.
+    Fzfit = fit(blade.r, -Fx)  
+    Fyfit = fit(blade.r, Fy) 
+    Mxfit = fit(blade.r, Mx)
 
 
     for ielem = eachindex(assembly.elements)
-        r1 = assembly.points[ielem][1] #Todo: I want a vector of just lengths, of the points. Not just the X distance. 
-        r2 = assembly.points[ielem+1][1]
+        # r1 = assembly.points[ielem][1] #Todo,: I want a vector of just lengths, of the points. Not just the X distance. 
+        # r2 = assembly.points[ielem+1][1]
+        r1 = norm(assembly.points[ielem])
+        r2 = norm(assembly.points[ielem+1])
         distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
     end
 

@@ -160,7 +160,7 @@ function interpolate_angle(ip, assembly, state) #Todo: I need to see if I should
     theta1 = WMPtoangle(state.points[ip.pair[1]].theta)
     theta2 = WMPtoangle(state.points[ip.pair[2]].theta) #Todo: I should see if I should interpolate, then convert to angle, or do as I'm doing. 
 
-    return (1-ip.percent)*theta1[1] + ip.percent*theta2[1]
+    return (1-ip.percent)*theta1 + ip.percent*theta2
 end
 
 """
