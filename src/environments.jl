@@ -235,17 +235,23 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     hubht = rotor.hubht
 
     #Transform the structural deflections into the aerodynamic reference frame. 
-    dx = -delta[3]
-    dy = delta[2]
-    dz = delta[1]
+    # dx = -delta[3]
+    # dy = delta[2]
+    # dz = delta[1]
+
+    dx = dy = dz = 0.0
 
     rbc_x = blade.rx[idx] + dx #Leadlag
     rbc_y = blade.ry[idx] + dy #Flapwise
     rbc_z = blade.rz[idx] + dz #Radial
     
-    sweep = -blade.thetax[idx] - delta_theta[3]  #The sweep is negative in the given reference frame 
-    curve = blade.thetay[idx] + delta_theta[2]
-    precone = blade.precone + delta_theta[1]
+    # sweep = -blade.thetax[idx] - delta_theta[3]  #The sweep is negative in the given reference frame 
+    # curve = blade.thetay[idx] + delta_theta[2]
+    # precone = blade.precone + delta_theta[1]
+
+    sweep = -blade.thetax[idx]  
+    curve = blade.thetay[idx]
+    precone = blade.precone
 
 
     ### Get the velocities from the freestream. 

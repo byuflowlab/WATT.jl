@@ -205,23 +205,30 @@ errfun(x, xt) = 100*(x - xt)/xt
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
         pitch = 0.0
-
-        idx = 10
         Vx = vinf
-        Vy = omega*rvec[idx]
 
-        rotorout = Rotors.solve_BEM(rotor, blade, env, idx, Vx, Vy, pitch; npts=10)
+        for idx = 1:n
+            Vy = omega*rvec[idx]
 
-        af = AlphaAF("../data/polars/DU25_A17.dat", radians=false)
-        section = Section(rvec[idx], chordvec[idx], twistvec[idx], af)
-        rotor = CCBlade.Rotor(blade.rhub, blade.rtip, B; turbine=true, tip=nothing)
-        op = CCBlade.OperatingPoint(Vx, Vy, rho, pitch, mu, a)
-        ccout = solve(rotor, section, op)
+            rotorout = Rotors.solve_BEM(rotor, blade, env, idx, Vx, Vy, pitch; npts=10)
 
-        @test isa(rotorout, typeof(ccout))
+            # af = AlphaAF("../data/polars/DU25_A17.dat", radians=false)
+            polar = blade.airfoils[idx].polar
+            af = CCBlade.AlphaAF(polar[:,1], polar[:,2], polar[:,3])
+            section = Section(rvec[idx], chordvec[idx], twistvec[idx], af)
+            rotor_cc = CCBlade.Rotor(blade.rhub, blade.rtip, B; turbine=true, tip=nothing)
+            op = CCBlade.OperatingPoint(Vx, Vy, rho, pitch, mu, a)
+            ccout = solve(rotor_cc, section, op)
 
-        flags = Rotors.compare_fieldnames(rotorout, ccout)
-        @test any(i -> i, flags)
+            @test isa(rotorout, typeof(ccout))
+
+            flags = Rotors.compare_fieldnames(rotorout, ccout)
+            @test any(i -> i, flags)
+
+            if ccout.a>1
+                @show idx, ccout.a, ccout.phi
+            end
+        end
 
 
     end #End test CCBlade

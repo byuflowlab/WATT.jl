@@ -321,7 +321,7 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.L
         # r2 = assembly.points[ielem+1][1]
         r1 = norm(assembly.points[ielem])
         r2 = norm(assembly.points[ielem+1])
-        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
+        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
     end
 
 end

@@ -131,6 +131,10 @@ function Blade(span, twist, airfoils::AbstractVector{<:DS.Airfoil}; rhub=span[1]
         error("Blade(): The curve angle(s) you provided appears to be degrees, not radians.")
     end
 
+    if any(i->i>pi2, twist)
+        error("Blade(): The twist angle appears to be in degrees, not radians.")
+    end
+
     # rx = zero(span)
     # ry = zero(span)
     # rz = zero(span)

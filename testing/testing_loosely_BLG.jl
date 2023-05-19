@@ -500,11 +500,25 @@ display(loadingerrplt)
 
 #Note: The error has increased from the coefficients here because there is a slight error on phi between CCBlade and OpenFAST (even though they use the same method, they have slightly different tolerances). This slight error is incorporated here through the inflow velocity (which is used to dimensionalize the loadings) in a exponential relationship which increases the error. 
 
+node = 15
+
+tiploadplt = plot(xaxis="Time (s)", yaxis="Load (N/m)")
+plot!(tvec, cchistory[:,node].Np, lab="Np", markershape=:circle)
+plot!(tvec, cchistory[:,node].Tp, lab="Tp", markershape=:circle)
+plot!(tvec_of, fxmat[:,node], lab="Fx - OF", markershape=:x)
+plot!(tvec_of, fymat[:,node], lab="Fy - OF", markershape=:x)
+plot!(tvec, loads.Fx[:,node], lab="Fx - R", markershape=:cross)
+plot!(tvec, -loads.Fy[:,node], lab="Fy - R", markershape=:cross)
+# display(tiploadplt)
 
 
 
-
-
+# anim = @animate for i in eachindex(tvec)
+#     plot(xaxis="Radius (m)", yaxis="Load (N/m)", leg=:topleft, ylim=(0, 7000))
+#     plot!(rvec, cchistory[i, :].Np, lab="N")
+#     plot!(rvec, cchistory[i,:].Tp, lab="T")
+# end every 10
+# gif(anim, "ccloads_BLGloose.gif", fps = 10)
 
 
 

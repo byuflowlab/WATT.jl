@@ -55,9 +55,9 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     # twist = blade.twist[idx]
 
     # check if we are at hub/tip
-    if isapprox(rR, 0.0, atol=1e-6) || isapprox(rR, 1.0, atol=1e-6)
-        return Outputs()  # no loads at hub/tip
-    end
+    # if isapprox(rR, 0.0, atol=1e-6) || isapprox(rR, 1.0, atol=1e-6)
+    #     return Outputs()  # no loads at hub/tip
+    # end
 
     ### unpack
     # Vx = op.Vx
@@ -129,7 +129,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
 
     # package up variables and parameters for residual
     # xv = [r, airfoil.c, twist, blade.rhub, blade.rtip, Vx, Vy, env.rho, pitch, env.mu, env.a] #Todo: I wonder how I can make this vector inplace, or limit allocations here. -> Just pass in a dummy vector that get's replaced every function call.  
-    update_BEM_variables!(xv, blade, airfoil, env, r, twist, Vx, Vy, pitch)
+    update_BEM_variables!(xv, blade, airfoil, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
     pv = (airfoil, rotor.B, rotor.turbine, rotor.re, rotor.mach, rotor.rotation, rotor.tip)
 
     success = false

@@ -27,7 +27,7 @@ bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
 bddriver = of.read_bddriver("NREL5MW_bddriver.inp", ofpath)
 
 ### Simulation control
-tmax = 5.0
+tmax = 1.0
 dt = 0.001
 dt_out = 0.001 # "\"default\""
 
@@ -183,7 +183,7 @@ let
     adfile["ADBlFile(2)"] = "sn5_ADblade.dat"
     adfile["ADBlFile(3)"] = "sn5_ADblade.dat"
     adfile["OutList"] = ["B1Azimuth"]
-    adfile["NodeOutList"] = ["Fx", "Fy", "Mm"]
+    adfile["NodeOutList"] = ["Alpha", "Vx", "Vy", "Fx", "Fy", "Mm", "AxInd", "TnInd", "Phi", "Theta"]
     # append!(adfile["NodeOutList"], ["Alpha"])
 
 
@@ -295,7 +295,7 @@ let
     bdfile["BldNd_BlOutNd"] = 99
 
     bdfile["OutNd"] = Int[1]
-    bdfile["OutList"] = [" ", "TipTDxr", "TipTDyr", "TipTDzr"]
+    bdfile["OutList"] = [" ", "TipTDxr", "TipTDyr", "TipTDzr", "TipRDxr", "TipRDyr", "TipRDzr"]
     # bdfile["NodeOutList"] = ["TDxr"]
     append!(bdfile["NodeOutList"], ["RDxr", "RDyr", "RDzr", "TVxr", "TVyr", "TVzr", "RVxr", "RVyr", "RVzr", "DFxr", "DFyr", "DFzr" ])
 

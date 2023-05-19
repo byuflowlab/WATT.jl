@@ -43,6 +43,9 @@ function initialize_DS_model(airfoils::AbstractVector{<:Airfoil}, turbine::Bool,
 end
 
 function update_ds_states!(solver::Solver, airfoils::AbstractVector{<:DS.Airfoil}, states_old, states_new, xds_idxs, p_ds, t, dt)
+
+    # @show p_ds[end-3:end]
+    
     airfoils(states_old, states_new, xds_idxs, p_ds, dt)
 
     # if isa(airfoil.model.detype, Indicial) #Indicial #Todo: I need a way to either switch between, or enforce that ll of the dsmodels on a blade will be of a similar DEType. 
@@ -71,6 +74,10 @@ function update_ds_inputs!(airfoils::AbstractVector{<:Airfoil}, p_ds, W, phivec,
         #     @show j, W[j]
         # end
 
+        # if W[j] < 0
+        #     @show j, W[j]
+        # end
+
         p_ds[idx + 1] = W[j] #Update the inflow velocity
         p_ds[idx + 2] = Udot #Update the inflow acceleration
         p_ds[idx + 3] = alpha #Update the aoa
@@ -87,6 +94,10 @@ function extract_ds_loads!(airfoils::AbstractVector{<:Airfoil}, states, state_id
         nsi1, nsi2 = DS.state_indices(airfoils[j].model, state_idxs[j])
         xs = view(states, nsi1:nsi2)
         ys = view(p_ds, 4*(j-1)+1:4*j)
+
+        # if ys[1]<1
+        #     @show j, ys[1]
+        # end
 
         
         Cl, Cd, Cm[j] = DS.get_loads(airfoils[j].model, airfoils[j], xs, ys) 

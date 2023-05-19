@@ -340,6 +340,9 @@ True          SumPrint       - Print   summary data to "<RootName>.sum" (flag)
 "TipTDxr"  
 "TipTDyr"  
 "TipTDzr"  
+"TipRDxr"  
+"TipRDyr"  
+"TipRDzr"  
 END of input file (the word "END" must appear in the first 3columns of    this last OutList line)
 ---------------------- NODE OUTPUTS --------------------------------------------
           1   BldNd_BladesOut  - Blades to output

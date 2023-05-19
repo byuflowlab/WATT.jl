@@ -1,6 +1,8 @@
 using Revise
 using OpenFASTsr, DelimitedFiles, GXBeam, Rotors, LinearAlgebra, DynamicStallModels
 using YAML
+using Infiltrator
+using StaticArrays
 # using Plots
 
 DS = DynamicStallModels
@@ -44,7 +46,7 @@ rho = inputfile["AirDens"]
 mu = inputfile["KinVisc"]
 vinf = inflowwind["HWindSpeed"]
 a = inputfile["SpdSound"]
-omega = edfile["RotSpeed"]*2*pi/60
+omega = edfile["RotSpeed"]*2*pi/60 #Convert to rads/s
 shearexp = inflowwind["PLexp"]
 tsr = omega*rtip/vinf
 
@@ -252,9 +254,19 @@ if readflag
     #     dfz[:,i] = outs[namedfz]
     # end
 
-        
+    intermediatefile = readdlm("BLADG_intermediate_states.txt")
 
-    readflag = false
+    inames = intermediatefile[1,:]
+    idata = intermediatefile[2:end, :]
+
+    iouts = Dict(inames[i] => idata[:,i] for i in eachindex(inames))
+
+    bemif = readdlm("BEM_intermediate_states.txt")
+    bemnames = ["i", "theta", "cant", "toe", "Vx", "Vy", "Vz", "chord"]
+
+    bouts = Dict(bemnames[i] => bemif[:,i] for i in eachindex(bemnames))
+
+    # readflag = false
 end
 
 azimuth = outs["B1Azimuth"].*(pi/180)
@@ -291,7 +303,7 @@ end
 
 rR = rvec./rtip
 # blade = Rotors.Blade(rhub, rtip, rR, airfoils)
-blade = Rotors.Blade(rvec, twistvec, airfoils; rhub=rhub, rtip=rtip, precone)
+blade = Rotors.Blade(rvec, twistvec.*(pi/180), airfoils; rhub=rhub, rtip=rtip, precone)
 
 turbine = true
 rotor_r = Rotors.Rotor(Int(B), hubht, turbine; tilt, yaw)
@@ -304,14 +316,15 @@ if !@isdefined(runflag)
     runflag = true
 end
 
-twist_rotors = twistvec.*(pi/180)
+
 
 
 if runflag
     # tvec_r = range(0, 50, length=50001)
-    loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=true, plotiter=20)
+    # loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
+    loads, cchistory, xds, gxhistory, Vxmat, Vymat = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
 
-    runflag = false
+    # runflag = false
 end
 
 
@@ -345,6 +358,27 @@ nothing
 tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec)]
 tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec)]
 tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec)]
+
+tiptheta_x = zeros(nt)
+tiptheta_y = zeros(nt)
+tiptheta_z = zeros(nt)
+
+tiptheta_xof = zeros(nt)
+tiptheta_yof = zeros(nt)
+tiptheta_zof = zeros(nt)
+
+for i = 1:nt
+    theta = Rotors.WMPtoangle(gxhistory[i].points[end].theta)
+    tiptheta_x[i] = theta[1]
+    tiptheta_y[i] = theta[2]
+    tiptheta_z[i] = theta[3]
+
+    thetawmp = SVector(outs["B1TipRDxr"][i], outs["B1TipRDyr"][i], outs["B1TipRDzr"][i])
+    theta = Rotors.WMPtoangle(thetawmp)
+    tiptheta_xof[i] = theta[1]
+    tiptheta_yof[i] = theta[2]
+    tiptheta_zof[i] = theta[3]
+end
 
 nr = length(rvec)
 nt = length(tvec)
@@ -441,19 +475,96 @@ plot!(tvec, -tipdef_z, lab=L"\delta x - GX")
 plot!(tvec, tipdef_y, lab=L"\delta y - GX")
 plot!(tvec, tipdef_x, lab=L"\delta z - GX")
 display(tipdefs2)
-# savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_5seconds_041223.png")
+# # savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_5seconds_041223.png")
+nodeidx = 300
+
+alphaplt = plot(xaxis="Time (s)", yaxis="Angle of Attack (deg)")
+plot!(tvec, cchistory[:,nodeidx].alpha.*(180/pi), lab="R")
+plot!(tvec, outs["AB1N$nodeidx"*"Alpha"], lab="OF")
+plot!(tvec[2:end], iouts["alpha"].*(180/pi), lab="AD")
+display(alphaplt)
+
+
+Wof = @. sqrt(outs["AB1N$nodeidx"*"Vx"]^2 + outs["AB1N$nodeidx"*"Vy"]^2)
+
+
+Uplt = plot(xaxis = "Time (s)", yaxis="Inflow Velocity (m/s)")
+plot!(tvec, cchistory[:,nodeidx].W, lab="R")
+plot!(tvec, Wof, lab="OF")
+plot!(tvec[2:end], iouts["U"], lab="AD")
+display(Uplt)
+
+Vxr = cchistory[:,nodeidx].u./cchistory[:,nodeidx].G
+
+Vxplt = plot(xaxis = "Time (s)", yaxis="Vx (m/s)")
+plot!(Vxmat[:,nodeidx], lab="R")
+plot!(outs["AB1N$nodeidx"*"Vx"], lab="OF")
+plot!(bouts["Vx"], lab="AD")
+display(Vxplt)
+
+Vyplt = plot(xaxis = "Time (s)", yaxis="Vy (m/s)", leg=:topleft)
+plot!(Vymat[:,nodeidx], lab="R")
+plot!(outs["AB1N$nodeidx"*"Vy"], lab="OF")
+plot!(bouts["Vy"], lab="AD")
+display(Vyplt)
+
+aplt = plot(xaxis="Time (s)", yaxis="Axial induction factor")
+plot!(tvec, cchistory[:, nodeidx].a, lab="R")
+plot!(tvec, outs["AB1N$nodeidx"*"AxInd"], lab="AD")
+display(aplt)
+
+applt = plot(xaxis="Time (s)", yaxis="Tangential Induction factor")
+plot!(tvec, cchistory[:, nodeidx].ap, lab="R")
+plot!(tvec, outs["AB1N$nodeidx"*"TnInd"], lab="AD")
+display(applt)
+
+phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)")
+plot!(tvec, cchistory[:, nodeidx].phi.*(180/pi), lab="R")
+plot!(tvec, outs["AB1N$nodeidx"*"Phi"], lab="AD")
+display(phiplt)
+
+twist = @. (cchistory[:,nodeidx].phi + -cchistory[:,nodeidx].alpha)*180/pi
+twistof = @. outs["AB1N$nodeidx"*"Phi"] + -outs["AB1N$nodeidx"*"Alpha"]
+
+twistplt = plot(xaxis="Time (s)", yaxis="Twist Angle (deg)")
+plot!(tvec, twist, lab="R")
+plot!(tvec, outs["AB1N$nodeidx"*"Theta"], lab="AD")
+# plot!(tvec, twistof, lab="OF", linestyle=:dash)
+display(twistplt)
+
+thetaplt = plot(xaxis = "Time (s)", yaxis=L"\delta_\theta (deg)", leg=:topleft)
+plot!(tvec, -tiptheta_z.*(180/pi), lab="R - x")
+plot!(tvec, tiptheta_y.*(180/pi), lab="R - y")
+plot!(tvec, tiptheta_x.*(180/pi), lab="R - z")
+# plot!(tvec, outs["B1TipRDxr"], lab="OF - x", linestyle=:dash)
+# plot!(tvec, outs["B1TipRDyr"], lab="OF - y", linestyle=:dash)
+# plot!(tvec, outs["B1TipRDzr"], lab="OF - z", linestyle=:dash)
+plot!(tvec, tiptheta_xof.*(180/pi), lab="OF - x", linestyle=:dash)
+plot!(tvec, tiptheta_yof.*(180/pi), lab="OF - y", linestyle=:dash)
+plot!(tvec, tiptheta_zof.*(180/pi), lab="OF - z", linestyle=:dash)
+display(thetaplt)
 
 
 
 
 # anim = @animate for i in eachindex(tvec)
-#     plt1 = plot(leg=:topleft, yaxis="Distributed Load (N/m)", ylims=(-30, 4700))
+#     plot(xaxis="Radius (m)", yaxis="Load (N/m)", leg=:topleft)
+#     plot!(rvec, cchistory[i, :].Np, lab="N")
+#     plot!(rvec, cchistory[i,:].Tp, lab="T")
+# end every 10
+# gif(anim, "ccloads.gif", fps = 15)
+
+
+
+
+# anim = @animate for i in eachindex(tvec)
+#     plt1 = plot(leg=:topleft, yaxis="Distributed Load (N/m)", ylims=(-750, 6000))
 #     plot!(rvec, fxmat[i,:], lab=L"$F_x$ - OF", linestyle=:dash)
 #     plot!(rvec, fymat[i,:], lab=L"$F_y$ - OF", linestyle=:dash)
 #     plot!(rvec, loads.Fx[i,:], lab=L"$F_x$ - R")
 #     plot!(rvec, loads.Fy[i,:], lab=L"$F_y$ - R")
 
-#     plt2 = plot(xaxis="Time (s)", yaxis="Deflection (m)", legend=:topleft, ylims=(-.32, 3.65)) #
+#     plt2 = plot(xaxis="Time (s)", yaxis="Deflection (m)", legend=:topleft, ylims=(-1.0, 1.75)) #
 #     plot!(rnodes, dxmat[i,:], lab=L"x - OF", linestyle=:dash)
 #     plot!(rnodes, dymat[i,:], lab=L"y - OF", linestyle=:dash)
 #     plot!(rnodes, dzmat[i,:], lab=L"z - OF", linestyle=:dash)
@@ -462,30 +573,10 @@ display(tipdefs2)
 #     plot!(rvec, defx_gx[i,:], lab=L"z - GX")
 
 #     plot(plt1, plt2, layout=(2,1))
-# end every 10
+# end # every 10
 # gif(anim, "loads_defs.gif", fps = 15)
 
-#=
-2/9/23
-The solutions start off quite similar, but they diverge over time. It appears that the OpenFAST solution is converging to a solution where the tip deflection is somewhere near 4.5 m, whereas Rotors quickly converges to a tip deflection just under 3 m. I don't want to be under predicting the loads. I don't know if I'm just neglecting an effect, or if potentially the stiffnesses aren't aligned (although I'm fairly confident that they are aligned). 
 
-Additionally, my Y deflections are significantly larger than OpenFASTs'. I don't know what the source of that is. I don't know if they are the right sign either. 
-
-I tried switching to a semi-implict approach (I had GXBeam deflect off of the i+1 aero state rather than the ith state.). I believe that currently I have OpenFAST running on an explicit approach. That didn't really make much of a difference, so I switched back. 
-
-I'm trying switching the direction of the rotation (changing omega from negative to positive.). I don't know if that'll have any real effect on the final solution, but we'll see. -> That made the solution oscillate a lot, and eventually it looks like it'll go unstable. I need to plot more frequently to be sure that the thing goes unstable. -> Yeah, it definitely goes unstable.
-
-
-Another thing that I could try is seeing if my loads application is off. Currently, I'm interpolating the aerodynamic loads, then integrating them across the GXBeam elements. Gasmi2013 or Sprague2014 (one of the two, I can't remember which) suggested that if you try to interpolate the loads, then you won't pass the entire load. 
-
-Another thought that I had was what if there are forces that are getting applied to BeamDyn that I'm not applying to GXBeam. Right now I'm applying the aeroloads. Oh. I just realized I'm applying the moment to GXBeam, and not to OpenFAST. ... Well that didn't make a large difference. But let's revisit what loads are getting applied. Let's see. I'm applying the aero loads. I have gravity turned off currently for both. I have inertial loads applied because I'm applying a mass matrix. It's hard to say whether or not that is the issue because I'm not 100% confident that I'm interpolating correctly. I suppose I could interpolate for both so that I'm more confident that both are seeing the same mass matrix. That might make the solutions come closer, and might explain why one is converging to a different solution. 
-
-Another approach is I could take a look at where the solutions start to converge and try and narrow down why they are diverging. I wonder if my DS states are the same. Because it looks like my loads are converging to a solution, but theirs kind of go off a little bit more before converging. Which... that could explain a major difference. ... Am I applying tip corrections? 
-
-
-I should probably compare this against the static solution. 
-
-=#
 
 
 
