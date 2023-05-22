@@ -93,14 +93,6 @@ function create_interpolationpoints(assembly::GXBeam.Assembly, blade::Blade)
     points = Vector{InterpolationPoint}(undef, na)
 
     ### Find the beam length 
-    #Note: I can't just do the norm of the points because position-wise you might come back, and the find_point_indices() function depends on the 1D mesh being monatonically increasing.
-    # ns = length(assembly.points)
-    # rgx = zeros(ns)
-    # rgx[1] = norm(assembly.points[1])
-    # for i = 2:ns
-    #     delr = assembly.points[i] - assembly.points[i-1]
-    #     rgx[i] = rgx[i-1] + norm(delr)
-    # end
     rgx = get_bladelength_vector(assembly)
 
     for i = 1:na
@@ -155,13 +147,10 @@ function interpolate_velocity(ip, assembly, state)
     return (1-ip.percent)*v1 + ip.percent*v2
 end
 
-function interpolate_angle(ip, assembly, state) #Todo: I need to see if I should be interpolating or doing what is being done here. 
+function interpolate_angle(ip, assembly, state) 
     
     theta1 = WMPtoangle(state.points[ip.pair[1]].theta)
-    theta2 = WMPtoangle(state.points[ip.pair[2]].theta) #Todo: I should see if I should interpolate, then convert to angle, or do as I'm doing. 
-
-    # theta1 = state.points[ip.pair[1]].theta
-    # theta2 = state.points[ip.pair[2]].theta
+    theta2 = WMPtoangle(state.points[ip.pair[2]].theta) 
 
     return (1-ip.percent)*theta1 + ip.percent*theta2
 end
@@ -203,18 +192,6 @@ function convert_velocities(blade::Blade, env::Environment, assembly, state, int
     # urx = 0.0
     ury = omega*raz 
     urz = -omega*ray
-    
-
-    # @show ray, raz
-    # if idx == 1
-    #     @show blade.ry[idx], blade.rz[idx]
-    #     @show ray, raz
-    #     @show assembly.points[1]
-    #     @show delta
-    #     @show usx, usy, usz
-    #     @show ury, urz
-    #     @show omega
-    # end
 
     return (usx, usy-ury, usz-urz)
 end

@@ -31,6 +31,9 @@ end
 
 #TODO: It might be a good idea to make a version that is completely in place. (Pass in data storage and riso ode.)
 
+function initialize()
+end
+
 #TODO: Function headers
 function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; pitch=0.0, turbine::Bool=true, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
     #Todo: Move the DSM initialization type (the current ModelInit struct) to DSM. 
@@ -57,31 +60,24 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
     t0 = tvec[1]
 
 
-    twistvec = blade.twist
-    airfoils = blade.airfoils
-    chordvec = airfoils.c
+    chordvec = view(blade.airfoils.c, :)
+    inittype = eltype(blade.airfoils.c)
 
     ### Prepare data storage
-    Vxvec = Array{eltype(chordvec)}(undef, na) #TODO: These might be too type specific. 
-    Vyvec = Array{eltype(chordvec)}(undef, na)
-    azimuth = Array{eltype(chordvec)}(undef, nt)
-    # Vxvec = @SVector zeros(eltype(chordvec), na)  #Note: I guess static arrays are immutable... even though the docs say they aren't. 
-    # Vyvec = @SVector zeros(eltype(chordvec), na) 
-    # azimuth = @SVector zeros(eltype(chordvec), nt) 
-    Cx = Array{eltype(chordvec)}(undef,(nt, na))
-    Cy = Array{eltype(chordvec)}(undef,(nt, na))
-    Cm = Array{eltype(chordvec)}(undef,(nt, na))
+    azimuth = Array{inittype}(undef, nt)
 
-    Fx = Array{eltype(chordvec)}(undef,(nt, na))
-    Fy = Array{eltype(chordvec)}(undef,(nt, na))
-    Mx = Array{eltype(chordvec)}(undef,(nt, na)) #Moment about the aero Z axis is the moment about the structural X axis. 
+    Cx = Array{inittype}(undef,(nt, na))
+    Cy = Array{inittype}(undef,(nt, na))
+    Cm = Array{inittype}(undef,(nt, na))
 
-    # sections = Array{CCBlade.Section{eltype(rvec)}, 1}(undef, na)
-    # operatingpoints = Array{CCBlade.OperatingPoint{eltype(rvec)}, 1}(undef, na)
-    cchistory = Array{CCBlade.Outputs{eltype(chordvec)}, 2}(undef, nt, na) 
+    Fx = Array{inittype}(undef,(nt, na))
+    Fy = Array{inittype}(undef,(nt, na))
+    Mx = Array{inittype}(undef,(nt, na)) #Moment about the aero Z axis is the moment about the structural X axis. 
+
+    cchistory = Array{CCBlade.Outputs{inittype}, 2}(undef, nt, na) 
     xcc = zeros(11)
 
-    gxhistory = Array{GXBeam.AssemblyState{eltype(chordvec), Vector{GXBeam.PointState{eltype(chordvec)}}, Vector{GXBeam.ElementState{eltype(chordvec)}}}}(undef, nt)
+    gxhistory = Array{GXBeam.AssemblyState{inittype, Vector{GXBeam.PointState{inittype}}, Vector{GXBeam.ElementState{inittype}}}}(undef, nt)
 
 
 
@@ -91,42 +87,25 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
 
 
     for j = 1:na
-        # sections[i] = CCBlade.Section(rvec[i], chordvec[i], twistvec[i], blade.airfoils[i])
-        Vxvec[j], Vyvec[j] = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
+        Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
 
-        cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
+        cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, xcc)
     end
 
-    # cchistory[1,:] = CCBlade.solve.(Ref(rotor), sections, operatingpoints)
-
-    # @show env.RS(t0), env.U(t0)
 
 
 
 
     ### Initialize DS solution
-    # ode = initializeDSmodel(dsmodel, solver) 
+    Wdotvec = zeros(inittype, na)
+    alphadotvec = zeros(inittype, na)
+    
+    xds, xds_idxs, p_ds = initialize_DS_model(blade.airfoils, turbine, nt, tvec, cchistory[1, :], Wdotvec, alphadotvec, blade.twist, pitch)
 
-    # Wdotvec = SVector{na}(zeros(na)) #TODO: Typing
-    Wdotvec = zeros(eltype(chordvec), na)
-    alphadotvec = zeros(eltype(chordvec), na)
-    # for i = 1:na
-    #     Wdotvec[i] = sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2)
-    # end
-
-    # Wdotvec = [sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #TODO: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. 
-
-    # ode, xds, p_ds = initializeDSmodel(dsmodel, dsmodelinit, solver, turbine, nt, na, tvec, cchistory[1, :], Wdotvec, chordvec, twistvec, pitch, env.a)
-    xds, xds_idxs, p_ds = initialize_DS_model(airfoils, turbine, nt, tvec, cchistory[1, :], Wdotvec, alphadotvec, twistvec, pitch)
-
-    # @show xds[1,end-31:end]
+    
 
 
-    # Cx[1,:], Cy[1,:], Cn[1,:], Ct[1,:], Cl[1,:], Cd[1,:], Cm[1,:] = extractloads(dsmodel, xds[1,:], cchistory[1], chordvec, twistvec, pitch, blade, env) #Todo: I might need to individual rotations for the stations. 
-    #Todo. Why am I storing Cl, Cn, and Cx? 
-    # extractloads!(dsmodel, xds[1,:], cchistory[1, :], chordvec, twistvec, pitch, blade, env, view(Cx, 1, :), view(Cy, 1, :), view(Cn, 1, :), view(Ct, 1, :), view(Cl, 1, :), view(Cd, 1, :), view(Cm, 1, :))
-
-    extract_ds_loads!(airfoils, view(xds, 1, :), xds_idxs, cchistory[1, :], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :)) #Todo: With Precone, and any deflections, then Cx, and Cy will no longer be in the blade root frame. 
+    extract_ds_loads!(blade.airfoils, view(xds, 1, :), xds_idxs, cchistory[1, :], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :)) #Todo: With Precone, and any deflections, then Cx, and Cy will no longer be in the blade root frame. 
     
     ### Dimensionalize #TODO: Could probably make a function out of this. 
     #Todo: These loads may need to be rotated from a local frame to a hub frame. 
@@ -143,11 +122,7 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
 
 
     ### Extract CCBlade Loads and create a distributed load 
-
-    # nelem = length(assembly.elements)
-    # rgx = [assembly.elements[i].x[1] for i in 1:nelem]
-
-    distributed_loads = Dict{Int64, GXBeam.DistributedLoads{eltype(chordvec)}}()
+    distributed_loads = Dict{Int64, GXBeam.DistributedLoads{inittype}}()
     update_forces!(distributed_loads, view(Fx, 1,:), view(Fy, 1,:), view(Mx, 1,:), blade, assembly)
 
 
@@ -158,8 +133,6 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
     prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed
 
 
-
-    ### TODO: I'm still debating whether or not I should include precone, tilt, and yaw in the assembly... what benefits and drawbacks would there be? What things would I have to change if I did? What things should be here if I didn't? => I would have to translate the velocity further. I think it would be easier to include the precone. 
 
     #TODO: Create a function to initialize the behavior. One for starting from no loading, one from steady state as below. Look at that, I wrote that down already. 
 
@@ -184,19 +157,11 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
     interpolationpoints = create_interpolationpoints(assembly, blade) 
 
     delta = [interpolate_deflection(interpolationpoints[j], assembly, gxhistory[1]) for j = 1:na]
-    # delta = [SVector(0.0, 0.0, 0.0) for j = 1:na]
 
     aeroV = [convert_velocities(blade, env, assembly, gxhistory[1], interpolationpoints, t0, j) for j = 1:na]  
-    # aeroV = [SVector(0.0, 0.0, 0.0) for j = 1:na]
     
     def_theta = [interpolate_angle(interpolationpoints[j], assembly, gxhistory[1]) for j = 1:na] 
-    # def_theta = [SVector(0.0, 0.0, 0.0) for j = 1:na]
 
-    Vxmat = zeros(nt, na)
-    Vymat = zeros(nt, na)
-
-    Vxmat[1,:] .= Vxvec
-    Vymat[1,:] .= Vyvec
 
 
 
@@ -208,89 +173,33 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
         #update azimuthal position
         azimuth[i] = env.RS(t)*dt + azimuth[i-1] #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
 
-        ### Update BEM inputs
+        ### Update BEM inputs and solve
         for j = 1:na
-            ### Update sections with twist
-            # if def_theta[j][1]>1
-            #     @show i, j, def_theta[j]
-            # end
-            twistvec[j] = blade.twist[j]  
-            # twistvec[j] = blade.twist[j] - def_theta[j][1] #Todo: Is this correct? I think this is what I had in the fixed point solution. -> A negative smooths the output. 
-            # sections[j] = CCBlade.Section(rvec[j], chordvec[j], twist_displaced, blade.airfoils[j]) #Not displacing rvec because CCBlade uses that to calculate the tip and hub corrections, and the value should be based on relative to the distance along the blade to the hub or tip. (Although in dynamic movement, the tip losses would change dramatically.)
 
             ### Update base inflow velocities
-            # Vxvec[j], Vyvec[j] = get_aerostructural_velocities(env, aeroV[j], t, rvec[j], azimuth[i], precone, tilt, yaw, hubht) #Todo. This should probably see the deflected radius. -> Or I could not subtract out the angular portion of the structural velocity.... then it would automatically see the deflected radius. 
-            Vxvec[j], Vyvec[j] = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth[i], delta[j], def_theta[j], aeroV[j])
+            Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth[i], delta[j], def_theta[j], aeroV[j])
 
-            # if j==300
-            #     @show Vxvec[j], Vyvec[j]
-            # end
-
-            # if Vxvec[j]>330 || Vyvec[j]>330
-            #     @show i, j, Vxvec[j]
-            # end
-
-            # if j==140
-            #     @show Vxvec[j], Vyvec[j]
-            # end
-
-            # operatingpoints[j] = CCBlade.OperatingPoint(Vxvec[j], Vyvec[j], env.rho, pitch, env.mu, env.a)
-            cchistory[i, j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc; twist = twistvec[j])
-
-            # if i==2&&j==300
-            #     @show i, j, cchistory[i,j].W, cchistory[i,j].phi
-            #     @show Vxvec[j], Vyvec[j]
-            #     @show cchistory[i,j].a
-            #     @show cchistory[i,j].ap
-            #     @show def_theta[j]
-            #     println("")
-            # end
-
-            # if cchistory[i,j].W > 330&&j==300
-            #     @show i, j, cchistory[i,j].W, cchistory[i,j].phi
-            #     @show Vxvec[j], Vyvec[j]
-            #     @show cchistory[i,j].a
-            #     @show cchistory[i,j].ap
-            #     @show def_theta[j]
-            #     println("")
-
-            #     #Todo: Problem 1) I don't think that the freestream velocity should ever be near 20, it should be at or below 10, right? Never above... 
-            #     #Todo: Problem 2) why the heck is the inflow velocity jumping up to 900+. That violates the cauchy shwarz inequality. -> Crazy twist distribution. 
-            # end
+            
+            cchistory[i, j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, xcc)
             #TODO: Write a solver that is initialized with the previous inflow angle.
         end
 
-        Vxmat[i,:] .= Vxvec
-        Vymat[i,:] .= Vyvec
-
-        ### Solve BEM
-        # cchistory[i, :] = CCBlade.solve.(Ref(rotor), sections, operatingpoints)  
-
-        # for j = 1:na
-        #     if cchistory[i,j].W < 0
-        #         @show i, j, cchistory[i,j].W
-        #     elseif cchistory[i,j].W > 330
-        #         @show i, j, cchistory[i,j].W
-        #     end
-        # end
+        
 
 
         ### Update Dynamic Stall model inputs 
-        update_ds_inputs!(airfoils, p_ds, cchistory[i,:].W, cchistory[i,:].phi, twistvec, pitch, dt, turbine)
+        update_ds_inputs!(blade.airfoils, p_ds, cchistory[i,:].W, cchistory[i,:].phi, blade.twist, pitch, dt, turbine)
 
 
 
         
         ### Integrate Dynamic Stall model
-        update_ds_states!(solver, airfoils, view(xds, i-1, :), view(xds, i, :), xds_idxs, p_ds, t, dt)
-        # println("")
-        # @show xds[i,end-31:end]
+        update_ds_states!(solver, blade.airfoils, view(xds, i-1, :), view(xds, i, :), xds_idxs, p_ds, t, dt)
 
 
 
         ### Extract loads 
-        
-        extract_ds_loads!(airfoils, view(xds, i, :), xds_idxs, cchistory[i,:], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
+        extract_ds_loads!(blade.airfoils, view(xds, i, :), xds_idxs, cchistory[i,:], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
     
         
         ### Dimensionalize
@@ -329,11 +238,6 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
 
             aeroV[j] = convert_velocities(blade, env, assembly, gxhistory[i], interpolationpoints, t, j)
 
-            # if any(item->item<0, aeroV[j])
-            # if aeroV[j][1]<0
-            #     @show t, j, aeroV[j]
-            # end
-
             def_theta[j] = interpolate_angle(interpolationpoints[j], assembly, gxhistory[i]) 
         end
 
@@ -368,5 +272,5 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
     end
 
     # return (Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, def_theta
-    return (Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, Vxmat, Vymat
+    return (Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory
 end

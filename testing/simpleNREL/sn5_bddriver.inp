@@ -3,7 +3,7 @@ Static analysis of NREL 5MW blade under distributed force
 ---------------------- SIMULATION CONTROL --------------------------------------
 true          DynamicSolve  - Dynamic solve (false for static solve) (-)
 0.0           t_initial     - Starting time of simulation (s) [used only when DynamicSolve=TRUE]
-5.0           t_final       - Ending time of simulation   (s) [used only when DynamicSolve=TRUE]
+1.0           t_final       - Ending time of simulation   (s) [used only when DynamicSolve=TRUE]
 0.001         dt            - Time increment size         (s) [used only when DynamicSolve=TRUE]
 ---------------------- GRAVITY PARAMETER --------------------------------------
 0.0           Gx            - Component of gravity vector along X direction (m/s^2)

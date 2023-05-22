@@ -48,54 +48,6 @@ function environment(rho::Number, mu::Number, a::Number, U::Number, Omega::Numbe
 end
 
 
-function get_aero_velocities(env::Environment, t, r, azimuth, precone, tilt, yaw, hubht)
-    sine_yaw = sin(yaw)
-    cos_yaw = cos(yaw)
-    sin_tilt = sin(tilt)
-    cos_tilt = cos(tilt)
-    sin_azimuth = sin(azimuth)
-    cos_azimuth = cos(azimuth)
-    sin_precone = sin(precone)
-    cos_precone = cos(precone)
-
-    # @show azimuth
-
-    # coordinate in azimuthal coordinate system
-    x_az = -r*sin(precone)
-    z_az = r*cos(precone)
-    y_az = 0.0  # could omit (the more general case allows for presweep so this is nonzero) #Todo: If I include those velocities, I'd need to augment this. 
-    @show x_az, y_az, z_az
-
-    # get section heights in wind-aligned coordinate system
-    heightFromHub = (y_az*sin_azimuth + z_az*cos_azimuth)*cos_tilt - x_az*sin_tilt
-
-    # @show heightFromHub
-
-    ### velocity with shear
-    factor = (1 + heightFromHub/hubht)^env.shearexp
-    V = env.Vinf(t)*factor
-    # @show V, factor
-
-    # transform wind to blade c.s.
-    Vwind_x = V * ((cos_yaw*sin_tilt*cos_azimuth + sine_yaw*sin_azimuth)*sin_precone + cos_yaw*cos_tilt*cos_precone)
-    Vwind_y = V * (cos_yaw*sin_tilt*sin_azimuth - sine_yaw*cos_azimuth)
-
-    # @show Vwind_x, Vwind_y
-
-    # wind from rotation to blade c.s.
-    Vrot_x = -env.RS(t)*y_az*sin_precone
-    Vrot_y = env.RS(t)*z_az
-
-    @show y_az*sin_precone
-
-    @show Vrot_x, Vrot_y
-
-    # total velocity
-    Vx = Vwind_x + Vrot_x
-    Vy = Vwind_y + Vrot_y
-
-    return Vx, Vy
-end
 
 """
     evaluate_flowfield_velocity(env, hubht, x, y, z, t)
@@ -110,20 +62,6 @@ A function to retrieve the free-stream velocity vector of a simple environment. 
 """
 function evaluate_flowfield_velocity(env::SimpleEnvironment, hubht, x, y, z, t)
     factor = (z/hubht)^env.shearexp
-    # @show y/hubht
-    # @show factor
-
-    # dely = sqrt(x^2 + y^2 + z^2)
-    # factor = (1 + dely/hubht)^env.shearexp
-    # @show factor
-
-    # dely = abs(y-hubht)
-    # factor = (1 + dely/hubht)^env.shearexp
-    # @show factor
-
-    # dely = y-hubht
-    # factor = (1 + dely/hubht)^env.shearexp
-    # @show factor
 
     return env.U(t).*factor
 end
@@ -202,7 +140,7 @@ function get_aerostructural_velocities(env::Environment, aeroV, t, r, azimuth, p
 
     ### Get the relative structural velocities
     vxrel = aeroV[3] 
-    vyrel = aeroV[2] + env.RS(t)*r  #Todo. Why do I add the rotational velocity into the structural? -> Oh, that's right, the rotational velocities are included in the GXBeam output velocity. So to get the relative velocities, I need to subtract out the rotational component. But the rotational component is negative in the structural frame, so subtract a negative is add the rotational velocity back in. 
+    vyrel = aeroV[2] + env.RS(t)*r  #The rotational velocities are included in the GXBeam output velocity. So to get the relative velocities, I need to subtract out the rotational component. But the rotational component is negative in the structural frame, so subtract a negative is add the rotational velocity back in. 
     
 
     ### Return the total x and y velocities (x and y in the aerodynamic frame)
@@ -239,7 +177,6 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     dy = delta[2]
     dz = delta[1]
 
-    # dx = dy = dz = 0.0
 
     rbc_x = blade.rx[idx] + dx #Leadlag
     rbc_y = blade.ry[idx] + dy #Flapwise
@@ -247,11 +184,7 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     
     sweep = -(blade.thetax[idx] - delta_theta[3])  #The sweep is negative in the given reference frame 
     curve = blade.thetay[idx] + delta_theta[2]
-    precone = blade.precone #+ delta_theta[1] #Todo: I'm not convinced that the angular deflections are applied to the same RF as the sweep, curve, and precone. -> Precone and curve are along the same axis. 
-
-    # sweep = -blade.thetax[idx]  
-    # curve = blade.thetay[idx]
-    # precone = blade.precone
+    precone = blade.precone 
 
 
     ### Get the velocities from the freestream. 
@@ -295,7 +228,6 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     # return Vx, Vy
 
     ### Trying to apply change in twist
-    # deltheta = delta_theta[1]
     st, ct = sincos(delta_theta[1])
     Vxnew = Vx*ct - Vy*st
     Vynew = -Vx*st + Vy*ct
