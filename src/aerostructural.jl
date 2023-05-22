@@ -215,12 +215,16 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
             #     @show i, j, def_theta[j]
             # end
             twistvec[j] = blade.twist[j]  
-            # twistvec[j] = blade.twist[j] + def_theta[j][1] #Todo: Is this correct? I think this is what I had in the fixed point solution. -> A negative smooths the output. 
+            # twistvec[j] = blade.twist[j] - def_theta[j][1] #Todo: Is this correct? I think this is what I had in the fixed point solution. -> A negative smooths the output. 
             # sections[j] = CCBlade.Section(rvec[j], chordvec[j], twist_displaced, blade.airfoils[j]) #Not displacing rvec because CCBlade uses that to calculate the tip and hub corrections, and the value should be based on relative to the distance along the blade to the hub or tip. (Although in dynamic movement, the tip losses would change dramatically.)
 
             ### Update base inflow velocities
             # Vxvec[j], Vyvec[j] = get_aerostructural_velocities(env, aeroV[j], t, rvec[j], azimuth[i], precone, tilt, yaw, hubht) #Todo. This should probably see the deflected radius. -> Or I could not subtract out the angular portion of the structural velocity.... then it would automatically see the deflected radius. 
             Vxvec[j], Vyvec[j] = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth[i], delta[j], def_theta[j], aeroV[j])
+
+            # if j==300
+            #     @show Vxvec[j], Vyvec[j]
+            # end
 
             # if Vxvec[j]>330 || Vyvec[j]>330
             #     @show i, j, Vxvec[j]

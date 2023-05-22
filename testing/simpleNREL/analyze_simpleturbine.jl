@@ -266,7 +266,7 @@ if readflag
 
     bouts = Dict(bemnames[i] => bemif[:,i] for i in eachindex(bemnames))
 
-    # readflag = false
+    readflag = false
 end
 
 azimuth = outs["B1Azimuth"].*(pi/180)
@@ -324,7 +324,7 @@ if runflag
     # loads, cchistory, xds, gxhistory, def_thetax = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
     loads, cchistory, xds, gxhistory, Vxmat, Vymat = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
 
-    # runflag = false
+    runflag = false
 end
 
 
@@ -453,6 +453,10 @@ display(tiploads)
 # savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_5seconds_041223.png")
 
 
+# tiploadmat = hcat(tvec, fxmat[:,end], -fymat[:,end], loads.Fx[:,end], loads.Fy[:,end])
+
+# endloadsmat = hcat(rvec, fxmat[end,:], fymat[end, :], loads.Fx[end,:], loads.Fy[end,:])
+
 # Uplt = plot(xaxis="Time (s)", yaxis="Tip Velocity (m/s)", legend=:outerright)
 # plot!(tvec, Uxmat[:,1], lab=L"$U_x$ - OF", seriescolor=:blue)
 # # plot!(tvec, Uymat[:,1], lab=L"$U_y$ - OF", seriescolor=:red)
@@ -466,23 +470,36 @@ I think the windspeed values I'm plotting include the induced velocities.
 The wigglies in the velocities that I was getting from OpenFAST were due to the tower wiggling. 
 =#
 
+# tipdefmat = hcat(tvec, tipdx, tipdy, tipdz, -tipdef_z, tipdef_y, tipdef_x)
 
-tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=:outerright) #
-plot!(tvec, tipdx, lab=L"\delta x - OF", linestyle=:dash)
-plot!(tvec, tipdy, lab=L"\delta y - OF", linestyle=:dash)
-plot!(tvec, tipdz, lab=L"\delta z - OF", linestyle=:dash)
-plot!(tvec, -tipdef_z, lab=L"\delta x - GX")
-plot!(tvec, tipdef_y, lab=L"\delta y - GX")
-plot!(tvec, tipdef_x, lab=L"\delta z - GX")
+
+tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=(0.8, 0.3)) #
+plot!(tvec, tipdx, lab=L"$\delta x$ - OF", linestyle=:dash)
+plot!(tvec, tipdy, lab=L"$\delta y$ - OF", linestyle=:dash)
+plot!(tvec, tipdz, lab=L"$\delta z$ - OF", linestyle=:dash)
+plot!(tvec, -tipdef_z, lab=L"\delta x")
+plot!(tvec, tipdef_y, lab=L"\delta y")
+plot!(tvec, tipdef_x, lab=L"\delta z")
 display(tipdefs2)
 # # savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_5seconds_041223.png")
+
+using Statistics
+
+tiploaderr = @. 100*(loads.Fx[:,end] - fxmat[:,end])./fxmat[:,end]
+tipdeferr = @. (-tipdef_z-tipdx)
+
+meantiploaderr = mean(tiploaderr)
+meantipdeferr = mean(tipdeferr)
+
+
+
 nodeidx = 300
 
 alphaplt = plot(xaxis="Time (s)", yaxis="Angle of Attack (deg)")
 plot!(tvec, cchistory[:,nodeidx].alpha.*(180/pi), lab="R")
 plot!(tvec, outs["AB1N$nodeidx"*"Alpha"], lab="OF")
 plot!(tvec[2:end], iouts["alpha"].*(180/pi), lab="AD")
-display(alphaplt)
+# display(alphaplt)
 
 
 Wof = @. sqrt(outs["AB1N$nodeidx"*"Vx"]^2 + outs["AB1N$nodeidx"*"Vy"]^2)
@@ -492,36 +509,36 @@ Uplt = plot(xaxis = "Time (s)", yaxis="Inflow Velocity (m/s)")
 plot!(tvec, cchistory[:,nodeidx].W, lab="R")
 plot!(tvec, Wof, lab="OF")
 plot!(tvec[2:end], iouts["U"], lab="AD")
-display(Uplt)
+# display(Uplt)
 
 Vxr = cchistory[:,nodeidx].u./cchistory[:,nodeidx].G
 
-Vxplt = plot(xaxis = "Time (s)", yaxis="Vx (m/s)")
+Vxplt = plot(xaxis = "Time (s)", yaxis="Vx (m/s)", leg=:bottomright)
 plot!(Vxmat[:,nodeidx], lab="R")
 plot!(outs["AB1N$nodeidx"*"Vx"], lab="OF")
-plot!(bouts["Vx"], lab="AD")
-display(Vxplt)
+# plot!(bouts["Vx"], lab="AD")
+# display(Vxplt)
 
-Vyplt = plot(xaxis = "Time (s)", yaxis="Vy (m/s)", leg=:topleft)
+Vyplt = plot(xaxis = "Time (s)", yaxis="Vy (m/s)", leg=:topright)
 plot!(Vymat[:,nodeidx], lab="R")
 plot!(outs["AB1N$nodeidx"*"Vy"], lab="OF")
-plot!(bouts["Vy"], lab="AD")
-display(Vyplt)
+# plot!(bouts["Vy"], lab="AD")
+# display(Vyplt)
 
 aplt = plot(xaxis="Time (s)", yaxis="Axial induction factor")
 plot!(tvec, cchistory[:, nodeidx].a, lab="R")
 plot!(tvec, outs["AB1N$nodeidx"*"AxInd"], lab="AD")
-display(aplt)
+# display(aplt)
 
 applt = plot(xaxis="Time (s)", yaxis="Tangential Induction factor")
 plot!(tvec, cchistory[:, nodeidx].ap, lab="R")
 plot!(tvec, outs["AB1N$nodeidx"*"TnInd"], lab="AD")
-display(applt)
+# display(applt)
 
 phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)")
 plot!(tvec, cchistory[:, nodeidx].phi.*(180/pi), lab="R")
 plot!(tvec, outs["AB1N$nodeidx"*"Phi"], lab="AD")
-display(phiplt)
+# display(phiplt)
 
 twist = @. (cchistory[:,nodeidx].phi + -cchistory[:,nodeidx].alpha)*180/pi
 twistof = @. outs["AB1N$nodeidx"*"Phi"] + -outs["AB1N$nodeidx"*"Alpha"]
@@ -530,7 +547,7 @@ twistplt = plot(xaxis="Time (s)", yaxis="Twist Angle (deg)")
 plot!(tvec, twist, lab="R")
 plot!(tvec, outs["AB1N$nodeidx"*"Theta"], lab="AD")
 # plot!(tvec, twistof, lab="OF", linestyle=:dash)
-display(twistplt)
+# display(twistplt)
 
 thetaplt = plot(xaxis = "Time (s)", yaxis=L"\delta_\theta (deg)", leg=:topleft)
 plot!(tvec, -tiptheta_z.*(180/pi), lab="R - x")
@@ -542,7 +559,9 @@ plot!(tvec, tiptheta_x.*(180/pi), lab="R - z")
 plot!(tvec, tiptheta_xof.*(180/pi), lab="OF - x", linestyle=:dash)
 plot!(tvec, tiptheta_yof.*(180/pi), lab="OF - y", linestyle=:dash)
 plot!(tvec, tiptheta_zof.*(180/pi), lab="OF - z", linestyle=:dash)
-display(thetaplt)
+# display(thetaplt)
+
+
 
 
 

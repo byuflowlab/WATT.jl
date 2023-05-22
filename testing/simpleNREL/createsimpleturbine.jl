@@ -27,7 +27,7 @@ bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
 bddriver = of.read_bddriver("NREL5MW_bddriver.inp", ofpath)
 
 ### Simulation control
-tmax = 1.0
+tmax = 5.0
 dt = 0.001
 dt_out = 0.001 # "\"default\""
 
