@@ -11,8 +11,8 @@ False         Echo           - Echo input data to <RootName>.ech (flag)
        90.0   WindVziList    - List of coordinates in the inertial Z direction (m)
 ==================== Parameters for Steady Wind Conditions [used only for WindType = 1] ====================
          10   HWindSpeed     - Horizontal windspeed                            (m/s)
-         20   RefHt          - Reference height for horizontal wind speed      (m)
-        0.0   PLexp          - Power law exponent                              (-)
+         90   RefHt          - Reference height for horizontal wind speed      (m)
+       0.01   PLexp          - Power law exponent                              (-)
 ==================== Parameters for Uniform wind file   [used only for WindType = 2] ====================
 "Wind/08ms.wnd"     FileName_Uni       - Filename of time series data for uniform wind field.      (-)
        90.0   RefHt_Uni          - Reference height for horizontal wind speed                (m)

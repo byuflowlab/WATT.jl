@@ -269,7 +269,7 @@ if readflag
     readflag = false
 end
 
-azimuth = outs["B1Azimuth"].*(pi/180)
+azimuth = outs["B1Azimuth"]
 tipdx = outs["B1TipTDxr"]
 tipdy = outs["B1TipTDyr"]
 tipdz = outs["B1TipTDzr"]
@@ -320,7 +320,7 @@ end
 
 
 if runflag
-    loads, cchistory, xds, gxhistory = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
+    loads, cchistory, xds, gxhistory, azimuth_R = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=100, g=inputfile["Gravity"], plotbool=false, plotiter=20, azimuth0=0.0)
 
     # runflag = false
 end
@@ -416,7 +416,7 @@ using Plots, LaTeXStrings
 
 
 
-tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=:outerright)
+tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=(0.9, 0.3))
 plot!(tvec, fxmat[:,end], lab=L"$F_x$ - OF", seriescolor=:blue)
 plot!(tvec, -fymat[:,end], lab=L"$F_y$ - OF", seriescolor=:red)
 # plot!(tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
@@ -424,30 +424,10 @@ plot!(tvec, loads.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
 plot!(tvec, loads.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
 # plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
 display(tiploads)
-# savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_5seconds_041223.png")
+# savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_10seconds_052323.png")
 
 
-# tiploadmat = hcat(tvec, fxmat[:,end], -fymat[:,end], loads.Fx[:,end], loads.Fy[:,end])
-
-# endloadsmat = hcat(rvec, fxmat[end,:], fymat[end, :], loads.Fx[end,:], loads.Fy[end,:])
-
-# Uplt = plot(xaxis="Time (s)", yaxis="Tip Velocity (m/s)", legend=:outerright)
-# plot!(tvec, Uxmat[:,1], lab=L"$U_x$ - OF", seriescolor=:blue)
-# # plot!(tvec, Uymat[:,1], lab=L"$U_y$ - OF", seriescolor=:red)
-# plot!(tvec_r, Uxhist[:,1], lab=L"$U_x$ - Rotors", linestyle=:dash)
-# plot!(tvec, Uyhist[:,1], lab=L"$U_y$ - Rotors", linestyle=:dash)
-# display(Uplt)
-
-#=
-I think the windspeed values I'm plotting include the induced velocities. 
-
-The wigglies in the velocities that I was getting from OpenFAST were due to the tower wiggling. 
-=#
-
-# tipdefmat = hcat(tvec, tipdx, tipdy, tipdz, -tipdef_z, tipdef_y, tipdef_x)
-
-
-tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=(0.8, 0.3)) #
+tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=(0.9, 0.5)) #
 plot!(tvec, tipdx, lab=L"$\delta x$ - OF", linestyle=:dash)
 plot!(tvec, tipdy, lab=L"$\delta y$ - OF", linestyle=:dash)
 plot!(tvec, tipdz, lab=L"$\delta z$ - OF", linestyle=:dash)
@@ -455,7 +435,7 @@ plot!(tvec, -tipdef_z, lab=L"\delta x")
 plot!(tvec, tipdef_y, lab=L"\delta y")
 plot!(tvec, tipdef_x, lab=L"\delta z")
 display(tipdefs2)
-# # savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_5seconds_041223.png")
+# savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_gravity_shear_10seconds_052323.png")
 
 using Statistics
 
@@ -535,8 +515,57 @@ plot!(tvec, tiptheta_yof.*(180/pi), lab="OF - y", linestyle=:dash)
 plot!(tvec, tiptheta_zof.*(180/pi), lab="OF - z", linestyle=:dash)
 # display(thetaplt)
 
+aziplt = plot(tvec, azimuth, lab="AeroDyn", xaxis="Time (s)", yaxis="Azimuthal angle (deg)", leg=:top)
+plot!(tvec, azimuth_R.*(180/pi), lab="Rotors")
+plot!(tvec, outs["Azimuth"], lab="ElastoDyn", linestyle=:dash)
+# display(aziplt)
+# savefig(aziplt, "/Users/adamcardoza/Desktop/azimuthplot_AD_ED.png")
+
+# Fxamp_of = maximum(fxmat[2500:end,end]) - minimum(fxmat[2500:end,end]) #427.0
+# Fxamp_R = maximum(loads.Fx[2500:end, end])-minimum(loads.Fx[2500:end, end]) #448.517
+
+Mx_of = zeros(nt)
+Mx_r = zeros(nt)
+
+for i = 1:nt
+    Mx_of[i] = of.root_bending_moment(rvec, fxmat[i,:])
+    Mx_r[i] = of.root_bending_moment(rvec, loads.Fx[i,:])
+end
+
+using Dierckx
+Mx_r_smooth_fit = Spline1D(tvec, Mx_r;w=ones(length(tvec)), k=3, bc="nearest", s=1.0e14)
+
+Mx_r_smooth = Mx_r_smooth_fit.(tvec)
+
+Mplt = plot(xaxis="Time (s)", yaxis=L"Root Bending Moment $(N\cdot m)$", leg=:bottomright)
+plot!(tvec, Mx_of, lab="OF")
+plot!(tvec, Mx_r, lab="R")
+# plot!(tvec, Mx_r_smooth, lab="smooth")
+display(Mplt)
+# savefig(Mplt, "/Users/adamcardoza/Desktop/SimpleNRELrootbendingmoment_varyingairfoils_chords_twists_gravity_shear_10seconds_052423.png")
+
+Mxerr = @. 100*(Mx_r-Mx_of)/Mx_of
+
+avgMerr = mean(Mxerr)
+
+Mxamp_of = maximum(Mx_of[2500:end])-minimum(Mx_of[2500:end])
+Mxamp_r = maximum(Mx_r[2500:end])-minimum(Mx_r[2500:end])
 
 
+
+DEMx_of = of.damage_equivalent_load(Mx_of)
+DEMx_r = of.damage_equivalent_load(Mx_r)
+# DEMx_r = of.damage_equivalent_load(Mx_r_smooth)
+
+
+DEMx_err = 100*(DEMx_r-DEMx_of)/DEMx_of
+
+#=
+I'm a little confused. I thought with the damage equivalent moment, if I smoothed the sucker out that it would become.... less. I guess not? Is it purely dependent on the the amplitude of the loads? 
+
+Also, with a difference in the max amplitudes of 100,000 I wouldn't expect the difference in the DEM to be 420,000.... 
+
+=#
 
 
 

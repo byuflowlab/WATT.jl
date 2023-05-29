@@ -3,6 +3,11 @@
 
 =#
 
+export initialize, initial_condition!, take_step!, simulate
+
+
+
+
 
 
 function checkforwarnings(rvec, twistvec, rhub, rtip, pitch, precone, tilt, yaw)
@@ -31,13 +36,16 @@ end
 
 #TODO: It might be a good idea to make a version that is completely in place. (Pass in data storage and riso ode.)
 
-function initialize()
-end
 
-#TODO: Function headers
-function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; pitch=0.0, turbine::Bool=true, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
-    #Todo: Move the DSM initialization type (the current ModelInit struct) to DSM. 
-    # println("Why isn't it printing inside the function.")
+"""
+    initialize()
+
+Prepare data structures for the simulation. 
+
+
+"""
+function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool=false)
+
     if verbose
         println("Rotors.jl initializing solution...")
     end
@@ -46,25 +54,21 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
     #     checkforwarnings(rvec, twistvec, rhub, rtip, pitch, precone, tilt, yaw)
     # end
 
-    #TODO: I need to put something in to be able to disable the dynamic stall model (near the hub). 
-    #TODO: I might put some checks in to help with problems caused by having rvec[i]~=rhub or rvec[i]~=rtip. 
-    #TODO: I might put some checks in to see if the airfoils are in degrees or radians. 
-    #TODO: I might put some checks in to see if twist or pitch is in degrees or radians. 
-    #TODO: I might put something in to make the solution run smoother when the dynamic stall states would get screwed up (i.e. at the root cylinders, when rvec[i]=rhub or rtip). 
-    #TODO: It might be a good idea to check rvec, chordvec, and twistvec to get the design variables to get the right types. 
+    
+    #TODO: It might be a good idea to check rvec, chordvec, and twistvec to get the design variables to get the right types.
 
     ### Initialization information
     na = length(blade.rR)
     nt = length(tvec)
-
-    t0 = tvec[1]
-
-
-    chordvec = view(blade.airfoils.c, :)
     inittype = eltype(blade.airfoils.c)
+
+
 
     ### Prepare data storage
     azimuth = Array{inittype}(undef, nt)
+    phi = Array{inittype}(undef,(nt, na))
+    alpha = Array{inittype}(undef,(nt, na))
+    W = Array{inittype}(undef,(nt, na))
 
     Cx = Array{inittype}(undef,(nt, na))
     Cy = Array{inittype}(undef,(nt, na))
@@ -72,205 +76,218 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
 
     Fx = Array{inittype}(undef,(nt, na))
     Fy = Array{inittype}(undef,(nt, na))
-    Mx = Array{inittype}(undef,(nt, na)) #Moment about the aero Z axis is the moment about the structural X axis. 
+    Mx = Array{inittype}(undef,(nt, na))
 
-    cchistory = Array{CCBlade.Outputs{inittype}, 2}(undef, nt, na) 
-    xcc = zeros(11)
+    cchistory = Vector{CCBlade.Outputs{inittype}}(undef, na) #Todo: I might be able to get rid of this and only ever keep a single 
+    xcc = zeros(11) #Maybe just making a tuple will be sufficient? 
 
     gxhistory = Array{GXBeam.AssemblyState{inittype, Vector{GXBeam.PointState{inittype}}, Vector{GXBeam.ElementState{inittype}}}}(undef, nt)
 
 
 
-
-    ### Initialize BEM solution
-    azimuth[1] = azimuth0
-
-
-    for j = 1:na
-        Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
-
-        cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, xcc)
-    end
-
-
-
-
-
     ### Initialize DS solution
-    Wdotvec = zeros(inittype, na)
-    alphadotvec = zeros(inittype, na)
+    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt)  
+
+     
     
-    xds, xds_idxs, p_ds = initialize_DS_model(blade.airfoils, turbine, nt, tvec, cchistory[1, :], Wdotvec, alphadotvec, blade.twist, pitch)
+    ### Store everything in the aerostates 
+    aerostates = AeroStates(azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
 
     
 
-
-    extract_ds_loads!(blade.airfoils, view(xds, 1, :), xds_idxs, cchistory[1, :], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :)) #Todo: With Precone, and any deflections, then Cx, and Cy will no longer be in the blade root frame. 
-    
-    ### Dimensionalize #TODO: Could probably make a function out of this. 
-    #Todo: These loads may need to be rotated from a local frame to a hub frame. 
-    for j = 1:na
-        u_1 = cchistory[1, j].W
-        qinf_1 = 0.5*env.rho*u_1^2
-        # N[1,j] = Cn[1,j]*qinf_1*chordvec[j] 
-        # T[1,j] = Ct[1,j]*qinf_1*chordvec[j]
-        Fx[1,j] = Cx[1,j]*qinf_1*chordvec[j] 
-        Fy[1,j] = Cy[1,j]*qinf_1*chordvec[j] 
-        Mx[1,j] = Cm[1,j]*qinf_1*chordvec[j]^2 #The coefficient of moment is positive about the negative Z aero axis, so we need the negative of this to move it to the structural X axis. 
-    end
-
-
-
-    ### Extract CCBlade Loads and create a distributed load 
+    ### Allocate the distributed load 
     distributed_loads = Dict{Int64, GXBeam.DistributedLoads{inittype}}()
-    update_forces!(distributed_loads, view(Fx, 1,:), view(Fy, 1,:), view(Mx, 1,:), blade, assembly)
+    
 
-
-
-    ### Prepare GXBeam inputs  
-    Omega0 = SVector(0.0, 0.0, -env.RS(t0))
-    gravity0 = SVector(g*sin(azimuth0), -g*cos(azimuth0), 0.0)
-    prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) # root section is fixed
-
-
-
-    #TODO: Create a function to initialize the behavior. One for starting from no loading, one from steady state as below. Look at that, I wrote that down already. 
-
-    ### GXBeam initial solution #TODO: I might make it an option to initialize from rest, or from steady state at the intial conditions (as current).
-
-
-    # system, history0, converged = GXBeam.time_domain_analysis(assembly, tvec[1:1]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega, gravity=gravity0, steady=false, initialize=true) 
-
-    # gxhistory[1] = history0[end]
-
-
-
-    ### Trying initializing from steady state spin
-    system, _, _ = GXBeam.time_domain_analysis(assembly, tvec[1:1]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady=true, initialize=true, structural_damping) #Todo: Is there going to be some wonky behavior from passing in tvec[1:1]
-
-    system, history0, converged = GXBeam.time_domain_analysis!(system, assembly, tvec[1:1]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega0, reset_state=false, initialize=false, structural_damping, gravity=gravity0)
-    gxhistory[1] = history0[end]
+    ### Allocate the prescribed conditions 
+    prescribed_conditions = Dict(1 => GXBeam.PrescribedConditions(ux=0.0, uy=0.0, uz=0.0, theta_x=0.0, theta_y=0.0, theta_z=0.0)) # root section is fixed
 
 
 
     ### Points to interpolate velocity, deflections, from structural to aerodynamic nodes. 
     interpolationpoints = create_interpolationpoints(assembly, blade) 
 
-    delta = [interpolate_deflection(interpolationpoints[j], assembly, gxhistory[1]) for j = 1:na]
 
-    aeroV = [convert_velocities(blade, env, assembly, gxhistory[1], interpolationpoints, t0, j) for j = 1:na]  
-    
-    def_theta = [interpolate_angle(interpolationpoints[j], assembly, gxhistory[1]) for j = 1:na] 
+    delta = Vector{SVector{3, inittype}}(undef, na)
+    def_theta = Vector{SVector{3, inittype}}(undef, na)
+    aeroV = Vector{SVector{3, inittype}}(undef, na)
 
-
-
-
-    ### Iterate through time 
-    for i = 2:nt
-        t = tvec[i]
-        dt = tvec[i] - tvec[i-1]
-
-        #update azimuthal position
-        azimuth[i] = env.RS(t)*dt + azimuth[i-1] #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
-
-        ### Update BEM inputs and solve
-        for j = 1:na
-
-            ### Update base inflow velocities
-            Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth[i], delta[j], def_theta[j], aeroV[j])
-
-            
-            cchistory[i, j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, xcc)
-            #TODO: Write a solver that is initialized with the previous inflow angle.
-        end
-
-        
+    mesh = Mesh(interpolationpoints, prescribed_conditions, distributed_loads, delta, def_theta, aeroV, cchistory, xcc, xds_idxs, p_ds)
 
 
-        ### Update Dynamic Stall model inputs 
-        update_ds_inputs!(blade.airfoils, p_ds, cchistory[i,:].W, cchistory[i,:].phi, blade.twist, pitch, dt, turbine)
+    return aerostates, gxhistory, mesh
+end
 
+function initial_condition_checks(gxflag)
 
+    if !in(gxflag, [nothing, :steady, :spinning])
+        error("The flag $gxflag isn't offered for GXBeam initialization.")
+    end
+end
 
-        
-        ### Integrate Dynamic Stall model
-        update_ds_states!(solver, blade.airfoils, view(xds, i-1, :), view(xds, i, :), xds_idxs, p_ds, t, dt)
+function initial_condition!(rotor::Rotor, blade::Blade, assembly::GXBeam.Assembly, env::Environment, aerostates::AeroStates, gxstates, mesh::Mesh, t0, azimuth0, pitch; g=9.81, gxflag=nothing, structural_damping::Bool=true, linear::Bool=false, verbose::Bool=false)
+    #TODO: Maybe include the coupled aerostructural solution as an option? 
 
+    #TODO: I might put some checks in to help with problems caused by having rvec[i]~=rhub or rvec[i]~=rtip. -> These might best go in the blade constructor. 
+    #TODO: I might put something in to make the solution run smoother when the dynamic stall states would get screwed up (i.e. at the root cylinders, when rvec[i]=rhub or rtip). -> I'm not entirely sure what I meant by that. 
 
+    aerostates.azimuth[1] = azimuth0
 
-        ### Extract loads 
-        extract_ds_loads!(blade.airfoils, view(xds, i, :), xds_idxs, cchistory[i,:], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
-    
-        
-        ### Dimensionalize
-        for j = 1:na
-            u_i = cchistory[i,j].W #TODO: Should I be normalizing by the actual nodal velocity, or the undistrubed nodal velocity. 
-            qinf = 0.5*env.rho*u_i^2
-            Fx[i,j] = Cx[i,j]*qinf*chordvec[j] 
-            Fy[i,j] = Cy[i,j]*qinf*chordvec[j] 
-            Mx[i,j] = Cm[i,j]*qinf*chordvec[j]^2
-        end
+    na = length(blade.r)
 
-
-
-
-
-        ### Update GXBeam loads  
-        update_forces!(distributed_loads, view(Fx, i-1,:), Fy[i-1,:], Mx[i-1,:], blade, assembly) 
-
-        Omega = SVector(0.0, 0.0, -env.RS(t))
-        gravity = SVector(g*sin(azimuth[i-1]), -g*cos(azimuth[i-1]), 0.0)
-
-
-        ### Solve GXBeam for time step #TODO: This function is taking a lot of time. 
-        system, localhistory, converged = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=prescribed_conditions, distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? 
-
-
-        ### Extract GXBeam outputs
-        gxhistory[i] = localhistory[end] 
-
-
-
-
-        ### Update aero inputs from structures.
-        for j = 1:na
-            delta[j] = interpolate_deflection(interpolationpoints[j], assembly, gxhistory[i])
-
-            aeroV[j] = convert_velocities(blade, env, assembly, gxhistory[i], interpolationpoints, t, j)
-
-            def_theta[j] = interpolate_angle(interpolationpoints[j], assembly, gxhistory[i]) 
-        end
-
-
-
-        if verbose & (mod(i-1, speakiter)==0)
-            println("")
-            println("Simulation time: ", t)
-        end
-
-        if plotbool & (mod(i-1, plotiter)==0)
-            # tipdef_x = [gxhistory[k].points[end].u[1] for k in eachindex(tvec[1:i])]
-            # tipdef_y = [gxhistory[k].points[end].u[2] for k in eachindex(tvec[1:i])]
-            # tipdef_z = [gxhistory[k].points[end].u[3] for k in eachindex(tvec[1:i])]
-            # plt = plot(xaxis="Time (s)", yaxis="Tip Deflection", legend=:outerright)
-            # plot!(tvec[1:i], tipdef_x, lab="X deflection")
-            # plot!(tvec[1:i], tipdef_y, lab="Y deflection")
-            # plot!(tvec[1:i], tipdef_z, lab="Z deflection")
-            # display(plt)
-
-            thetamat = zeros(i, 3)
-            for k in 1:i
-                thetamat[k,:] = gxhistory[k].points[end].theta
-            end
-
-            plt = plot(xaxis="Time (s)", yaxis="theta def", legend=:outerright)
-            plot!(tvec[1:i], thetamat[:,1], lab="X deflection")
-            plot!(tvec[1:i], thetamat[:,2], lab="Y deflection")
-            plot!(tvec[1:i], thetamat[:,3], lab="Z deflection")
-            display(plt)
-        end
+    if verbose
+        println("Calculating initial condition...")
     end
 
-    # return (Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory, def_theta
-    return (Fx=Fx, Fy=Fy, Mx=Mx), cchistory, xds, gxhistory
+    # println("checks")
+    initial_condition_checks(gxflag)
+
+    ### Initialize BEM solution 
+    # println("BEM solution")
+    for j = 1:na
+        Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth0)
+
+        mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
+
+        update_aerostates!(aerostates, mesh, 1, j)
+    end
+
+    # println("dsmodel initial condition")
+    dsmodel_initial_condition(aerostates, mesh, blade, rotor.turbine, t0, pitch)
+
+    # println("extract ds loads")
+    extract_ds_loads!(blade.airfoils, view(aerostates.xds, 1, :), mesh.xds_idxs, view(aerostates.phi, 1, :), mesh.p_ds, view(aerostates.cx, 1, :), view(aerostates.cy, 1, :), view(aerostates.cm, 1, :))
+
+    # println("dimensionalize loades")
+    dimensionalize!(view(aerostates.fx, 1, :), view(aerostates.fy, 1, :), view(aerostates.mx, 1, :), view(aerostates.cx, 1, :), view(aerostates.cy, 1, :), view(aerostates.cm, 1, :), blade::Blade, env::Environment, view(aerostates.W, 1, :)) 
+
+    # println("update distributed loads")
+    update_forces!(mesh.distributed_loads, view(aerostates.fx, 1,:), view(aerostates.fy, 1,:), view(aerostates.mx, 1,:), blade, assembly)
+
+
+    ### GXBeam initial solution 
+    # println("GXBeam initial conditions")
+    gxstates[1], system = gxbeam_initial_conditions(env, assembly, mesh.prescribed_conditions, mesh.distributed_loads, t0, azimuth0, g, structural_damping, linear, gxflag)
+
+    ### Update mesh transfer variables
+    # println("Update mesh")
+    update_mesh!(blade, mesh, assembly, gxstates[1], env, t0, na)
+
+    return system
 end
+
+
+
+#TODO: Function headers
+function take_step!(aerostates::AeroStates, gxstates, mesh::Mesh, rotor::Rotor, blade::Blade, assembly::GXBeam.Assembly, env::Environment, system::GXBeam.DynamicSystem, tvec, i, pitch; verbose::Bool=false, speakiter::Int=100, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter, solver::Solver=RK4())
+
+    na = length(blade.r)
+
+    t = tvec[i]
+    dt = tvec[i] - tvec[i-1]
+    
+    
+    if dt<0
+        error("Time step is negative")
+    end
+
+    #update azimuthal position
+    aerostates.azimuth[i] = env.RS(t)*dt + aerostates.azimuth[i-1] #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
+
+    if aerostates.azimuth[i]<aerostates.azimuth[i-1]
+        @warn("Blade moved backwards")
+    end
+
+    ### Update BEM inputs and solve
+    for j = 1:na
+        ### Update base inflow velocities
+        Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, aerostates.azimuth[i], mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
+        
+        #TODO: Write a solver that is initialized with the previous inflow angle.
+        mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
+
+        update_aerostates!(aerostates, mesh, i, j)
+    end
+    
+    ### Update Dynamic Stall model inputs 
+    update_ds_inputs!(blade.airfoils, view(mesh.p_ds, :), view(aerostates.W, i, :), view(aerostates.phi, i, :), blade.twist, pitch, dt, rotor.turbine)
+    
+    ### Integrate Dynamic Stall model
+    update_ds_states!(solver, blade.airfoils, view(aerostates.xds, i-1, :), view(aerostates.xds, i, :), mesh.xds_idxs, mesh.p_ds, t, dt)
+
+    ### Extract loads 
+    extract_ds_loads!(blade.airfoils, view(aerostates.xds, i, :), mesh.xds_idxs, view(aerostates.phi, i, :), mesh.p_ds, view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :))
+    #Todo: With Precone, and any deflections, then Cx, and Cy will no longer be in the blade root frame. 
+    
+    dimensionalize!(view(aerostates.fx, i, :), view(aerostates.fy, i, :), view(aerostates.mx, i, :), view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :), blade::Blade, env::Environment, view(aerostates.W, i, :))
+    #Todo: These loads may need to be rotated from a local frame to a hub frame. 
+    
+    
+    ### Update GXBeam loads  
+    update_forces!(mesh.distributed_loads, view(aerostates.fx, i-1, :), view(aerostates.fy, i-1, :), view(aerostates.mx, i-1, :), blade, assembly) 
+
+    Omega = SVector(0.0, 0.0, -env.RS(t))
+    gravity = SVector(-g*cos(aerostates.azimuth[i-1]), -g*sin(aerostates.azimuth[i-1]), 0.0) #Todo: I need to include tilt, and precone here. 
+
+    ### Solve GXBeam for time step #TODO: This function is taking a lot of time. -> I might be able to save time by branching his code and writing another function, but most of the time is spent in nlsolve. I think all of the time spent is just time solving, not really inside of Taylor's code, but of course, if I make his code faster, then I make the solve faster. 
+    system, localhistory, _ = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=mesh.prescribed_conditions, distributed_loads=mesh.distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? -> Is this really a time cost though? 
+
+    #Todo: Can I save memory by directly allocating to the gxstates vector? 
+    ### Extract GXBeam outputs
+    gxstates[i] = localhistory[end] 
+
+    ### Update aero inputs from structures.
+    update_mesh!(blade, mesh, assembly, gxstates[i], env, t, na)
+
+
+
+    if verbose & (mod(i-1, speakiter)==0)
+        println("")
+        println("Simulation time: ", t)
+    end
+
+
+
+    if plotbool & (mod(i-1, plotiter)==0)
+        # tipdef_x = [gxhistory[k].points[end].u[1] for k in eachindex(tvec[1:i])]
+        # tipdef_y = [gxhistory[k].points[end].u[2] for k in eachindex(tvec[1:i])]
+        # tipdef_z = [gxhistory[k].points[end].u[3] for k in eachindex(tvec[1:i])]
+        # plt = plot(xaxis="Time (s)", yaxis="Tip Deflection", legend=:outerright)
+        # plot!(tvec[1:i], tipdef_x, lab="X deflection")
+        # plot!(tvec[1:i], tipdef_y, lab="Y deflection")
+        # plot!(tvec[1:i], tipdef_z, lab="Z deflection")
+        # display(plt)
+
+        thetamat = zeros(i, 3)
+
+        for k in 1:i
+            thetamat[k,:] = gxhistory[k].points[end].theta
+        end
+
+        plt = plot(xaxis="Time (s)", yaxis="theta def", legend=:outerright)
+        plot!(tvec[1:i], thetamat[:,1], lab="X deflection")
+        plot!(tvec[1:i], thetamat[:,2], lab="Y deflection")
+        plot!(tvec[1:i], thetamat[:,3], lab="Z deflection")
+        display(plt)
+    end
+    return system
+end
+
+function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
+
+    nt = length(tvec)
+
+    aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose=true)
+
+    system = initial_condition!(rotor, blade, assembly, env, aerostates, gxstates, mesh, tvec[1], azimuth0, pitch; verbose)
+
+    for i = 2:nt
+        system = take_step!(aerostates, gxstates, mesh, rotor, blade, assembly, env, system, tvec, i, pitch; verbose, speakiter, plotiter, plotbool, structural_damping, linear, g, solver)
+    end
+
+    return aerostates, gxstates
+end
+
+
+#TODO: Make a memory efficient take_step!() function that only saves certain time indices. 
+

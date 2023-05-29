@@ -196,6 +196,17 @@ function convert_velocities(blade::Blade, env::Environment, assembly, state, int
     return (usx, usy-ury, usz-urz)
 end
 
+function update_mesh!(blade::Blade, mesh::Mesh, assembly::GXBeam.Assembly, gxstate, env::Environment, t, na)
+
+    for j = 1:na
+        mesh.delta[j] = interpolate_deflection(mesh.interpolationpoints[j], assembly, gxstate)
+
+        mesh.def_theta[j] = interpolate_angle(mesh.interpolationpoints[j], assembly, gxstate)
+
+        mesh.aerov[j] = convert_velocities(blade, env, assembly, gxstate, mesh.interpolationpoints, t, j)
+    end
+end
+
 
 
 function transform_BC_G(rhr_x, rhr_y, rhr_z, azimuth, precone, tilt, yaw)

@@ -156,5 +156,31 @@ end
 
 
 
+struct AeroStates
+    azimuth
+    phi     #Inflow angle
+    alpha   #Angle of attack
+    W       #Inflow velocity
+    cx
+    cy
+    cm
+    fx
+    fy
+    mx
+    xds #Todo: I might be able to get rid of this. Do I really need the intermediate dynamic stall states? That would cut down my allocations by alot. 
+end
 
+
+struct Mesh
+    interpolationpoints
+    prescribed_conditions
+    distributed_loads
+    delta 
+    def_theta
+    aerov
+    cchistory
+    xcc
+    xds_idxs
+    p_ds
+end
 

@@ -9,7 +9,23 @@ export simulate
 
 #Question: I don't know if using this many structs will make my package take forever to compile... So it might be better to create a nest of if statements... but we'll see.
 
+function dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade::Blade, env::Environment, W)
+    
+    for j in eachindex(blade.r)
+        qinf = 0.5*env.rho*W[j]^2
+        
+        Fx[j] = Cx[j]*qinf*blade.airfoils.c[j] 
+        Fy[j] = Cy[j]*qinf*blade.airfoils.c[j] 
+        Mx[j] = Cm[j]*qinf*blade.airfoils.c[j]^2 #The coefficient of moment is positive about the negative Z aero axis, so we need the negative of this to move it to the structural X axis. 
+    end
+end
 
+function update_aerostates!(aerostates::AeroStates, mesh::Mesh, i, j)
+
+    aerostates.phi[i,j] = mesh.cchistory[j].phi
+    aerostates.alpha[i,j] = mesh.cchistory[j].alpha
+    aerostates.W[i,j] = mesh.cchistory[j].W
+end
 
 """
     simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
@@ -91,8 +107,8 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
     Wdotvec = zeros(na) #[sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #TODO: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. -> Currently not used by BLADG. 
     alphadotvec = zero(Wdotvec) #TODO: 
 
-    
-    xds, xds_idxs, p_ds = initialize_DS_model(airfoils, turbine, nt, tvec, cchistory[1,:], Wdotvec, alphadotvec, twistvec, pitch)
+    #Todo: This is going to need to be rearrange now. 
+    xds, xds_idxs, p_ds = initialize_ds_model(airfoils, turbine, nt, tvec, cchistory[1,:], Wdotvec, alphadotvec, twistvec, pitch)
 
 
 

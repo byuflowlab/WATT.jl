@@ -35,15 +35,15 @@ dt_out = 0.001 # "\"default\""
 density = 1.225 #density (kg/m^3)
 kinvisc = 1.5 #Kinematic Viscosity (m^2/s)
 a = 335 #Speed of Sound (m/s)
-gravity = 0.0 #9.81 #Gravity (m/s^2)
+gravity = 9.81 #Gravity (m/s^2)
 
 Uinf = 10 #Freestream velocity (m/s)
 patm = 101325 #Atmospheric pressure (Pa)
 rpm = 50 #angular velocity (rotations per minute)
 omega = rpm*2*pi/60 #angular velocity (radians/second)
 
-refht = 20 #Reference height for the power law exponent shear rule
-plexp = 0.0
+refht = 90 #Reference height for the power law exponent shear rule
+plexp = 0.01
 
 
 ### Turbine description
@@ -53,7 +53,7 @@ tilt = 0.0
 precone = 0.0
 
 B = 3 #Number of blades
-hubht = 20 #Hub height (m)
+hubht = 90 #Hub height (m)
 overhang = -1 
 
 rhub = 1.5 #Hub radius
@@ -248,6 +248,7 @@ let
     edfile["BldFile(3)"] = "sn5_EDblade.dat"
 
     edfile["TwrFile"] = "sn5_EDtower.dat"
+    edfile["OutList"] = ["Azimuth"]
 
 
     ### BD Driver
@@ -352,7 +353,7 @@ let
 
     inputfile["TMax"] = tmax
     inputfile["DT"] = dt
-    inputfile["DT_Out"] = dt
+    # inputfile["DT_Out"] = dt
     inputfile["DT_Out"] = dt_out
     inputfile["NumCrctn"] = 0
 

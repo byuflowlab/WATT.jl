@@ -118,6 +118,7 @@ true         TabDelim    - Use tab delimiters in text tabular output file? (flag
         0.0   NBlGages    - Number of blade nodes that have strain gages for output [0 to 9] (-)
           0   BldGagNd    - List of blade nodes that have strain gages [1 to BldNodes] (-) [unused if NBlGages=0]
               OutList     - The next line(s) contains a list of output parameters.  See OutListParameters.xlsx for a listing of available output channels, (-)
+"Azimuth"  
 END of input file (the word "END" must appear in the first 3 columns of this last OutList line)
 ---------------------- NODE OUTPUTS --------------------------------------------
                1   BldNd_BladesOut  - Blades to output

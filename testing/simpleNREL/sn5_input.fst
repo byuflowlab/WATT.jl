@@ -20,7 +20,7 @@ True       Echo            - Echo input data to <RootName>.ech (flag)
 0             CompIce         - Compute ice loads (switch) {0=None; 1=IceFloe; 2=IceDyn}
 0             MHK             - MHK turbine type (switch) {0=Not an MHK turbine; 1=Fixed MHK turbine; 2=Floating MHK turbine}
 ---------------------- ENVIRONMENTAL CONDITIONS --------------------------------
-0.0           Gravity         - Gravitational acceleration (m/s^2)
+9.81          Gravity         - Gravitational acceleration (m/s^2)
 1.225         AirDens         - Air density (kg/m^3)
 0.0           WtrDens         - Water density (kg/m^3)
 1.5           KinVisc         - Kinematic viscosity of working fluid (m^2/s)

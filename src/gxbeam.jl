@@ -307,6 +307,27 @@ function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
 
 end
 
+function gxbeam_initial_conditions(env::Environment, assembly, prescribed_conditions, distributed_loads, t0, azimuth0, g, structural_damping, linear, flag)
+
+    Omega0 = SVector(0.0, 0.0, -env.RS(t0))
+    gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0)
+
+    if flag==:steady
+        @warn("Steady initialization not yet prepared, starting from no load no deflection. ")
+
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady=false, initialize=true, structural_damping, linear) 
+
+    elseif flag==:spinning
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady=true, initialize=true, structural_damping, linear)
+
+    else #No load, no deflection initialization. 
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady=false, initialize=true, structural_damping, linear) 
+    end
+
+
+    gxstate = history0[end]
+    return gxstate, system
+end
 
 function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.Linear)
 
