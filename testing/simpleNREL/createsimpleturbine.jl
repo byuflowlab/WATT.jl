@@ -29,17 +29,18 @@ bddriver = of.read_bddriver("NREL5MW_bddriver.inp", ofpath)
 ### Simulation control
 tmax = 1.0
 dt = 0.001
-dt_out = 0.001 # "\"default\""
+dt_out = 0.01 # "\"default\""
+# dt_out = dt
 
 ### Environmental variables
 density = 1.225 #density (kg/m^3)
-kinvisc = 1.5 #Kinematic Viscosity (m^2/s)
+kinvisc = 1.5e-5 #Kinematic Viscosity (m^2/s)
 a = 335 #Speed of Sound (m/s)
 gravity = 9.81 #Gravity (m/s^2)
 
 Uinf = 10 #Freestream velocity (m/s)
 patm = 101325 #Atmospheric pressure (Pa)
-rpm = 50 #angular velocity (rotations per minute)
+rpm = 11.44 #angular velocity (rotations per minute)
 omega = rpm*2*pi/60 #angular velocity (radians/second)
 
 refht = 90 #Reference height for the power law exponent shear rule
@@ -66,7 +67,7 @@ rtip = 63.0 #Tip radius
 # rfrac = (rvec .- rhub)/(rtip-rhub)
 
 nelem = 1
-np_elem = 300
+np_elem = 500
 
 # chordvec = ones(n)
 # twistvec = zeros(n)
@@ -229,7 +230,7 @@ let
     # edfile["BlPitch(1)"] = pitch
     # edfile["BlPitch(2)"] = pitch
     # edfile["BlPitch(3)"] = pitch
-    # edfile["RotSpeed"] = rpm 
+    edfile["RotSpeed"] = rpm 
 
     # #Turbine Config
     # edfile["NumBl"] = B
@@ -358,10 +359,10 @@ let
     inputfile["NumCrctn"] = 0
 
     inputfile["Gravity"] = gravity
-    # inputfile["AirDens"] = density
-    # inputfile["KinVisc"] = kinvisc
-    # inputfile["SpdSound"] = a
-    # inputfile["Patm"] = patm
+    inputfile["AirDens"] = density
+    inputfile["KinVisc"] = kinvisc
+    inputfile["SpdSound"] = a
+    inputfile["Patm"] = patm
 
     
 

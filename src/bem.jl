@@ -1,5 +1,9 @@
 #=
 
+The blade element momentum theory (BEMT) code. Most of this wraps the package CCBlade.jl
+
+TODO: I should probably rename this file to BEMT. It appears that most people refer to panel codes as BEMs, and refer to BEMT as BEMT. 
+
 =#
 
 import CCBlade.afeval

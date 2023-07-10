@@ -8,7 +8,8 @@ function retrieve_eulerangles(R)
 end
 
 function WMPtoangle(c)
-    R = GXBeam.wiener_milenkovic(c)'
+    scaling = GXBeam.rotation_parameter_scaling(c)
+    R = GXBeam.wiener_milenkovic(scaling*c)'
     return retrieve_eulerangles(R)
 end
 
@@ -343,6 +344,8 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.L
         r1 = norm(assembly.points[ielem])
         r2 = norm(assembly.points[ielem+1])
         distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
+        # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
+        #Todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
     end
 
 end
@@ -493,4 +496,20 @@ function steady_simulate_gxbeam(rvec, azimuth, Fx, Fy, Mx, env::Environment, ass
 
 
     return state
+end
+
+
+function get_blade_weight(assembly::GXBeam.Assembly)
+
+    n = length(assembly.elements)
+
+    rvec = zeros(n)
+    masses = zeros(n)
+
+    for i = 1:n
+        rvec[i] = norm(assembly.elements[i].x)
+        masses[i] = assembly.elements[i].mass[1,1]
+    end
+
+    return trapz(rvec, masses)
 end

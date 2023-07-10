@@ -13,7 +13,7 @@ cd(localpath)
 
 
 ### Read in OpenFAST files
-ofpath = "./" 
+ofpath = "./simpleNREL" 
 inputfile = of.read_inputfile("sn5_input.fst", ofpath)
 inflowwind = of.read_inflowwind("sn5_inflowwind.dat", ofpath)
 # addriver = of.read_addriver("sn5_ADdriver.dvr", ofpath)
@@ -43,7 +43,7 @@ yaw = edfile["NacYaw"]*(pi/180)
 tilt = edfile["ShftTilt"]*(pi/180)
 
 rho = inputfile["AirDens"]
-mu = inputfile["KinVisc"]
+mu = inputfile["KinVisc"]*rho
 vinf = inflowwind["HWindSpeed"]
 a = inputfile["SpdSound"]
 omega = edfile["RotSpeed"]*2*pi/60 #Convert to rads/s
@@ -64,7 +64,7 @@ end
 if readflag
     println("Reading OpenFAST files...")
     # fullouts = readdlm("./simpleNREL/sn5_ADdriver.1.out", skipstart=6)
-    fullouts = readdlm("./sn5_input.out", skipstart=6)
+    fullouts = readdlm("./simpleNREL/sn5_input.out", skipstart=6)
 
     names = fullouts[1,:]
 
@@ -161,7 +161,7 @@ if readflag
 
     # end
 
-    yamlfile = YAML.load_file("sn5_input.BD1.sum.yaml")
+    yamlfile = YAML.load_file("./simpleNREL/sn5_input.BD1.sum.yaml")
     
 
     # nfea = 150
@@ -255,14 +255,14 @@ if readflag
     #     dfz[:,i] = outs[namedfz]
     # end
 
-    intermediatefile = readdlm("BLADG_intermediate_states.txt")
+    intermediatefile = readdlm("./simpleNREL/BLADG_intermediate_states.txt")
 
     inames = intermediatefile[1,:]
     idata = intermediatefile[2:end, :]
 
     iouts = Dict(inames[i] => idata[:,i] for i in eachindex(inames))
 
-    bemif = readdlm("BEM_intermediate_states.txt")
+    bemif = readdlm("./simpleNREL/BEM_intermediate_states.txt")
     bemnames = ["i", "theta", "cant", "toe", "Vx", "Vy", "Vz", "chord"]
 
     bouts = Dict(bemnames[i] => bemif[:,i] for i in eachindex(bemnames))
@@ -270,7 +270,7 @@ if readflag
     readflag = false
 end
 
-azimuth = outs["B1Azimuth"].*(pi/180)
+azimuth = outs["B1Azimuth"]
 tipdx = outs["B1TipTDxr"]
 tipdy = outs["B1TipTDyr"]
 tipdz = outs["B1TipTDzr"]
@@ -280,14 +280,14 @@ assembly = of.make_assembly(edfile, bdfile, bdblade)
 
 ### Prep the ASD rotor and operating conditions 
 aftypes = Array{of.AirfoilInput}(undef, 8)
-aftypes[1] = of.read_airfoilinput("./Airfoils/Cylinder1.dat") 
-aftypes[2] = of.read_airfoilinput("./Airfoils/Cylinder2.dat") 
-aftypes[3] = of.read_airfoilinput("./Airfoils/DU40_A17.dat") 
-aftypes[4] = of.read_airfoilinput("./Airfoils/DU35_A17.dat") 
-aftypes[5] = of.read_airfoilinput("./Airfoils/DU30_A17.dat") 
-aftypes[6] = of.read_airfoilinput("./Airfoils/DU25_A17.dat") 
-aftypes[7] = of.read_airfoilinput("./Airfoils/DU21_A17.dat") 
-aftypes[8] = of.read_airfoilinput("./Airfoils/NACA64_A17.dat") 
+aftypes[1] = of.read_airfoilinput("./simpleNREL/Airfoils/Cylinder1.dat") 
+aftypes[2] = of.read_airfoilinput("./simpleNREL/Airfoils/Cylinder2.dat") 
+aftypes[3] = of.read_airfoilinput("./simpleNREL/Airfoils/DU40_A17.dat") 
+aftypes[4] = of.read_airfoilinput("./simpleNREL/Airfoils/DU35_A17.dat") 
+aftypes[5] = of.read_airfoilinput("./simpleNREL/Airfoils/DU30_A17.dat") 
+aftypes[6] = of.read_airfoilinput("./simpleNREL/Airfoils/DU25_A17.dat") 
+aftypes[7] = of.read_airfoilinput("./simpleNREL/Airfoils/DU21_A17.dat") 
+aftypes[8] = of.read_airfoilinput("./simpleNREL/Airfoils/NACA64_A17.dat") 
 
 # indices correspond to which airfoil is used at which station
 af_idx = Int.(adblade["BlAFID"])
@@ -303,143 +303,19 @@ for i = 1:n
 end
 
 rR = rvec./rtip
-# blade = Rotors.Blade(rhub, rtip, rR, airfoils)
 blade = Rotors.Blade(rvec, twistvec.*(pi/180), airfoils; rhub=rhub, rtip=rtip, precone)
 
 turbine = true
 rotor_r = Rotors.Rotor(Int(B), hubht, turbine; tilt, yaw)
 
 
-# dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
-# dsmodelinit = Rotors.BeddoesLeishman()
+### Passing derivatives through a single time step. 
 
-if !@isdefined(runflag)
-    runflag = true
-end
+aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose=true)
 
+system = initial_condition!(rotor, blade, assembly, env, aerostates, gxstates, mesh, tvec[1], azimuth0, pitch; verbose)
 
-
-
-if runflag
-    loads, cchistory, xds, gxhistory, azimuth = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
-    # Fx, Fy, Mx, cchistory, xds, gxhistory = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
-
-    runflag = false
-end
+system = take_step!(aerostates, gxstates, mesh, rotor, blade, assembly, env, system, tvec, i, pitch; verbose, speakiter, plotiter, plotbool, structural_damping, linear, g, solver)
 
 
-# tvecsample = 0:0.001:0.5
-
-# Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
-
-# @time Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
-# nothing
-# using Profile
-
-# @profile Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
-
-# open("./prof.txt", "w") do s
-    
-#     Profile.print(IOContext(s); combine=true)
-# end
-
-# using Profile, ProfileSVG
-
-# Profile.clear()
-# @profile Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
-# ProfileSVG.view(maxdepth=30, maxframes=5000)
-    
-# nothing
-
-# @code_warntype Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=false, speakiter=1000, g=inputfile["Gravity"], plotbool=false, plotiter=20)
-
-#Note: Current only type instability is the return tuple. I don't know if that is something that I can really fix. :| 
-
-# nothing
- 
-#Tip deflections
-# tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec)]
-# tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec)]
-# tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec)]
-
-# tiptheta_x = zeros(nt)
-# tiptheta_y = zeros(nt)
-# tiptheta_z = zeros(nt)
-
-# tiptheta_xof = zeros(nt)
-# tiptheta_yof = zeros(nt)
-# tiptheta_zof = zeros(nt)
-
-# for i = 1:nt
-#     theta = Rotors.WMPtoangle(gxhistory[i].points[end].theta)
-#     tiptheta_x[i] = theta[1]
-#     tiptheta_y[i] = theta[2]
-#     tiptheta_z[i] = theta[3]
-
-#     thetawmp = SVector(outs["B1TipRDxr"][i], outs["B1TipRDyr"][i], outs["B1TipRDzr"][i])
-#     theta = Rotors.WMPtoangle(thetawmp)
-#     tiptheta_xof[i] = theta[1]
-#     tiptheta_yof[i] = theta[2]
-#     tiptheta_zof[i] = theta[3]
-# end
-
-# nr = length(rvec)
-# nt = length(tvec)
-# defx_gx = zeros(nt, nr)
-# defy_gx = zeros(nt, nr)
-# defz_gx = zeros(nt, nr)
-
-# for i in eachindex(tvec)
-#     for j in eachindex(rvec)
-#         defx_gx[i,j] = gxhistory[i].points[j].u[1]
-#         defy_gx[i,j] = gxhistory[i].points[j].u[2]
-#         defz_gx[i,j] = gxhistory[i].points[j].u[3]
-#     end
-# end
-
-
-
-
-
-
-# using Plots, LaTeXStrings
-
-
-
-
-
-
-# tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=:outerright)
-# plot!(tvec, fxmat[:,end], lab=L"$F_x$ - OF", seriescolor=:blue)
-# plot!(tvec, -fymat[:,end], lab=L"$F_y$ - OF", seriescolor=:red)
-# # plot!(tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
-# plot!(tvec, loads.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
-# plot!(tvec, loads.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
-# # plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
-# display(tiploads)
-
-
-
-# tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=(0.8, 0.3)) #
-# plot!(tvec, tipdx, lab=L"$\delta x$ - OF", linestyle=:dash)
-# plot!(tvec, tipdy, lab=L"$\delta y$ - OF", linestyle=:dash)
-# plot!(tvec, tipdz, lab=L"$\delta z$ - OF", linestyle=:dash)
-# plot!(tvec, -tipdef_z, lab=L"\delta x")
-# plot!(tvec, tipdef_y, lab=L"\delta y")
-# plot!(tvec, tipdef_x, lab=L"\delta z")
-# display(tipdefs2)
-
-
-# using Statistics
-
-# tiploaderr = @. 100*(loads.Fx[:,end] - fxmat[:,end])./fxmat[:,end]
-# tipdeferr = @. (-tipdef_z-tipdx)
-
-# meantiploaderr = mean(tiploaderr)
-# meantipdeferr = mean(tipdeferr)
-
-
-
-
-
-# nothing
+# aerostates, gxstates = simulate!(rotor_r, blade, env, assembly, tvec, aerostates, gxstates, mesh; verbose=true)

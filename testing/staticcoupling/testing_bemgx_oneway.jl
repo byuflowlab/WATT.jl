@@ -1,5 +1,12 @@
 using Plots, GXBeam, StaticArrays, LinearAlgebra, DifferentialEquations, CCBlade, FLOWMath, CurveFit, NLsolve, DelimitedFiles, ForwardDiff
 
+#=
+I'm pretty sure that this is a one-way coupling of the BEM and gxbeam (so just the loads coming from CCBlade and being input into GXBeam.)
+
+
+=#
+
+
 include("../src/extra.jl")
 include("../src/blades.jl")
 include("../src/environments.jl")

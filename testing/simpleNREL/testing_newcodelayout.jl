@@ -62,6 +62,7 @@ if !@isdefined(readflag)
 end
 
 if readflag
+    println("Reading OpenFAST files...")
     # fullouts = readdlm("./simpleNREL/sn5_ADdriver.1.out", skipstart=6)
     fullouts = readdlm("./sn5_input.out", skipstart=6)
 
@@ -202,19 +203,25 @@ blade = Rotors.Blade(rvec, twistvec.*(pi/180), airfoils; rhub=rhub, rtip=rtip, p
 turbine = true
 rotor_r = Rotors.Rotor(Int(B), hubht, turbine; tilt, yaw)
 
+if !@isdefined(defflag)
+    defflag = true
+end
 
-# aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose=true)
+if defflag
+    aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose=true)
+    defflag = false
+end
 
-# azimuth0 = 0.0
-# global system
-# system = initial_condition!(rotor_r, blade, assembly, env, aerostates, gxstates, mesh, tvec[1], azimuth0, pitch; verbose=true)
+azimuth0 = 0.0
+global system
+system = initial_condition!(rotor_r, blade, assembly, env, aerostates, gxstates, mesh, tvec[1], azimuth0, pitch; verbose=true)
 
-# for i = 2:nt
-#     global system
-#     system = take_step!(aerostates, gxstates, mesh, rotor_r, blade, assembly, env, system, tvec, i, pitch; verbose=true, speakiter=100)
-# end
+for i = 2:nt
+    global system
+    system = take_step!(aerostates, gxstates, mesh, rotor_r, blade, assembly, env, system, tvec, i, pitch; verbose=true, speakiter=100)
+end
 
-aerostates, gxstates = simulate(rotor_r, blade, env, assembly, tvec; verbose=true)
+# aerostates, gxstates = simulate(rotor_r, blade, env, assembly, tvec; verbose=true)
 
 
 #=

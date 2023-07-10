@@ -4,6 +4,8 @@ using Revise, DifferentialEquations, StaticArrays, FLOWMath, CCBlade, Plots, Cur
 Test that the ODE, DAE, time-marching ODE, and time-marching linearized Riso models are working. (All the same model, just implemented different ways). 
 
 Adam Cardoza 8/2/22
+
+TODO: I might want to delete this sucker. I think this is probably more of a DSM test. 
 =#
 
 

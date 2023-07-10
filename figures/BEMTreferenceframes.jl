@@ -1,5 +1,9 @@
 using Plots, LaTeXStrings, Statistics, DelimitedFiles
 
+#=
+A script to generate BEMT reference frames figures for documentation. 
+=#
+
 include("utils.jl")
 
 x = zeros(3)

@@ -3,7 +3,7 @@
 
 =#
 
-export initialize, initial_condition!, take_step!, simulate
+export initialize, initial_condition!, take_step!, simulate, simulate!
 
 
 
@@ -217,22 +217,30 @@ function take_step!(aerostates::AeroStates, gxstates, mesh::Mesh, rotor::Rotor, 
 
     ### Extract loads 
     extract_ds_loads!(blade.airfoils, view(aerostates.xds, i, :), mesh.xds_idxs, view(aerostates.phi, i, :), mesh.p_ds, view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :))
-    #Todo: With Precone, and any deflections, then Cx, and Cy will no longer be in the blade root frame. 
+ 
     
     dimensionalize!(view(aerostates.fx, i, :), view(aerostates.fy, i, :), view(aerostates.mx, i, :), view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :), blade::Blade, env::Environment, view(aerostates.W, i, :))
-    #Todo: These loads may need to be rotated from a local frame to a hub frame. 
+    #These loads do not need to be rotated because they will be applied in the deflected frame (a follower load). This should also be true for things like precone, tilt, and yaw if they are defined correctly in GXBeam. 
     
     
     ### Update GXBeam loads  
     update_forces!(mesh.distributed_loads, view(aerostates.fx, i-1, :), view(aerostates.fy, i-1, :), view(aerostates.mx, i-1, :), blade, assembly) 
 
     Omega = SVector(0.0, 0.0, -env.RS(t))
-    gravity = SVector(-g*cos(aerostates.azimuth[i-1]), -g*sin(aerostates.azimuth[i-1]), 0.0) #Todo: I need to include tilt, and precone here. 
+    # gravity = SVector(-g*cos(aerostates.azimuth[i-1]), -g*sin(aerostates.azimuth[i-1]), 0.0) #Todo: I need to include tilt, and precone here. 
+
+    a0 = aerostates.azimuth[i-1]
+    a1 = aerostates.azimuth[i]
+
+    gravity2 = (tee) -> SVector(-g*cos((a0*(tvec[i]-tee) + a1*(tee-tvec[i-1]))/(tvec[i]-tvec[i-1])), -g*sin((a0*(tvec[i]-tee) + a1*(tee-tvec[i-1]))/(tvec[i]-tvec[i-1])), 0.0) ##Todo t = tvec[i].... So this be way wrong. Oh... this is an inline function. 
+
+    #Note: Taylor applies the gravitational load by C'*mass*C*gvec
 
     ### Solve GXBeam for time step #TODO: This function is taking a lot of time. -> I might be able to save time by branching his code and writing another function, but most of the time is spent in nlsolve. I think all of the time spent is just time solving, not really inside of Taylor's code, but of course, if I make his code faster, then I make the solve faster. 
-    system, localhistory, _ = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=mesh.prescribed_conditions, distributed_loads=mesh.distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? -> Is this really a time cost though? 
+    system, localhistory, _ = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=mesh.prescribed_conditions, distributed_loads=mesh.distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity=gravity2) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? -> Is this really a time cost though? 
 
-    #Todo: Can I save memory by directly allocating to the gxstates vector? 
+    #Todo: Can I save memory by directly allocating to the gxstates vector? -> I can probably save allocations by augmenting the time_domain_analysis!() function to already have the results allocated. 
+
     ### Extract GXBeam outputs
     gxstates[i] = localhistory[end] 
 
@@ -270,7 +278,8 @@ function take_step!(aerostates::AeroStates, gxstates, mesh::Mesh, rotor::Rotor, 
         plot!(tvec[1:i], thetamat[:,3], lab="Z deflection")
         display(plt)
     end
-    return system
+
+    return system #Todo: Should this be returned? (For scoping and passing of data)
 end
 
 function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
@@ -288,6 +297,19 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
     return aerostates, gxstates
 end
 
+
+function simulate!(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec, aerostates::AeroStates, gxstates, mesh::Mesh; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
+
+    nt = length(tvec)
+
+    system = initial_condition!(rotor, blade, assembly, env, aerostates, gxstates, mesh, tvec[1], azimuth0, pitch; verbose)
+
+    for i = 2:nt
+        system = take_step!(aerostates, gxstates, mesh, rotor, blade, assembly, env, system, tvec, i, pitch; verbose, speakiter, plotiter, plotbool, structural_damping, linear, g, solver)
+    end
+
+    return aerostates, gxstates
+end
 
 #TODO: Make a memory efficient take_step!() function that only saves certain time indices. 
 

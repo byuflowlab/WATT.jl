@@ -1,7 +1,7 @@
 using Revise
 using OpenFASTsr, DelimitedFiles, GXBeam, Rotors, LinearAlgebra, DynamicStallModels
 using YAML
-using Infiltrator
+# using Infiltrator
 using StaticArrays
 # using Plots
 
@@ -43,7 +43,7 @@ yaw = edfile["NacYaw"]*(pi/180)
 tilt = edfile["ShftTilt"]*(pi/180)
 
 rho = inputfile["AirDens"]
-mu = inputfile["KinVisc"]
+mu = inputfile["KinVisc"]*rho
 vinf = inflowwind["HWindSpeed"]
 a = inputfile["SpdSound"]
 omega = edfile["RotSpeed"]*2*pi/60 #Convert to rads/s
@@ -62,6 +62,7 @@ if !@isdefined(readflag)
 end
 
 if readflag
+    println("Reading OpenFAST files...")
     # fullouts = readdlm("./simpleNREL/sn5_ADdriver.1.out", skipstart=6)
     fullouts = readdlm("./sn5_input.out", skipstart=6)
 
@@ -269,7 +270,7 @@ if readflag
     readflag = false
 end
 
-azimuth = outs["B1Azimuth"]
+azimuth = outs["Azimuth"]
 tipdx = outs["B1TipTDxr"]
 tipdy = outs["B1TipTDyr"]
 tipdz = outs["B1TipTDzr"]
@@ -312,26 +313,33 @@ rotor_r = Rotors.Rotor(Int(B), hubht, turbine; tilt, yaw)
 # dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
 # dsmodelinit = Rotors.BeddoesLeishman()
 
+if !@isdefined(defflag)
+    defflag = true
+end
+
+if defflag
+    aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose=true)
+    defflag = false
+end
+
 if !@isdefined(runflag)
     runflag = true
 end
 
 
-
-
 if runflag
-    loads, cchistory, xds, gxhistory, azimuth_R = Rotors.simulate(rotor_r, blade, env, assembly, tvec; verbose=true, speakiter=100, g=inputfile["Gravity"], plotbool=false, plotiter=20, azimuth0=0.0)
+    aerostates, gxstates = simulate!(rotor_r, blade, env, assembly, tvec, aerostates, gxstates, mesh; verbose=true)
 
-    # runflag = false
+    runflag = false
 end
 
 
 
  
 #Tip deflections
-tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec)]
-tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec)]
-tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec)]
+tipdef_x = [gxstates[i].points[end].u[1] for i in eachindex(tvec)]
+tipdef_y = [gxstates[i].points[end].u[2] for i in eachindex(tvec)]
+tipdef_z = [gxstates[i].points[end].u[3] for i in eachindex(tvec)]
 
 tiptheta_x = zeros(nt)
 tiptheta_y = zeros(nt)
@@ -342,7 +350,7 @@ tiptheta_yof = zeros(nt)
 tiptheta_zof = zeros(nt)
 
 for i = 1:nt
-    theta = Rotors.WMPtoangle(gxhistory[i].points[end].theta)
+    theta = Rotors.WMPtoangle(gxstates[i].points[end].theta)
     tiptheta_x[i] = theta[1]
     tiptheta_y[i] = theta[2]
     tiptheta_z[i] = theta[3]
@@ -362,16 +370,16 @@ defz_gx = zeros(nt, nr)
 
 for i in eachindex(tvec)
     for j in eachindex(rvec)
-        defx_gx[i,j] = gxhistory[i].points[j].u[1]
-        defy_gx[i,j] = gxhistory[i].points[j].u[2]
-        defz_gx[i,j] = gxhistory[i].points[j].u[3]
+        defx_gx[i,j] = gxstates[i].points[j].u[1]
+        defy_gx[i,j] = gxstates[i].points[j].u[2]
+        defz_gx[i,j] = gxstates[i].points[j].u[3]
     end
 end
 
 
-# Vx1 = [gxhistory[1].points[i].V[1] for i in eachindex(assembly.points)]
-# Vy1 = [gxhistory[1].points[i].V[2] for i in eachindex(assembly.points)]
-# Vz1 = [gxhistory[1].points[i].V[3] for i in eachindex(assembly.points)]
+# Vx1 = [gxstates[1].points[i].V[1] for i in eachindex(assembly.points)]
+# Vy1 = [gxstates[1].points[i].V[2] for i in eachindex(assembly.points)]
+# Vz1 = [gxstates[1].points[i].V[3] for i in eachindex(assembly.points)]
 
 
 # Uxhist = zeros(50001, n)
@@ -420,8 +428,8 @@ tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=(0.9, 0.3))
 plot!(tvec, fxmat[:,end], lab=L"$F_x$ - OF", seriescolor=:blue)
 plot!(tvec, -fymat[:,end], lab=L"$F_y$ - OF", seriescolor=:red)
 # plot!(tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
-plot!(tvec, loads.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
-plot!(tvec, loads.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
+plot!(tvec, aerostates.fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
+plot!(tvec, aerostates.fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
 # plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
 display(tiploads)
 # savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_10seconds_052323.png")
@@ -439,7 +447,7 @@ display(tipdefs2)
 
 using Statistics
 
-tiploaderr = @. 100*(loads.Fx[:,end] - fxmat[:,end])./fxmat[:,end]
+tiploaderr = @. 100*(aerostates.fx[:,end] - fxmat[:,end])./fxmat[:,end]
 tipdeferr = @. (-tipdef_z-tipdx)
 
 meantiploaderr = mean(tiploaderr)
@@ -450,9 +458,9 @@ meantipdeferr = mean(tipdeferr)
 nodeidx = 300
 
 alphaplt = plot(xaxis="Time (s)", yaxis="Angle of Attack (deg)")
-plot!(tvec, cchistory[:,nodeidx].alpha.*(180/pi), lab="R")
+plot!(tvec, aerostates.alpha[:,nodeidx].*(180/pi), lab="R")
 plot!(tvec, outs["AB1N$nodeidx"*"Alpha"], lab="OF")
-plot!(tvec[2:end], iouts["alpha"].*(180/pi), lab="AD")
+# plot!(tvec[2:end], iouts["alpha"].*(180/pi), lab="AD")
 # display(alphaplt)
 
 
@@ -460,12 +468,12 @@ Wof = @. sqrt(outs["AB1N$nodeidx"*"Vx"]^2 + outs["AB1N$nodeidx"*"Vy"]^2)
 
 
 Uplt = plot(xaxis = "Time (s)", yaxis="Inflow Velocity (m/s)")
-plot!(tvec, cchistory[:,nodeidx].W, lab="R")
+plot!(tvec, aerostates.W[:,nodeidx], lab="R")
 plot!(tvec, Wof, lab="OF")
-plot!(tvec[2:end], iouts["U"], lab="AD")
+# plot!(tvec[2:end], iouts["U"], lab="AD")
 # display(Uplt)
 
-Vxr = cchistory[:,nodeidx].u./cchistory[:,nodeidx].G
+# Vxr = cchistory[:,nodeidx].u./cchistory[:,nodeidx].G
 
 # Vxplt = plot(xaxis = "Time (s)", yaxis="Vx (m/s)", leg=:bottomright)
 # plot!(Vxmat[:,nodeidx], lab="R")
@@ -479,28 +487,28 @@ Vxr = cchistory[:,nodeidx].u./cchistory[:,nodeidx].G
 # # plot!(bouts["Vy"], lab="AD")
 # # display(Vyplt)
 
-aplt = plot(xaxis="Time (s)", yaxis="Axial induction factor")
-plot!(tvec, cchistory[:, nodeidx].a, lab="R")
-plot!(tvec, outs["AB1N$nodeidx"*"AxInd"], lab="AD")
-# display(aplt)
+# aplt = plot(xaxis="Time (s)", yaxis="Axial induction factor")
+# plot!(tvec, aerostates.a[:,nodeidx], lab="R")
+# plot!(tvec, outs["AB1N$nodeidx"*"AxInd"], lab="AD")
+# # display(aplt)
 
-applt = plot(xaxis="Time (s)", yaxis="Tangential Induction factor")
-plot!(tvec, cchistory[:, nodeidx].ap, lab="R")
-plot!(tvec, outs["AB1N$nodeidx"*"TnInd"], lab="AD")
-# display(applt)
+# applt = plot(xaxis="Time (s)", yaxis="Tangential Induction factor")
+# plot!(tvec, aerostates.ap[:,nodeidx], lab="R")
+# plot!(tvec, outs["AB1N$nodeidx"*"TnInd"], lab="AD")
+# # display(applt)
 
-phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)")
-plot!(tvec, cchistory[:, nodeidx].phi.*(180/pi), lab="R")
+phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)", leg=:bottomright)
+plot!(tvec, aerostates.phi[:,nodeidx].*(180/pi), lab="R", markershape=:x)
 plot!(tvec, outs["AB1N$nodeidx"*"Phi"], lab="AD")
-# display(phiplt)
+display(phiplt)
 
-twist = @. (cchistory[:,nodeidx].phi + -cchistory[:,nodeidx].alpha)*180/pi
-twistof = @. outs["AB1N$nodeidx"*"Phi"] + -outs["AB1N$nodeidx"*"Alpha"]
+# twist = @. (aerostates.phi[:,nodeidx] + -aerostates.alpha[:,nodeidx])*180/pi
+# twistof = @. outs["AB1N$nodeidx"*"Phi"] + -outs["AB1N$nodeidx"*"Alpha"]
 
-twistplt = plot(xaxis="Time (s)", yaxis="Twist Angle (deg)")
-plot!(tvec, twist, lab="R")
-plot!(tvec, outs["AB1N$nodeidx"*"Theta"], lab="AD")
-# plot!(tvec, twistof, lab="OF", linestyle=:dash)
+# twistplt = plot(xaxis="Time (s)", yaxis="Twist Angle (deg)")
+# plot!(tvec, twist, lab="R")
+# plot!(tvec, outs["AB1N$nodeidx"*"Theta"], lab="AD")
+# # plot!(tvec, twistof, lab="OF", linestyle=:dash)
 # display(twistplt)
 
 thetaplt = plot(xaxis = "Time (s)", yaxis=L"\delta_\theta (deg)", leg=:topleft)
@@ -513,13 +521,13 @@ plot!(tvec, tiptheta_x.*(180/pi), lab="R - z")
 plot!(tvec, tiptheta_xof.*(180/pi), lab="OF - x", linestyle=:dash)
 plot!(tvec, tiptheta_yof.*(180/pi), lab="OF - y", linestyle=:dash)
 plot!(tvec, tiptheta_zof.*(180/pi), lab="OF - z", linestyle=:dash)
-# display(thetaplt)
+display(thetaplt)
 
-aziplt = plot(tvec, azimuth, lab="AeroDyn", xaxis="Time (s)", yaxis="Azimuthal angle (deg)", leg=:top)
-plot!(tvec, azimuth_R.*(180/pi), lab="Rotors")
-plot!(tvec, outs["Azimuth"], lab="ElastoDyn", linestyle=:dash)
+# aziplt = plot(tvec, azimuth, lab="AeroDyn", xaxis="Time (s)", yaxis="Azimuthal angle (deg)", leg=:top)
+# plot!(tvec, aerostates.azimuth.*(180/pi), lab="Rotors")
+# plot!(tvec, outs["Azimuth"], lab="ElastoDyn", linestyle=:dash)
 # display(aziplt)
-# savefig(aziplt, "/Users/adamcardoza/Desktop/azimuthplot_AD_ED.png")
+# savefig(aziplt, "/Users/adamcardoza/Desktop/azimuthplot_AD_ED.png") #The Aerodyn azimuth is a value for wake correction models. 
 
 # Fxamp_of = maximum(fxmat[2500:end,end]) - minimum(fxmat[2500:end,end]) #427.0
 # Fxamp_R = maximum(loads.Fx[2500:end, end])-minimum(loads.Fx[2500:end, end]) #448.517
@@ -529,7 +537,7 @@ Mx_r = zeros(nt)
 
 for i = 1:nt
     Mx_of[i] = of.root_bending_moment(rvec, fxmat[i,:])
-    Mx_r[i] = of.root_bending_moment(rvec, loads.Fx[i,:])
+    Mx_r[i] = of.root_bending_moment(rvec, aerostates.fx[i,:])
 end
 
 using Dierckx
@@ -544,21 +552,21 @@ plot!(tvec, Mx_r, lab="R")
 display(Mplt)
 # savefig(Mplt, "/Users/adamcardoza/Desktop/SimpleNRELrootbendingmoment_varyingairfoils_chords_twists_gravity_shear_10seconds_052423.png")
 
-Mxerr = @. 100*(Mx_r-Mx_of)/Mx_of
+# Mxerr = @. 100*(Mx_r-Mx_of)/Mx_of
 
-avgMerr = mean(Mxerr)
+# avgMerr = mean(Mxerr)
 
-Mxamp_of = maximum(Mx_of[2500:end])-minimum(Mx_of[2500:end])
-Mxamp_r = maximum(Mx_r[2500:end])-minimum(Mx_r[2500:end])
-
-
-
-DEMx_of = of.damage_equivalent_load(Mx_of)
-DEMx_r = of.damage_equivalent_load(Mx_r)
-# DEMx_r = of.damage_equivalent_load(Mx_r_smooth)
+# Mxamp_of = maximum(Mx_of[2500:end])-minimum(Mx_of[2500:end])
+# Mxamp_r = maximum(Mx_r[2500:end])-minimum(Mx_r[2500:end])
 
 
-DEMx_err = 100*(DEMx_r-DEMx_of)/DEMx_of
+
+# DEMx_of = of.damage_equivalent_load(Mx_of)
+# DEMx_r = of.damage_equivalent_load(Mx_r)
+# # DEMx_r = of.damage_equivalent_load(Mx_r_smooth)
+
+
+# DEMx_err = 100*(DEMx_r-DEMx_of)/DEMx_of
 
 #=
 I'm a little confused. I thought with the damage equivalent moment, if I smoothed the sucker out that it would become.... less. I guess not? Is it purely dependent on the the amplitude of the loads? 
@@ -567,6 +575,38 @@ Also, with a difference in the max amplitudes of 100,000 I wouldn't expect the d
 
 =#
 
+
+
+### Comparing blade mass
+# Mass calculated by BeamDyn: 16844.336
+m_bd = 16844.336
+m_r = Rotors.get_blade_weight(assembly)
+
+masserr = 100*(m_r-m_bd)/m_bd
+
+@show masserr
+
+
+
+### Computing gravity
+# g = inputfile["Gravity"]
+# gravvec = [SVector(-g*cos(aerostates.azimuth[i]), -g*sin(aerostates.azimuth[i]), 0.0) for i = 1:nt] #In the rotating hub reference frame. 
+
+# gidx = nt
+
+# rx = rtip*cos(aerostates.azimuth[gidx])
+# ry = rtip*sin(aerostates.azimuth[gidx])
+
+# graviplt = plot([0, -gravvec[gidx][2]], [0, gravvec[gidx][1]], leg=false, xaxis="-Y", yaxis="X")
+# plot!([0, ry], [0, rx], linecolor=:black, lab="Blade position")
+# display(graviplt)
+
+# grot = Rotors.rotate_z(gravvec[gidx]..., aerostates.azimuth[gidx]; T=true)
+#=
+Wait... everything goes into the negative x direction... which means I have rx and ry wrong. 
+
+Well... From what I can tell, I implemented gravity right. It's where I expect it to be... and at a value that I expect. So.... That's odd. I wonder if I'm spinning it the wrong way? Would that make a difference? I suppose it could push my deflections out of phase. 
+=#
 
 
 # anim = @animate for i in eachindex(tvec)
@@ -580,25 +620,31 @@ Also, with a difference in the max amplitudes of 100,000 I wouldn't expect the d
 
 
 # anim = @animate for i in eachindex(tvec)
-#     plt1 = plot(leg=:topleft, yaxis="Distributed Load (N/m)", ylims=(-750, 6000))
+#     plt1 = plot(leg=:topleft, yaxis="Distributed Load (N/m)", ylims=(-750, 8000))
 #     plot!(rvec, fxmat[i,:], lab=L"$F_x$ - OF", linestyle=:dash)
-#     plot!(rvec, fymat[i,:], lab=L"$F_y$ - OF", linestyle=:dash)
-#     plot!(rvec, loads.Fx[i,:], lab=L"$F_x$ - R")
-#     plot!(rvec, loads.Fy[i,:], lab=L"$F_y$ - R")
+#     plot!(rvec, -fymat[i,:], lab=L"$F_y$ - OF", linestyle=:dash)
+#     plot!(rvec, aerostates.fx[i,:], lab=L"$F_x$ - R")
+#     plot!(rvec, aerostates.fy[i,:], lab=L"$F_y$ - R")
 
-#     plt2 = plot(xaxis="Time (s)", yaxis="Deflection (m)", legend=:topleft, ylims=(-1.0, 1.75)) #
+#     plt2 = plot(xaxis="Radius (m)", yaxis="Deflection (m)", legend=:topleft, ylims=(-1.0, 5.1)) #
 #     plot!(rnodes, dxmat[i,:], lab=L"x - OF", linestyle=:dash)
 #     plot!(rnodes, dymat[i,:], lab=L"y - OF", linestyle=:dash)
 #     plot!(rnodes, dzmat[i,:], lab=L"z - OF", linestyle=:dash)
 #     plot!(rvec, -defz_gx[i,:], lab=L"x - GX")
-#     plot!(rvec, -defy_gx[i,:], lab=L"y - GX")
+#     plot!(rvec, defy_gx[i,:], lab=L"y - GX")
 #     plot!(rvec, defx_gx[i,:], lab=L"z - GX")
 
 #     plot(plt1, plt2, layout=(2,1))
-# end # every 10
+# end #every 3
 # gif(anim, "loads_defs.gif", fps = 15)
 
+#=
+When you look at things in the grand scheme of things, it really isn't that big of a difference. Now the overall loading might have some significant differences, but I don't know if I can expect to be any closer. Like... I'm using a different convergence tolerance I think (at least on the BEMT). Maybe implicitly I am. I guess I could check that. And check that the tip correction isn't getting applied. 
 
+-[] Check tip and hub corrections (that they match)
+-[] Check that the BEMT tolerances are the same. 
+6/22/23
+=#
 
 
 
@@ -616,6 +662,6 @@ Also, with a difference in the max amplitudes of 100,000 I wouldn't expect the d
 # end
 
 # mkpath("simpleturbine/viz/simpleturbine-simulation")
-# write_vtk("simpleturbine/viz/simpleturbine-simulation/wind-turbine-blade-simulation", assembly, gxhistory[1:2500], tvec[1:2500]; sections = sections)
+# write_vtk("simpleturbine/viz/simpleturbine-simulation/wind-turbine-blade-simulation", assembly, gxstates[1:2500], tvec[1:2500]; sections = sections)
 
 nothing
