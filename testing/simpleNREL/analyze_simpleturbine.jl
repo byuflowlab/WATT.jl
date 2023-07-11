@@ -57,6 +57,16 @@ env = Rotors.environment(rho, mu, a, vinf, omega, shearexp)
 n = length(adblade["BlSpn"])
 ne = Int(bdblade["station_total"])
 
+if !@isdefined(resetflag)
+    resetflag = false
+end
+
+if resetflag
+    readflag = true
+    defflag = true
+    runflag = true
+end
+
 if !@isdefined(readflag)
     readflag = true
 end
@@ -327,10 +337,11 @@ if !@isdefined(runflag)
 end
 
 
+# runflag = true
 if runflag
     aerostates, gxstates = simulate!(rotor_r, blade, env, assembly, tvec, aerostates, gxstates, mesh; verbose=true)
 
-    runflag = false
+    runflag = false 
 end
 
 
@@ -497,8 +508,8 @@ plot!(tvec, Wof, lab="OF")
 # plot!(tvec, outs["AB1N$nodeidx"*"TnInd"], lab="AD")
 # # display(applt)
 
-phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)", leg=:bottomright)
-plot!(tvec, aerostates.phi[:,nodeidx].*(180/pi), lab="R", markershape=:x)
+phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)", leg=:topleft)
+plot!(tvec, aerostates.phi[:,nodeidx].*(180/pi), lab="R")
 plot!(tvec, outs["AB1N$nodeidx"*"Phi"], lab="AD")
 display(phiplt)
 
@@ -545,7 +556,7 @@ Mx_r_smooth_fit = Spline1D(tvec, Mx_r;w=ones(length(tvec)), k=3, bc="nearest", s
 
 Mx_r_smooth = Mx_r_smooth_fit.(tvec)
 
-Mplt = plot(xaxis="Time (s)", yaxis=L"Root Bending Moment $(N\cdot m)$", leg=:bottomright)
+Mplt = plot(xaxis="Time (s)", yaxis=L"Root Bending Moment $(N\cdot m)$", leg=:topright)
 plot!(tvec, Mx_of, lab="OF")
 plot!(tvec, Mx_r, lab="R")
 # plot!(tvec, Mx_r_smooth, lab="smooth")

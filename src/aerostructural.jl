@@ -125,11 +125,13 @@ function initial_condition_checks(gxflag)
     end
 end
 
-function initial_condition!(rotor::Rotor, blade::Blade, assembly::GXBeam.Assembly, env::Environment, aerostates::AeroStates, gxstates, mesh::Mesh, t0, azimuth0, pitch; g=9.81, gxflag=nothing, structural_damping::Bool=true, linear::Bool=false, verbose::Bool=false)
+function initial_condition!(rotor::Rotor, blade::Blade, assembly::GXBeam.Assembly, env::Environment, aerostates::AeroStates, gxstates, mesh::Mesh, tvec, azimuth0, pitch; g=9.81, gxflag=nothing, structural_damping::Bool=true, linear::Bool=false, verbose::Bool=false, solver::Solver=RK4())
     #TODO: Maybe include the coupled aerostructural solution as an option? 
 
     #TODO: I might put some checks in to help with problems caused by having rvec[i]~=rhub or rvec[i]~=rtip. -> These might best go in the blade constructor. 
     #TODO: I might put something in to make the solution run smoother when the dynamic stall states would get screwed up (i.e. at the root cylinders, when rvec[i]=rhub or rtip). -> I'm not entirely sure what I meant by that. 
+
+    t0 = tvec[1]
 
     aerostates.azimuth[1] = azimuth0
 
@@ -173,7 +175,89 @@ function initial_condition!(rotor::Rotor, blade::Blade, assembly::GXBeam.Assembl
     # println("Update mesh")
     update_mesh!(blade, mesh, assembly, gxstates[1], env, t0, na)
 
+
+    # @show length(tvec)
+    # ### Trying to take the first step then set that as the first value. 
+    # system = take_step!(aerostates, gxstates, mesh, rotor, blade, assembly, env, system, tvec, 2, pitch; verbose, structural_damping, linear, g, solver)
+    # tvi = [tvec[1], tvec[1]] #Returned nlsolve error on later time step. 
+    take_aero_step!(aerostates, mesh, rotor, blade, env, tvec, 2, pitch; solver) #Todo: I think there is some overall problem in how the initial states are handled. Rather, maybe not a problem, but a difference. 
+
+    for j = 1:na
+        aerostates.W[1,j] = aerostates.W[2,j]
+        aerostates.phi[1,j] = aerostates.phi[2,j]
+        aerostates.xds[1,j] = aerostates.xds[2,j]
+        
+        aerostates.cx[1,j] = aerostates.cx[2,j]
+        aerostates.cy[1,j] = aerostates.cy[2,j]
+        aerostates.cm[1,j] = aerostates.cm[2,j]
+
+        aerostates.fx[1,j] = aerostates.fx[2,j]
+        aerostates.fy[1,j] = aerostates.fy[2,j]
+        aerostates.mx[1,j] = aerostates.mx[2,j]
+    end
+
+    # update_mesh!(blade, mesh, assembly, gxstates[1], env, t0, na)
+
+    # gxstates[1] = gxstates[2] #Todo: Do I need to reset the system for initialization? Do I even want to be updating? If I'm never updating the structural? 
+
+    # # println("update distributed loads")
+    # update_forces!(mesh.distributed_loads, view(aerostates.fx, 1,:), view(aerostates.fy, 1,:), view(aerostates.mx, 1,:), blade, assembly)
+
+
+    # ### GXBeam initial solution 
+    # # println("GXBeam initial conditions")
+    # gxstates[1], system = gxbeam_initial_conditions(env, assembly, mesh.prescribed_conditions, mesh.distributed_loads, t0, azimuth0, g, structural_damping, linear, gxflag)
+
+    # ### Update mesh transfer variables
+    # # println("Update mesh")
+    # update_mesh!(blade, mesh, assembly, gxstates[1], env, t0, na)
+
+
+
     return system
+end
+
+function take_aero_step!(aerostates::AeroStates, mesh::Mesh, rotor::Rotor, blade::Blade, env::Environment, tvec, i, pitch; solver::Solver=RK4())
+    na = length(blade.r)
+
+    t = tvec[i]
+    dt = tvec[i] - tvec[i-1]
+    
+    
+    if dt<0
+        error("Time step is negative")
+    end
+
+    #update azimuthal position
+    aerostates.azimuth[i] = env.RS(t)*dt + aerostates.azimuth[i-1] #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
+
+    if aerostates.azimuth[i]<aerostates.azimuth[i-1]
+        @warn("Blade moved backwards")
+    end
+
+    ### Update BEM inputs and solve
+    for j = 1:na
+        ### Update base inflow velocities
+        Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, aerostates.azimuth[i], mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
+        
+        #TODO: Write a solver that is initialized with the previous inflow angle.
+        mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
+
+        update_aerostates!(aerostates, mesh, i, j)
+    end
+    
+    ### Update Dynamic Stall model inputs 
+    update_ds_inputs!(blade.airfoils, view(mesh.p_ds, :), view(aerostates.W, i, :), view(aerostates.phi, i, :), blade.twist, pitch, dt, rotor.turbine)
+    
+    ### Integrate Dynamic Stall model
+    update_ds_states!(solver, blade.airfoils, view(aerostates.xds, i-1, :), view(aerostates.xds, i, :), mesh.xds_idxs, mesh.p_ds, t, dt)
+
+    ### Extract loads 
+    extract_ds_loads!(blade.airfoils, view(aerostates.xds, i, :), mesh.xds_idxs, view(aerostates.phi, i, :), mesh.p_ds, view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :))
+ 
+    
+    dimensionalize!(view(aerostates.fx, i, :), view(aerostates.fy, i, :), view(aerostates.mx, i, :), view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :), blade::Blade, env::Environment, view(aerostates.W, i, :))
+    #These loads do not need to be rotated because they will be applied in the deflected frame (a follower load). This should also be true for things like precone, tilt, and yaw if they are defined correctly in GXBeam. 
 end
 
 
@@ -288,7 +372,8 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
 
     aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose=true)
 
-    system = initial_condition!(rotor, blade, assembly, env, aerostates, gxstates, mesh, tvec[1], azimuth0, pitch; verbose)
+    
+    system = initial_condition!(rotor, blade, assembly, env, aerostates, gxstates, mesh, tvec, azimuth0, pitch; verbose)
 
     for i = 2:nt
         system = take_step!(aerostates, gxstates, mesh, rotor, blade, assembly, env, system, tvec, i, pitch; verbose, speakiter, plotiter, plotbool, structural_damping, linear, g, solver)
@@ -302,10 +387,10 @@ function simulate!(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly
 
     nt = length(tvec)
 
-    system = initial_condition!(rotor, blade, assembly, env, aerostates, gxstates, mesh, tvec[1], azimuth0, pitch; verbose)
+    system = initial_condition!(rotor, blade, assembly, env, aerostates, gxstates, mesh, tvec, azimuth0, pitch; verbose)
 
     for i = 2:nt
-        system = take_step!(aerostates, gxstates, mesh, rotor, blade, assembly, env, system, tvec, i, pitch; verbose, speakiter, plotiter, plotbool, structural_damping, linear, g, solver)
+        system = take_step!(aerostates, gxstates, mesh, rotor, blade, assembly, env, system, tvec, i, pitch; verbose, speakiter, plotiter, plotbool, structural_damping, linear, g, solver) #Todo: I want to change take_step! to rely on t and dt... but I'm not sure how to access the data structures then... because I've condensed the data into the aerostates, gxstates and they require an integer to index. 
     end
 
     return aerostates, gxstates

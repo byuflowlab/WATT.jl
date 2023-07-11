@@ -45,7 +45,7 @@ True       Echo            - Echo input data to <RootName>.ech (flag)
 True          SumPrint        - Print summary data to "<RootName>.sum" (flag)
 1.0           SttsTime        - Amount of time between screen status messages (s)
 99999.0       ChkptTime       - Amount of time between creating checkpoint files for potential restart (s)
-0.01          DT_Out          - Time step for tabular output (s) (or "default")
+0.001         DT_Out          - Time step for tabular output (s) (or "default")
 0.0           TStart          - Time to begin tabular output (s)
 0             OutFileFmt      - Format for tabular (time-marching) output file (switch) {1: text file [<RootName>.out], 2: binary file [<RootName>.outb], 3: both}
 True          TabDelim        - Use tab delimiters in text tabular output file? (flag) {uses spaces if false}

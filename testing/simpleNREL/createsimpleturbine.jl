@@ -29,8 +29,8 @@ bddriver = of.read_bddriver("NREL5MW_bddriver.inp", ofpath)
 ### Simulation control
 tmax = 1.0
 dt = 0.001
-dt_out = 0.01 # "\"default\""
-# dt_out = dt
+# dt_out = 0.01 # "\"default\""
+dt_out = dt
 
 ### Environmental variables
 density = 1.225 #density (kg/m^3)
