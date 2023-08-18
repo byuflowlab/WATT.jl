@@ -36,6 +36,18 @@ end
 
 #TODO: It might be a good idea to make a version that is completely in place. (Pass in data storage and riso ode.)
 
+function find_inittype(vars...)
+    # println("Initialization types")
+    for item in vars
+        # println(typeof(item))
+        if isa(item, ForwardDiff.Dual)
+            return typeof(item)
+        end
+    end
+
+    return eltype(vars)
+end
+
 
 """
     initialize()
@@ -60,7 +72,11 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
     ### Initialization information
     na = length(blade.rR)
     nt = length(tvec)
-    inittype = eltype(blade.airfoils.c)
+
+
+    # inittype = eltype(blade.airfoils.c)
+    inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+    # @show typeof(blade.twist), typeof(blade.twist[1])
 
 
 
@@ -78,15 +94,18 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
     Fy = Array{inittype}(undef,(nt, na))
     Mx = Array{inittype}(undef,(nt, na))
 
-    cchistory = Vector{CCBlade.Outputs{inittype}}(undef, na) #Todo: I might be able to get rid of this and only ever keep a single 
-    xcc = zeros(11) #Maybe just making a tuple will be sufficient? 
+     
+    cchistory = Vector{CCBlade.Outputs{inittype}}(undef, na) #TODO: I might be able to get rid of this and only ever keep a single 
+    # xcc = zeros(11) #Maybe just making a tuple will be sufficient? 
+    # @show inittype
+    xcc = Vector{inittype}(undef, 11)
 
     gxhistory = Array{GXBeam.AssemblyState{inittype, Vector{GXBeam.PointState{inittype}}, Vector{GXBeam.ElementState{inittype}}}}(undef, nt)
 
 
 
     ### Initialize DS solution
-    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt)  
+    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
 
      
     
@@ -311,19 +330,20 @@ function take_step!(aerostates::AeroStates, gxstates, mesh::Mesh, rotor::Rotor, 
     update_forces!(mesh.distributed_loads, view(aerostates.fx, i-1, :), view(aerostates.fy, i-1, :), view(aerostates.mx, i-1, :), blade, assembly) 
 
     Omega = SVector(0.0, 0.0, -env.RS(t))
-    # gravity = SVector(-g*cos(aerostates.azimuth[i-1]), -g*sin(aerostates.azimuth[i-1]), 0.0) #Todo: I need to include tilt, and precone here. 
+    # gravity = SVector(-g*cos(aerostates.azimuth[i-1]), -g*sin(aerostates.azimuth[i-1]), 0.0) #TODO: I need to include tilt, and precone here. 
 
     a0 = aerostates.azimuth[i-1]
     a1 = aerostates.azimuth[i]
 
-    gravity2 = (tee) -> SVector(-g*cos((a0*(tvec[i]-tee) + a1*(tee-tvec[i-1]))/(tvec[i]-tvec[i-1])), -g*sin((a0*(tvec[i]-tee) + a1*(tee-tvec[i-1]))/(tvec[i]-tvec[i-1])), 0.0) ##Todo t = tvec[i].... So this be way wrong. Oh... this is an inline function. 
+    gravity2 = (tee) -> SVector(-g*cos((a0*(tvec[i]-tee) + a1*(tee-tvec[i-1]))/(tvec[i]-tvec[i-1])), -g*sin((a0*(tvec[i]-tee) + a1*(tee-tvec[i-1]))/(tvec[i]-tvec[i-1])), 0.0) ##Todo t = tvec[i].... So this be way wrong. Oh... this is an inline function so the solver can linearly interpolate the gravity vector across time. But... I think the time domain analysis only analyzes at the given time steps... which means that this function doesn't get called really... I dunno. 
 
     #Note: Taylor applies the gravitational load by C'*mass*C*gvec
 
     ### Solve GXBeam for time step #TODO: This function is taking a lot of time. -> I might be able to save time by branching his code and writing another function, but most of the time is spent in nlsolve. I think all of the time spent is just time solving, not really inside of Taylor's code, but of course, if I make his code faster, then I make the solve faster. 
-    system, localhistory, _ = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=mesh.prescribed_conditions, distributed_loads=mesh.distributed_loads, linear, angular_velocity = Omega, reset_state=false, initialize=false, structural_damping, gravity=gravity2) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? -> Is this really a time cost though? 
+    system, localhistory, _ = GXBeam.time_domain_analysis!(system, assembly, tvec[i-1:i]; prescribed_conditions=mesh.prescribed_conditions, distributed_loads=mesh.distributed_loads, linear, angular_velocity = Omega, reset_state=false, initial_state=gxstates[i-1], structural_damping, gravity=gravity2) #TODO: I feel like there is a faster way to accomplish this. Like, do I really need to reallocate Omega and gravity every time step? -> Is this really a time cost though? 
+     
 
-    #Todo: Can I save memory by directly allocating to the gxstates vector? -> I can probably save allocations by augmenting the time_domain_analysis!() function to already have the results allocated. 
+    #TODO: Can I save memory by directly allocating to the gxstates vector? -> I can probably save allocations by augmenting the time_domain_analysis!() function to already have the results allocated. 
 
     ### Extract GXBeam outputs
     gxstates[i] = localhistory[end] 
@@ -383,7 +403,7 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
 end
 
 
-function simulate!(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec, aerostates::AeroStates, gxstates, mesh::Mesh; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
+function simulate!(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec, aerostates::AeroStates, gxstates, mesh::Mesh; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter) #Todo: Move g to the environment struct. 
 
     nt = length(tvec)
 

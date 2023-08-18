@@ -316,13 +316,13 @@ function gxbeam_initial_conditions(env::Environment, assembly, prescribed_condit
     if flag==:steady
         @warn("Steady initialization not yet prepared, starting from no load no deflection. ")
 
-        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady=false, initialize=true, structural_damping, linear) 
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear) 
 
     elseif flag==:spinning
-        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady=true, initialize=true, structural_damping, linear)
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady_state=true, structural_damping, linear)
 
     else #No load, no deflection initialization. 
-        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady=false, initialize=true, structural_damping, linear) 
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear) 
     end
 
 

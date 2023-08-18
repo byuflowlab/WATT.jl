@@ -70,7 +70,7 @@ The blade struct... what else is there to say.
 - twist::AbstractVector{<:TF} - the twist distribution (radians). 
 - airfoils::AbstractVector{<:DynamicStallModels.Airfoil} - The vector of the airfoil structs (an airfoil for each node). 
 """
-struct Blade{TF}  
+struct Blade{TF, TF2}  
     rhub::TF
     rtip::TF
     rx::AbstractVector{<:TF} #Lead-lag direction (freestream) curve value
@@ -80,7 +80,7 @@ struct Blade{TF}
     rR::AbstractVector{<:TF}
     thetax::AbstractVector{<:TF} #Sweep angle
     thetay::AbstractVector{<:TF} #Curve angle
-    twist::AbstractVector{<:TF}
+    twist::AbstractVector{<:TF2}
     precone::TF
     airfoils::AbstractVector{<:DS.Airfoil}
 end

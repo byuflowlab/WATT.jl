@@ -1,13 +1,14 @@
 name = "Rotors"
 uuid = "3f0b5dcd-76e8-4d37-b00e-98055191506f"
 authors = ["cardoza2 <adam@cardoza.one>"]
-version = "0.1.0"
+version = "0.3.0"
 
 [deps]
 CCBlade = "e1828068-15df-11e9-03e4-ef195ea46fa4"
 CurveFit = "5a033b19-8c74-5913-a970-47c3779ef25c"
 DynamicStallModels = "1fe18b12-a608-438b-96ea-7dfa0357455b"
 FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 GXBeam = "974624c9-1acb-4ad6-a627-8ac40fc27a3e"
 ImplicitAD = "e7cbb90b-9b31-4eb2-a8c8-45099c074ee1"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"

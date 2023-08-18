@@ -1,10 +1,8 @@
 
 #Todo: Move the DSM initialization type (the current ModelInit struct) to DSM. -> I'm not sure what I meant here. I think I had an initialization type previously, probably for how I was initializing the ds model. 
-function initialize_ds_model(airfoils::AbstractVector{<:Airfoil}, nt)
+function initialize_ds_model(airfoils::AbstractVector{<:Airfoil}, nt; inittype=typeof(airfoils[1].c))
     n = length(airfoils) #Number of airfoils
     ns = DS.numberofstates_total(airfoils) #Total number of states
-
-    inittype = eltype(airfoils[1].c)
 
     states = Array{inittype, }(undef, nt, ns) 
     y = Array{inittype, 1}(undef, 4n)

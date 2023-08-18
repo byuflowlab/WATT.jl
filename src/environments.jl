@@ -134,7 +134,7 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
 end
 
 function get_aerostructural_velocities(env::Environment, aeroV, t, r, azimuth, precone, tilt, yaw, hubht)
-
+    #Todo: What is this doing? Is it needed? 
     ### Extract the aero velocities due to the environment, precone, tilt, taw, and shear. 
     vxenv, vyenv = get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
@@ -196,13 +196,14 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     # I added hubht to rgz to translate the vector to the top of the tower.
 
     #Rotate the velocity into the local frame 
-    ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone, sweep, tilt, yaw)
+    # ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone, sweep, tilt, yaw)
+    ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone-delta_theta[2], sweep, tilt, yaw) #Note: Didn't have a large effect on the solution. 
 
     
 
 
     ### Get the rotational velocities
-    rhr_x, rhr_y, rhr_z = transform_BC_HR(rbc_x, rbc_y, rbc_z, precone)
+    rhr_x, rhr_y, rhr_z = transform_BC_HR(rbc_x, rbc_y, rbc_z, precone) #TODO: I'm not sure that I need to rotate by the precone... because the deflections should move the aero nodes to there given position in the hub-rotating reference frame. 
     Omega_hr = (env.RS(t), 0, 0) #Angular velocity in hub-rotating reference frame
 
     #Convert angular velocity to linear velocity 
@@ -210,12 +211,14 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
 
 
     #Convert from the hub-rotating frame to the local airfoil frame
-    ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone)
+    # ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone)
+    ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone-delta_theta[2]) #Note: Didn't have a large effect on the solution. 
 
 
 
     ### Transform the structural velocities from the hub-rotating into the local frame
-    usx, usy, _ = transform_HR_L(Vs..., curve, sweep, precone)
+    # usx, usy, _ = transform_HR_L(Vs..., curve, sweep, precone)
+    usx, usy, _ = transform_HR_L(Vs..., curve, sweep, precone-delta_theta[2]) #Note: Didn't have a large effect on the solution. 
 
 
     ### Sum the velocities in the airfoil reference frame. 
@@ -229,7 +232,9 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
 
     ### Trying to apply change in twist
     st, ct = sincos(delta_theta[1])
+
     Vxnew = Vx*ct - Vy*st
     Vynew = -Vx*st + Vy*ct
+
     return Vxnew, Vynew
 end

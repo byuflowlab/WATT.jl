@@ -443,7 +443,7 @@ plot!(tvec, aerostates.fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
 plot!(tvec, aerostates.fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
 # plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
 display(tiploads)
-# savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_10seconds_052323.png")
+# savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_1seconds_071223.pdf")
 
 
 tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=(0.9, 0.5)) #
@@ -454,7 +454,7 @@ plot!(tvec, -tipdef_z, lab=L"\delta x")
 plot!(tvec, tipdef_y, lab=L"\delta y")
 plot!(tvec, tipdef_x, lab=L"\delta z")
 display(tipdefs2)
-# savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_gravity_shear_10seconds_052323.png")
+# savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_gravity_shear_1seconds_071223.pdf")
 
 using Statistics
 
@@ -468,9 +468,9 @@ meantipdeferr = mean(tipdeferr)
 
 nodeidx = 300
 
-alphaplt = plot(xaxis="Time (s)", yaxis="Angle of Attack (deg)")
-plot!(tvec, aerostates.alpha[:,nodeidx].*(180/pi), lab="R")
-plot!(tvec, outs["AB1N$nodeidx"*"Alpha"], lab="OF")
+# alphaplt = plot(xaxis="Time (s)", yaxis="Angle of Attack (deg)")
+# plot!(tvec, aerostates.alpha[:,nodeidx].*(180/pi), lab="R")
+# plot!(tvec, outs["AB1N$nodeidx"*"Alpha"], lab="OF")
 # plot!(tvec[2:end], iouts["alpha"].*(180/pi), lab="AD")
 # display(alphaplt)
 
@@ -478,9 +478,9 @@ plot!(tvec, outs["AB1N$nodeidx"*"Alpha"], lab="OF")
 Wof = @. sqrt(outs["AB1N$nodeidx"*"Vx"]^2 + outs["AB1N$nodeidx"*"Vy"]^2)
 
 
-Uplt = plot(xaxis = "Time (s)", yaxis="Inflow Velocity (m/s)")
-plot!(tvec, aerostates.W[:,nodeidx], lab="R")
-plot!(tvec, Wof, lab="OF")
+# Uplt = plot(xaxis = "Time (s)", yaxis="Inflow Velocity (m/s)")
+# plot!(tvec, aerostates.W[:,nodeidx], lab="R")
+# plot!(tvec, Wof, lab="OF")
 # plot!(tvec[2:end], iouts["U"], lab="AD")
 # display(Uplt)
 
@@ -512,6 +512,7 @@ phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)", leg=:topleft)
 plot!(tvec, aerostates.phi[:,nodeidx].*(180/pi), lab="R")
 plot!(tvec, outs["AB1N$nodeidx"*"Phi"], lab="AD")
 display(phiplt)
+# savefig(phiplt, "simpleNREL_inflow_angle_1sec_7.12.23.pdf")
 
 # twist = @. (aerostates.phi[:,nodeidx] + -aerostates.alpha[:,nodeidx])*180/pi
 # twistof = @. outs["AB1N$nodeidx"*"Phi"] + -outs["AB1N$nodeidx"*"Alpha"]
@@ -533,6 +534,7 @@ plot!(tvec, tiptheta_xof.*(180/pi), lab="OF - x", linestyle=:dash)
 plot!(tvec, tiptheta_yof.*(180/pi), lab="OF - y", linestyle=:dash)
 plot!(tvec, tiptheta_zof.*(180/pi), lab="OF - z", linestyle=:dash)
 display(thetaplt)
+# savefig(thetaplt, "simpleNREL_angular_def_1s_7.12.23.pdf")
 
 # aziplt = plot(tvec, azimuth, lab="AeroDyn", xaxis="Time (s)", yaxis="Azimuthal angle (deg)", leg=:top)
 # plot!(tvec, aerostates.azimuth.*(180/pi), lab="Rotors")
@@ -561,7 +563,7 @@ plot!(tvec, Mx_of, lab="OF")
 plot!(tvec, Mx_r, lab="R")
 # plot!(tvec, Mx_r_smooth, lab="smooth")
 display(Mplt)
-# savefig(Mplt, "/Users/adamcardoza/Desktop/SimpleNRELrootbendingmoment_varyingairfoils_chords_twists_gravity_shear_10seconds_052423.png")
+# savefig(Mplt, "/Users/adamcardoza/Desktop/SimpleNRELrootbendingmoment_varyingairfoils_chords_twists_gravity_shear_1seconds_071223.pdf")
 
 # Mxerr = @. 100*(Mx_r-Mx_of)/Mx_of
 
