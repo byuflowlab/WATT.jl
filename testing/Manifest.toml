@@ -2,7 +2,7 @@
 
 julia_version = "1.8.2"
 manifest_format = "2.0"
-project_hash = "564ba87c48cdd9c8c2c2f9be494d2f3ad7915deb"
+project_hash = "63cf1ba074c0e1bffcda395af89212f461df06ea"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f5c25e8a5b29b5e941b7408bc8cc79fea4d9ef9a"
@@ -398,6 +398,12 @@ path = "/Users/adamcardoza/.julia/dev/ImplicitAD"
 uuid = "e7cbb90b-9b31-4eb2-a8c8-45099c074ee1"
 version = "0.3.1"
 
+[[deps.Infiltrator]]
+deps = ["InteractiveUtils", "Markdown", "REPL", "UUIDs"]
+git-tree-sha1 = "04de041e4590428cccbb026d86e5d670513be2e3"
+uuid = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
+version = "1.6.4"
+
 [[deps.Inflate]]
 git-tree-sha1 = "5cd07aab533df5170988219191dfad0519391428"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
@@ -696,11 +702,11 @@ deps = ["Artifacts", "CompilerSupportLibraries_jll", "Libdl"]
 uuid = "4536629a-c528-5b80-bd46-f80d51c5b363"
 version = "0.3.20+0"
 
-[[deps.OpenFASTsr]]
+[[deps.OpenFASTTools]]
 deps = ["DelimitedFiles", "DynamicStallModels", "FLOWMath", "GXBeam", "LinearAlgebra", "Printf", "StaticArrays"]
-path = "/Users/adamcardoza/.julia/dev/OpenFASTsr"
+path = "/Users/adamcardoza/.julia/dev/OpenFASTTools"
 uuid = "45c743d6-1a1e-4fb4-aa78-18ed941dcf18"
-version = "0.3.0"
+version = "1.0.0"
 
 [[deps.OpenLibm_jll]]
 deps = ["Artifacts", "Libdl"]
@@ -871,7 +877,7 @@ uuid = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 version = "2.0.19"
 
 [[deps.Rotors]]
-deps = ["CCBlade", "CurveFit", "DynamicStallModels", "FLOWMath", "ForwardDiff", "GXBeam", "ImplicitAD", "LinearAlgebra", "NLsolve", "Plots", "StaticArrays"]
+deps = ["CCBlade", "CurveFit", "DynamicStallModels", "FLOWMath", "ForwardDiff", "GXBeam", "ImplicitAD", "Infiltrator", "LinearAlgebra", "NLsolve", "Plots", "StaticArrays"]
 path = "/Users/adamcardoza/.julia/dev/Rotors"
 uuid = "3f0b5dcd-76e8-4d37-b00e-98055191506f"
 version = "0.3.0"

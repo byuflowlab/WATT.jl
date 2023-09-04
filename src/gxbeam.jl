@@ -14,8 +14,9 @@ function WMPtoangle(c)
 end
 
 function get_bladelength_vector(assembly::GXBeam.Assembly)
+    inittype = eltype(assembly)
     ns = length(assembly.points)
-    rgx = zeros(ns)
+    rgx = zeros(inittype, ns)
     rgx[1] = norm(assembly.points[1])
     for i = 2:ns
         delr = assembly.points[i] - assembly.points[i-1]
@@ -308,21 +309,29 @@ function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
 
 end
 
-function gxbeam_initial_conditions(env::Environment, assembly, prescribed_conditions, distributed_loads, t0, azimuth0, g, structural_damping, linear, flag)
+function gxbeam_initial_conditions(env::Environment, assembly, prescribed_conditions, distributed_loads, t0, azimuth0, g, structural_damping, linear, flag, pfunc, p)
 
     Omega0 = SVector(0.0, 0.0, -env.RS(t0))
     gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0)
 
+    # @show typeof(Omega0) #None of these are duals. 
+    # @show typeof(gravity0)
+    # @show eltype(prescribed_conditions)
+    # @show eltype(assembly)
+    # @show typeof(t0)
+
     if flag==:steady
         @warn("Steady initialization not yet prepared, starting from no load no deflection. ")
 
-        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear) 
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false) 
 
     elseif flag==:spinning
-        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady_state=true, structural_damping, linear)
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady_state=true, structural_damping, linear, pfunc, p, show_trace=false)
 
     else #No load, no deflection initialization. 
-        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear) 
+        # @infiltrate
+        # error("break here. ")
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false) 
     end
 
 
@@ -343,13 +352,12 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.L
         # r2 = assembly.points[ielem+1][1]
         r1 = norm(assembly.points[ielem])
         r2 = norm(assembly.points[ielem+1])
-        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
+        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
         # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
         #Todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
     end
 
 end
-
 
 
 function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Environment, assembly::GXBeam.Assembly; verbose::Bool=false, speakiter=100, structural_damping::Bool=true, linear::Bool=false, g=9.81)

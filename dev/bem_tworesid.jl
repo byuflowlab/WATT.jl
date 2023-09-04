@@ -70,4 +70,3 @@ function bemresiduals()
 
 
 end
-

@@ -1,6 +1,8 @@
 module Rotors
 
-using FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, CurveFit, NLsolve, DynamicStallModels, ImplicitAD, ForwardDiff
+using FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, CurveFit, NLsolve, DynamicStallModels
+using ImplicitAD, ForwardDiff, ReverseDiff
+using Infiltrator
 using Plots
 #Todo: Why do I have plots as a dependency? -> So I can plot mid simulation. I wonder if there is a way to pass plots in or something. 
 #Todo: Why do I have NLsolve as a dependency? -> I think for the BDF solvers... but I don't know if I need that. 

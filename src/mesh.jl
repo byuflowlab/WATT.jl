@@ -63,9 +63,9 @@ end
 
 A struct to quickly interpolate from one mesh to another. . 
 """
-struct InterpolationPoint 
+struct InterpolationPoint{TF}
     pair::Tuple{Int64, Int64}
-    percent::Float64
+    percent::TF
 end
 
 #=
