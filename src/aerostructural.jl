@@ -78,9 +78,9 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
 
     # inittype = eltype(blade.airfoils.c)
     inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
-    @show typeof(blade.airfoils[1].c)
-    @show typeof(blade.twist[1])
-    @show inittype
+    # @show typeof(blade.airfoils[1].c)
+    # @show typeof(blade.twist[1])
+    # @show inittype
     # @show typeof(blade.twist), typeof(blade.twist[1])
 
 
@@ -172,7 +172,7 @@ function initial_condition!(rotor::Rotor, blade::Blade, assembly::GXBeam.Assembl
     for j = 1:na
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth0)
 
-        mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
+        mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) #TODO: This shouldn't have an exclamation point in the name because it doesn't actually appear to be inplace. And it returns a struct, not a vector, so it's not an allocation... Or shouldn't be. 
 
         update_aerostates!(aerostates, mesh, 1, j)
     end
