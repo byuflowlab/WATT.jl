@@ -20,11 +20,16 @@ function dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade::Blade, env::Environment,
     end
 end
 
-function update_aerostates!(aerostates::AeroStates, mesh::Mesh, i, j)
+function update_aerostates!(aerostates::AeroStates, ccout, i, j)
 
-    aerostates.phi[i,j] = mesh.cchistory[j].phi
-    aerostates.alpha[i,j] = mesh.cchistory[j].alpha
-    aerostates.W[i,j] = mesh.cchistory[j].W
+    # aerostates.phi[i,j] = mesh.cchistory[j].phi
+    # aerostates.alpha[i,j] = mesh.cchistory[j].alpha
+    # aerostates.W[i,j] = mesh.cchistory[j].W
+
+    aerostates.phi[i,j] = ccout.phi
+    aerostates.alpha[i,j] = ccout.alpha
+    aerostates.W[i,j] = ccout.W
+    
 end
 
 """

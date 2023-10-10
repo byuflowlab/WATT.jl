@@ -1,12 +1,12 @@
 using Revise
-using OpenFASTsr, DelimitedFiles, GXBeam, Rotors, LinearAlgebra, DynamicStallModels
+using OpenFASTTools, DelimitedFiles, GXBeam, Rotors, LinearAlgebra, DynamicStallModels
 using YAML
 # using Infiltrator
 using StaticArrays
 # using Plots
 
 DS = DynamicStallModels
-of = OpenFASTsr
+of = OpenFASTTools
 
 localpath = @__DIR__
 cd(localpath)
@@ -344,6 +344,8 @@ if runflag
     runflag = false 
 end
 
+as2, gs2 = Rotors.simulate2(rotor_r, blade, env, assembly, tvec)
+
 
 
  
@@ -547,6 +549,7 @@ display(thetaplt)
 
 Mx_of = zeros(nt)
 Mx_r = zeros(nt)
+
 
 for i = 1:nt
     Mx_of[i] = of.root_bending_moment(rvec, fxmat[i,:])

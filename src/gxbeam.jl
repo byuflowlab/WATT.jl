@@ -25,6 +25,12 @@ function get_bladelength_vector(assembly::GXBeam.Assembly)
     return rgx
 end
 
+
+"""
+    update_assembly(assembly; compliance=nothing, stiffness=nothing)
+
+Create a new assembly based on a previous assembly with new compliance or stiffness. 
+"""
 function update_assembly(assembly; compliance=nothing, stiffness=nothing)
 
     points = assembly.points
@@ -35,13 +41,13 @@ function update_assembly(assembly; compliance=nothing, stiffness=nothing)
     ### Update Elements
     if !isnothing(compliance) || !isnothing(stiffness)
         if !isnothing(stiffness)
-            if isa(stiffness, Vector)
+            if isa(stiffness, Vector) #Todo: This doesn't allow for unique replacement of the compliance matrix. (As stands this just gives a stiffness to an entire matrix... yeah? Unless... it's a vector of matrices... which might work as coded.)
                 if length(stiffness) != length(assembly.elements)
                     error("The number of elements in the stiffness vector does not match the number of elements in the assembly.")
                 end
                 compliance = [SMatrix{6,6}(inv(stiffness[i])) for i = eachindex(assembly.elements)]
             else
-                compliance = [inv(stiffness) for i = eachindex(assembly.elements)]
+                compliance = [inv(stiffness) for _ in eachindex(assembly.elements)]
             end
         else
             if isa(compliance, Vector)
@@ -154,6 +160,12 @@ function interpolate_matrix_symmetric(f1, f2, Kmat; fit=Linear)
     return Kfit
 end
 
+
+"""
+    pane_assembly(assembly; ne=nothing, verbose=false, fit=Linear)
+
+Create a new assembly based on an old one with a new number of elements. 
+"""
 function pane_assembly(assembly; ne=nothing, verbose::Bool=false, fit=Linear)
     if isnothing(ne)
         return assembly
@@ -222,7 +234,7 @@ function pane_assembly(assembly; ne=nothing, verbose::Bool=false, fit=Linear)
 
     sevec_new = [elvec_new[i]/L for i in 1:ne]
 
-    return sevec_new
+    return sevec_new #Todo: Shouldn't this return a new assembly? Where is this used? 
 end
 
 function plotpoints(points; xdim = true, ydim = true, zdim=true)
@@ -336,6 +348,39 @@ function gxbeam_initial_conditions(env::Environment, assembly, prescribed_condit
 
 
     gxstate = history0[end]
+    return gxstate, system
+end
+
+function gxbeam_initial_conditions!(env::Environment, system, assembly, prescribed_conditions, distributed_loads, t0, azimuth0, g, structural_damping, linear, flag, pfunc, p)
+
+    Omega0 = SVector(0.0, 0.0, -env.RS(t0))
+    gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0)
+
+    # @show typeof(Omega0) #None of these are duals. 
+    # @show typeof(gravity0)
+    # @show eltype(prescribed_conditions)
+    # @show eltype(assembly)
+    # @show typeof(t0)
+
+    if flag==:steady
+        @warn("Steady initialization not yet prepared, starting from no load no deflection. ")
+
+        # system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false) 
+        system, gxstate, converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
+
+    elseif flag==:spinning
+        # system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady_state=true, structural_damping, linear, pfunc, p, show_trace=false)
+        system, gxstate, converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=true, structural_damping, linear, pfunc, p, show_trace=false)
+
+    else #No load, no deflection initialization. 
+        # @infiltrate
+        # error("break here. ")
+        # system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false) 
+        system, gxstate, converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
+    end
+
+
+    # gxstate = history0[end]
     return gxstate, system
 end
 

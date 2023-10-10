@@ -156,31 +156,75 @@ end
 
 
 
-struct AeroStates
-    azimuth
-    phi     #Inflow angle
-    alpha   #Angle of attack
-    W       #Inflow velocity
-    cx
-    cy
-    cm
-    fx
-    fy
-    mx
-    xds #Todo: I might be able to get rid of this. Do I really need the intermediate dynamic stall states? That would cut down my allocations by alot. 
+struct AeroStates{TF1, TF2, TA} #Todo: Parametric typing
+    azimuth::TF1 #Float
+    phi::TF2 #These are arrays of floats, all the same size     #Inflow angle
+    alpha::TF2   #Angle of attack
+    W::TF2       #Inflow velocity
+    cx::TF2
+    cy::TF2
+    cm::TF2
+    fx::TF2 #Todo: I should get rid of either the loads or the coefficients. I don't think that I need to store both... I think that I can have a function to fetch on based on the other. 
+    fy::TF2
+    mx::TF2
+    xds::TA #This is an array of floats, but different size than the rest. #Todo: I might be able to get rid of this. Do I really need the intermediate dynamic stall states? That would cut down my allocations by alot.  
+end
+
+function get_aerostate(aerostates::AeroStates, i)
+    nt = length(aerostates.azimuth) #Get the total number of time steps
+
+    #check and see if the requested aerostate is in the vectors. 
+    if i>nt
+        error("get_aerostates(): There aren't that many time steps.")
+    end
+
+    azimuth = aerostates.azimuth[i]
+    phi = aerostates.phi[i,:]
+    alpha = aerostates.alpha[i,:]
+    W = aerostates.W[i,:]
+    cx = aerostates.cx[i,:]
+    cy = aerostates.cy[i,:]
+    cm = aerostates.cm[i,:]
+    fx = aerostates.fx[i,:]
+    fy = aerostates.fy[i,:]
+    mx = aerostates.mx[i,:]
+    xds = aerostates.xds[i,:]
+
+    return azimuth, phi, alpha, W, cx, cy, cm, fx, fy, mx, xds
 end
 
 
-struct Mesh
-    interpolationpoints
-    prescribed_conditions
-    distributed_loads
-    delta 
-    def_theta
-    aerov
-    cchistory
-    xcc
-    xds_idxs
-    p_ds
+
+"""
+    Mesh(interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, p_ds, 
+            system, prescribed_conditions, distributed_loads, paug, constants)
+
+**Fields**
+- interpolationpoints::Vector{InterpolationPoint}
+- delta::Vector{StaticArray(Float64, Float64, Float64)} - The linear structural deflection interpolated to the aerodynamic nodes.
+- def_theta::Vector{StaticArray(Float64, Float64, Float64)} - The angular structural deflection interpolated to the aerodynamic nodes.
+- aerov::Vector{StaticArray(Float64, Float64, Float64)} - The structural linear velocities interpolated to the aerodynamic nodes. 
+- xxc::Vector{Float64} - 
+- xds_idxs
+- p_ds
+- system
+- distributed_loads
+- paug
+- constants::NamedTuple 
+"""
+struct Mesh{TIP, TPC, TDL, TSA, TAF, TAF2, TAI, TT, TS}
+    interpolationpoints::TIP
+    delta::TSA #The structural deflection at the aerodynamics nodes. 
+    def_theta::TSA
+    aerov::TSA
+    xcc::TAF
+    xds_idxs::TAI
+    p_ds::TAF
+    #GXBeam memory
+    system::TS
+    prescribed_conditions::TPC
+    distributed_loads::TDL
+    paug::TAF2 #Todo: I'm not sure if I need this liek this yet. 
+    constants::TT #NamedTuple holding all of the GXBeam constants.
 end
 
