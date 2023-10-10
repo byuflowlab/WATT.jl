@@ -344,8 +344,6 @@ if runflag
     runflag = false 
 end
 
-as2, gs2 = Rotors.simulate2(rotor_r, blade, env, assembly, tvec)
-
 
 
  

@@ -33,6 +33,57 @@ function update_aerostates!(aerostates::AeroStates, ccout, i, j)
 end
 
 """
+    take_aero_step!()
+
+Take an in-place step of the aerodynamic models. 
+
+"""
+function take_aero_step!(aerostates::AeroStates, mesh::Mesh, rotor::Rotor, blade::Blade, env::Environment, tvec, i, pitch; solver::Solver=RK4(), pfunc = (p,t) -> (;), prepp=nothing, p=nothing)
+    na = length(blade.r)
+
+    t = tvec[i]
+    dt = tvec[i] - tvec[i-1]
+    
+    
+    if dt<0
+        error("Time step is negative")
+    end
+
+    #update azimuthal position
+    aerostates.azimuth[i] = env.RS(t)*dt + aerostates.azimuth[i-1] #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
+
+    if aerostates.azimuth[i]<aerostates.azimuth[i-1]
+        @warn("Blade moved backwards")
+    end
+
+    ### Update BEM inputs and solve
+    for j = 1:na
+        ### Update base inflow velocities
+        Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, aerostates.azimuth[i], mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
+        
+        #TODO: Write a solver that is initialized with the previous inflow angle.
+        # mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
+        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
+
+        update_aerostates!(aerostates, ccout, i, j)
+        # update_aerostates!(aerostates, mesh, i, j)
+    end
+    
+    ### Update Dynamic Stall model inputs 
+    update_ds_inputs!(blade.airfoils, view(mesh.p_ds, :), view(aerostates.W, i, :), view(aerostates.phi, i, :), blade.twist, pitch, dt, rotor.turbine)
+    
+    ### Integrate Dynamic Stall model
+    update_ds_states!(solver, blade.airfoils, view(aerostates.xds, i-1, :), view(aerostates.xds, i, :), mesh.xds_idxs, mesh.p_ds, t, dt)
+
+    ### Extract loads 
+    extract_ds_loads!(blade.airfoils, view(aerostates.xds, i, :), mesh.xds_idxs, view(aerostates.phi, i, :), mesh.p_ds, view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :))
+ 
+    
+    dimensionalize!(view(aerostates.fx, i, :), view(aerostates.fy, i, :), view(aerostates.mx, i, :), view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :), blade::Blade, env::Environment, view(aerostates.W, i, :))
+    #These loads do not need to be rotated because they will be applied in the deflected frame (a follower load). This should also be true for things like precone, tilt, and yaw if they are defined correctly in GXBeam. 
+end
+
+"""
     simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
 
 Simulate the rotor's response for a given rotor and environmental condition. 
@@ -46,8 +97,6 @@ Simulate the rotor's response for a given rotor and environmental condition.
 
 ### Notes
 """
-# function simulate(rvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, tipcorrection=CCBlade.PrandtlTipHub(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
-
 function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
      pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter=100,
      azimuth0=0.0)

@@ -50,6 +50,8 @@ function solve_BEM(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, pi
 end
 
 function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts::Int=10)
+#TODO: This shouldn't have an exclamation point in the name because it doesn't actually appear to be inplace. And it returns a struct, not a vector, so it's not an allocation... Or shouldn't be. 
+
 
     airfoil = blade.airfoils[idx]
     rR = blade.rR[idx]

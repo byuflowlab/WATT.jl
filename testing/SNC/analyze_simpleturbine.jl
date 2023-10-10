@@ -133,11 +133,11 @@ if runflag
     runflag = false 
 end
 
-# println("Running simulate2")
-# as2, gs2 = Rotors.simulate2(rotor_r, blade, env, assembly, tvec)
 
 tipdef_x = [gxstates[i].points[end].u[1] for i in eachindex(tvec)]
 
 @show tipdef_x
+
+#[0.0, 3.9924964120256665e-5, 0.00015876402804123688, 0.0003542923417708522, 0.0006238931195408572, 0.0009641344237213083, 0.0013719055459919265, 0.001843945046587685, 0.002376257741316404, 0.0029647096623815136, 0.0036052055288560625]
 
 nothing
