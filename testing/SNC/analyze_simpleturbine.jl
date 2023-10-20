@@ -111,13 +111,13 @@ if !@isdefined(defflag)
     defflag = true
 end
 
-tvec = [0.000, 0.001]
+# tvec = [0.000, 0.001]
 tvec = 0:0.001:0.01
 
 # if defflag
-    println("Initialization function")
-    aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose=true)
-    defflag = false
+# println("initialize...")
+aerostates, gxstates, gxhistory, mesh = initialize(blade, assembly, tvec; verbose=true)
+    # defflag = false
 # end
 
 if !@isdefined(runflag)
@@ -127,14 +127,13 @@ end
 
 runflag = true
 if runflag
-    println("Ran simulate!()")
-    aerostates, gxstates = simulate!(rotor_r, blade, env, assembly, tvec, aerostates, gxstates, mesh; verbose=true)
+    aerostates, gxstates, gxhistory = simulate!(rotor_r, env, tvec, aerostates, gxstates, gxhistory, mesh; verbose=true)
 
     runflag = false 
 end
 
 
-tipdef_x = [gxstates[i].points[end].u[1] for i in eachindex(tvec)]
+tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec)]
 
 @show tipdef_x
 

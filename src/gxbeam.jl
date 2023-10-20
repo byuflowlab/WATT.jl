@@ -495,7 +495,7 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
             println("")
             println("Simulation time: ", t)
             # @show Vxvec[end], Vyvec[end] 
-            # @show aeroV[end]
+            # @show aerov[end]
             # @show azimuth[i], localhistory[end].elements[end].V
             # @show maximum(N[i,:]), maximum(T[i,:])
         end

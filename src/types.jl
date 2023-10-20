@@ -195,36 +195,41 @@ end
 
 
 
-"""
-    Mesh(interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, p_ds, 
-            system, prescribed_conditions, distributed_loads, paug, constants)
+# """
+#     Mesh(interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, p_ds, 
+#             system, prescribed_conditions, distributed_loads, paug, constants)
 
-**Fields**
-- interpolationpoints::Vector{InterpolationPoint}
-- delta::Vector{StaticArray(Float64, Float64, Float64)} - The linear structural deflection interpolated to the aerodynamic nodes.
-- def_theta::Vector{StaticArray(Float64, Float64, Float64)} - The angular structural deflection interpolated to the aerodynamic nodes.
-- aerov::Vector{StaticArray(Float64, Float64, Float64)} - The structural linear velocities interpolated to the aerodynamic nodes. 
-- xxc::Vector{Float64} - 
-- xds_idxs
-- p_ds
-- system
-- distributed_loads
-- paug
-- constants::NamedTuple 
-"""
-struct Mesh{TIP, TPC, TDL, TSA, TAF, TAF2, TAI, TT, TS}
-    interpolationpoints::TIP
-    delta::TSA #The structural deflection at the aerodynamics nodes. 
-    def_theta::TSA
-    aerov::TSA
-    xcc::TAF
-    xds_idxs::TAI
-    p_ds::TAF
-    #GXBeam memory
-    system::TS
-    prescribed_conditions::TPC
-    distributed_loads::TDL
-    paug::TAF2 #Todo: I'm not sure if I need this liek this yet. 
-    constants::TT #NamedTuple holding all of the GXBeam constants.
-end
+# **Fields**
+# - interpolationpoints::Vector{InterpolationPoint}
+# - delta::Vector{StaticArray(Float64, Float64, Float64)} - The linear structural deflection interpolated to the aerodynamic nodes.
+# - def_theta::Vector{StaticArray(Float64, Float64, Float64)} - The angular structural deflection interpolated to the aerodynamic nodes.
+# - aerov::Vector{StaticArray(Float64, Float64, Float64)} - The structural linear velocities interpolated to the aerodynamic nodes. 
+# - xxc::Vector{Float64} - 
+# - xds_idxs
+# - p_ds
+# - system
+# - distributed_loads
+# - paug
+# - constants::NamedTuple 
+# """
+# struct Mesh{TIP, TSA, TAF, TAF2, TAI, TT, TS}
+#     interpolationpoints::TIP
+#     delta::TSA #The structural deflection at the aerodynamics nodes. 
+#     def_theta::TSA
+#     aerov::TSA
+#     xcc::TAF
+#     xds_idxs::TAI
+#     p_ds::TAF
+#     #GXBeam memory
+#     assembly::TASS
+#     system::TS
+#     pcond::TPC #prescribed_condtions
+#     dload::TDL #distributed_loads
+#     lv::TLV #linear_velocity
+#     av::TAV #angular_velocity
+#     xpfunc::TXP
+#     pfunc::TP
+#     td::Bool
+#     sd::Bool
+# end
 

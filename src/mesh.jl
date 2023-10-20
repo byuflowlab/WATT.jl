@@ -196,7 +196,7 @@ function convert_velocities(blade::Blade, env::Environment, assembly, state, int
     return (usx, usy-ury, usz-urz)
 end
 
-function update_mesh!(blade::Blade, mesh::Mesh, assembly::GXBeam.Assembly, gxstate, env::Environment, t, na)
+function update_mesh!(blade::Blade, mesh, assembly::GXBeam.Assembly, gxstate, env::Environment, t, na)
 
     for j = 1:na
         mesh.delta[j] = interpolate_deflection(mesh.interpolationpoints[j], assembly, gxstate)

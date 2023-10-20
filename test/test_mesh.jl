@@ -216,7 +216,7 @@ cd(localpath)
         delta = [Rotors.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
         dtheta = [Rotors.interpolate_angle(ips[i], assembly, state) for i in 1:na]
         V = [Rotors.interpolate_velocity(ips[i], assembly, state) for i in 1:na]
-        aeroV = [norm(Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i)) for i in 1:na]
+        aerov = [norm(Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i)) for i in 1:na]
 
 
         theta_root = Rotors.WMPtoangle(state.points[1].theta)
@@ -253,7 +253,7 @@ cd(localpath)
         
 
         ## All point checks
-        @test !any(i->i<0, aeroV[2:end])
+        @test !any(i->i<0, aerov[2:end])
 
 
 
@@ -267,12 +267,12 @@ cd(localpath)
             steady=true) 
 
         state = history[end]
-        aeroV = [Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i) for i in 1:na]
+        aerov = [Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i) for i in 1:na]
 
 
         steadyflag = true
         for i in 1:na
-            if any(i->!isapprox(i, 0.0, atol=1e-12), aeroV[i])
+            if any(i->!isapprox(i, 0.0, atol=1e-12), aerov[i])
                 steadyflag = false
             end
         end

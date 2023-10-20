@@ -136,11 +136,11 @@ function fixedpoint(rvec, chordvec, twistvec, pitch, rhub, rtip, assembly::GXBea
 
 
     interpolationpoints = create_interpolationpoints(assembly, rvec) #Create points to interpolate the velocities from
-    aeroV = [interpolate_velocity(interpolationpoints[j], assembly, state) for j = 1:na] #Interpolate the velocities from the elements to the aerodynamic nodes
+    aerov = [interpolate_velocity(interpolationpoints[j], assembly, state) for j = 1:na] #Interpolate the velocities from the elements to the aerodynamic nodes
     aero_thetax =  [interpolate_angle(interpolationpoints[j], assembly, state) for j=1:na]
 
-    Vx = [env.Vinf(t) + aeroV[iaero][3] for iaero = 1:na]  
-    Vy = [-aeroV[iaero][2] for iaero = 1:na]
+    Vx = [env.Vinf(t) + aerov[iaero][3] for iaero = 1:na]  
+    Vy = [-aerov[iaero][2] for iaero = 1:na]
 
 
     ### Store old solution 
@@ -224,10 +224,10 @@ function fixedpoint(rvec, chordvec, twistvec, pitch, rhub, rtip, assembly::GXBea
 
         ## Update the velocities
         for iaero = 1:na
-            aeroV[iaero] = interpolate_velocity(interpolationpoints[iaero], assembly, history[1])
+            aerov[iaero] = interpolate_velocity(interpolationpoints[iaero], assembly, history[1])
             aero_thetax[iaero] =  interpolate_angle(interpolationpoints[iaero], assembly, history[1])
-            Vx[iaero] = env.Vinf(t) + aeroV[iaero][3] #Freestream velocity  
-            Vy[iaero] = -aeroV[iaero][2]
+            Vx[iaero] = env.Vinf(t) + aerov[iaero][3] #Freestream velocity  
+            Vy[iaero] = -aerov[iaero][2]
         end
 
 

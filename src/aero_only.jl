@@ -38,7 +38,7 @@ end
 Take an in-place step of the aerodynamic models. 
 
 """
-function take_aero_step!(aerostates::AeroStates, mesh::Mesh, rotor::Rotor, blade::Blade, env::Environment, tvec, i, pitch; solver::Solver=RK4(), pfunc = (p,t) -> (;), prepp=nothing, p=nothing)
+function take_aero_step!(aerostates::AeroStates, mesh, rotor::Rotor, blade::Blade, env::Environment, tvec, i, pitch; solver::Solver=RK4(), pfunc = (p,t) -> (;), prepp=nothing, p=nothing)
     na = length(blade.r)
 
     t = tvec[i]

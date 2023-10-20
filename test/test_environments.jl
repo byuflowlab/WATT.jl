@@ -609,19 +609,19 @@ cd(localpath)
         na = length(blade.airfoils)
 
         delta = [Rotors.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
-        aeroV = [Rotors.convert_velocities(blade, env, assembly, state, ips, t, i) for i in 1:na]
+        aerov = [Rotors.convert_velocities(blade, env, assembly, state, ips, t, i) for i in 1:na]
 
         # @show state.points[1].u
         # @show state.points[1].V
         # @show env.RS(0)
         # @show env.RS(t)
-        # @show aeroV[1]
+        # @show aerov[1]
 
         Vxvec = zeros(na)
         Vyvec = zeros(na)
 
         for i = 1:na
-            Vxvec[i], Vyvec[i] = Rotors.get_aerostructural_velocities(rotor, blade, env, t, i, azimuth, delta[i], aeroV[i])
+            Vxvec[i], Vyvec[i] = Rotors.get_aerostructural_velocities(rotor, blade, env, t, i, azimuth, delta[i], aerov[i])
         end
 
         # @show blade.r

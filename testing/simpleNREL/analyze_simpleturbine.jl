@@ -327,8 +327,10 @@ if !@isdefined(defflag)
     defflag = true
 end
 
+defflag = false
 if defflag
-    aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose=true)
+    println("initialize...")
+    aerostates, gxstates, gxhistory, mesh = initialize(blade, assembly, tvec; verbose=true)
     defflag = false
 end
 
@@ -337,20 +339,19 @@ if !@isdefined(runflag)
 end
 
 
-# runflag = true
-if runflag
-    aerostates, gxstates = simulate!(rotor_r, blade, env, assembly, tvec, aerostates, gxstates, mesh; verbose=true)
+runflag = false
+if runflag #Ran up to 801
+    aerostates, gxstates, gxhistory = simulate!(rotor_r, env, tvec, aerostates, gxstates, gxhistory, mesh; verbose=true)
 
     runflag = false 
 end
 
 
-
  
 #Tip deflections
-tipdef_x = [gxstates[i].points[end].u[1] for i in eachindex(tvec)]
-tipdef_y = [gxstates[i].points[end].u[2] for i in eachindex(tvec)]
-tipdef_z = [gxstates[i].points[end].u[3] for i in eachindex(tvec)]
+tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec[1:801])]
+tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec[1:801])]
+tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec[1:801])]
 
 tiptheta_x = zeros(nt)
 tiptheta_y = zeros(nt)
@@ -360,8 +361,8 @@ tiptheta_xof = zeros(nt)
 tiptheta_yof = zeros(nt)
 tiptheta_zof = zeros(nt)
 
-for i = 1:nt
-    theta = Rotors.WMPtoangle(gxstates[i].points[end].theta)
+for i = 1:801 #nt
+    theta = Rotors.WMPtoangle(gxhistory[i].points[end].theta)
     tiptheta_x[i] = theta[1]
     tiptheta_y[i] = theta[2]
     tiptheta_z[i] = theta[3]
@@ -379,18 +380,18 @@ defx_gx = zeros(nt, nr)
 defy_gx = zeros(nt, nr)
 defz_gx = zeros(nt, nr)
 
-for i in eachindex(tvec)
+for i in eachindex(tvec[1:801])
     for j in eachindex(rvec)
-        defx_gx[i,j] = gxstates[i].points[j].u[1]
-        defy_gx[i,j] = gxstates[i].points[j].u[2]
-        defz_gx[i,j] = gxstates[i].points[j].u[3]
+        defx_gx[i,j] = gxhistory[i].points[j].u[1]
+        defy_gx[i,j] = gxhistory[i].points[j].u[2]
+        defz_gx[i,j] = gxhistory[i].points[j].u[3]
     end
 end
 
 
-# Vx1 = [gxstates[1].points[i].V[1] for i in eachindex(assembly.points)]
-# Vy1 = [gxstates[1].points[i].V[2] for i in eachindex(assembly.points)]
-# Vz1 = [gxstates[1].points[i].V[3] for i in eachindex(assembly.points)]
+# Vx1 = [gxhistory[1].points[i].V[1] for i in eachindex(assembly.points)]
+# Vy1 = [gxhistory[1].points[i].V[2] for i in eachindex(assembly.points)]
+# Vz1 = [gxhistory[1].points[i].V[3] for i in eachindex(assembly.points)]
 
 
 # Uxhist = zeros(50001, n)
@@ -439,166 +440,166 @@ tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=(0.9, 0.3))
 plot!(tvec, fxmat[:,end], lab=L"$F_x$ - OF", seriescolor=:blue)
 plot!(tvec, -fymat[:,end], lab=L"$F_y$ - OF", seriescolor=:red)
 # plot!(tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
-plot!(tvec, aerostates.fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
-plot!(tvec, aerostates.fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
+plot!(tvec[1:801], aerostates.fx[1:801,end], lab=L"$F_x$ - R", linestyle=:dash)
+plot!(tvec[1:801], aerostates.fy[1:801,end], lab=L"$F_y$ - R", linestyle=:dash)
 # plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
 display(tiploads)
-# savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_1seconds_071223.pdf")
+# savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_1seconds_102023.pdf")
 
 
 tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=(0.9, 0.5)) #
 plot!(tvec, tipdx, lab=L"$\delta x$ - OF", linestyle=:dash)
 plot!(tvec, tipdy, lab=L"$\delta y$ - OF", linestyle=:dash)
 plot!(tvec, tipdz, lab=L"$\delta z$ - OF", linestyle=:dash)
-plot!(tvec, -tipdef_z, lab=L"\delta x")
-plot!(tvec, tipdef_y, lab=L"\delta y")
-plot!(tvec, tipdef_x, lab=L"\delta z")
+plot!(tvec[1:801], -tipdef_z[1:801], lab=L"\delta x")
+plot!(tvec[1:801], tipdef_y[1:801], lab=L"\delta y")
+plot!(tvec[1:801], tipdef_x[1:801], lab=L"\delta z")
 display(tipdefs2)
-# savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_gravity_shear_1seconds_071223.pdf")
+# savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_gravity_shear_1seconds_0102023.pdf")
 
-using Statistics
+# using Statistics
 
-tiploaderr = @. 100*(aerostates.fx[:,end] - fxmat[:,end])./fxmat[:,end]
-tipdeferr = @. (-tipdef_z-tipdx)
+# tiploaderr = @. 100*(aerostates.fx[:,end] - fxmat[:,end])./fxmat[:,end]
+# tipdeferr = @. (-tipdef_z-tipdx)
 
-meantiploaderr = mean(tiploaderr)
-meantipdeferr = mean(tipdeferr)
-
-
-
-nodeidx = 300
-
-# alphaplt = plot(xaxis="Time (s)", yaxis="Angle of Attack (deg)")
-# plot!(tvec, aerostates.alpha[:,nodeidx].*(180/pi), lab="R")
-# plot!(tvec, outs["AB1N$nodeidx"*"Alpha"], lab="OF")
-# plot!(tvec[2:end], iouts["alpha"].*(180/pi), lab="AD")
-# display(alphaplt)
-
-
-Wof = @. sqrt(outs["AB1N$nodeidx"*"Vx"]^2 + outs["AB1N$nodeidx"*"Vy"]^2)
-
-
-# Uplt = plot(xaxis = "Time (s)", yaxis="Inflow Velocity (m/s)")
-# plot!(tvec, aerostates.W[:,nodeidx], lab="R")
-# plot!(tvec, Wof, lab="OF")
-# plot!(tvec[2:end], iouts["U"], lab="AD")
-# display(Uplt)
-
-# Vxr = cchistory[:,nodeidx].u./cchistory[:,nodeidx].G
-
-# Vxplt = plot(xaxis = "Time (s)", yaxis="Vx (m/s)", leg=:bottomright)
-# plot!(Vxmat[:,nodeidx], lab="R")
-# plot!(outs["AB1N$nodeidx"*"Vx"], lab="OF")
-# # plot!(bouts["Vx"], lab="AD")
-# # display(Vxplt)
-
-# Vyplt = plot(xaxis = "Time (s)", yaxis="Vy (m/s)", leg=:topright)
-# plot!(Vymat[:,nodeidx], lab="R")
-# plot!(outs["AB1N$nodeidx"*"Vy"], lab="OF")
-# # plot!(bouts["Vy"], lab="AD")
-# # display(Vyplt)
-
-# aplt = plot(xaxis="Time (s)", yaxis="Axial induction factor")
-# plot!(tvec, aerostates.a[:,nodeidx], lab="R")
-# plot!(tvec, outs["AB1N$nodeidx"*"AxInd"], lab="AD")
-# # display(aplt)
-
-# applt = plot(xaxis="Time (s)", yaxis="Tangential Induction factor")
-# plot!(tvec, aerostates.ap[:,nodeidx], lab="R")
-# plot!(tvec, outs["AB1N$nodeidx"*"TnInd"], lab="AD")
-# # display(applt)
-
-phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)", leg=:topleft)
-plot!(tvec, aerostates.phi[:,nodeidx].*(180/pi), lab="R")
-plot!(tvec, outs["AB1N$nodeidx"*"Phi"], lab="AD")
-display(phiplt)
-# savefig(phiplt, "simpleNREL_inflow_angle_1sec_7.12.23.pdf")
-
-# twist = @. (aerostates.phi[:,nodeidx] + -aerostates.alpha[:,nodeidx])*180/pi
-# twistof = @. outs["AB1N$nodeidx"*"Phi"] + -outs["AB1N$nodeidx"*"Alpha"]
-
-# twistplt = plot(xaxis="Time (s)", yaxis="Twist Angle (deg)")
-# plot!(tvec, twist, lab="R")
-# plot!(tvec, outs["AB1N$nodeidx"*"Theta"], lab="AD")
-# # plot!(tvec, twistof, lab="OF", linestyle=:dash)
-# display(twistplt)
-
-thetaplt = plot(xaxis = "Time (s)", yaxis=L"\delta_\theta (deg)", leg=:topleft)
-plot!(tvec, -tiptheta_z.*(180/pi), lab="R - x")
-plot!(tvec, tiptheta_y.*(180/pi), lab="R - y")
-plot!(tvec, tiptheta_x.*(180/pi), lab="R - z")
-# plot!(tvec, outs["B1TipRDxr"], lab="OF - x", linestyle=:dash)
-# plot!(tvec, outs["B1TipRDyr"], lab="OF - y", linestyle=:dash)
-# plot!(tvec, outs["B1TipRDzr"], lab="OF - z", linestyle=:dash)
-plot!(tvec, tiptheta_xof.*(180/pi), lab="OF - x", linestyle=:dash)
-plot!(tvec, tiptheta_yof.*(180/pi), lab="OF - y", linestyle=:dash)
-plot!(tvec, tiptheta_zof.*(180/pi), lab="OF - z", linestyle=:dash)
-display(thetaplt)
-# savefig(thetaplt, "simpleNREL_angular_def_1s_7.12.23.pdf")
-
-# aziplt = plot(tvec, azimuth, lab="AeroDyn", xaxis="Time (s)", yaxis="Azimuthal angle (deg)", leg=:top)
-# plot!(tvec, aerostates.azimuth.*(180/pi), lab="Rotors")
-# plot!(tvec, outs["Azimuth"], lab="ElastoDyn", linestyle=:dash)
-# display(aziplt)
-# savefig(aziplt, "/Users/adamcardoza/Desktop/azimuthplot_AD_ED.png") #The Aerodyn azimuth is a value for wake correction models. 
-
-# Fxamp_of = maximum(fxmat[2500:end,end]) - minimum(fxmat[2500:end,end]) #427.0
-# Fxamp_R = maximum(loads.Fx[2500:end, end])-minimum(loads.Fx[2500:end, end]) #448.517
-
-Mx_of = zeros(nt)
-Mx_r = zeros(nt)
-
-
-for i = 1:nt
-    Mx_of[i] = of.root_bending_moment(rvec, fxmat[i,:])
-    Mx_r[i] = of.root_bending_moment(rvec, aerostates.fx[i,:])
-end
-
-using Dierckx
-Mx_r_smooth_fit = Spline1D(tvec, Mx_r;w=ones(length(tvec)), k=3, bc="nearest", s=1.0e14)
-
-Mx_r_smooth = Mx_r_smooth_fit.(tvec)
-
-Mplt = plot(xaxis="Time (s)", yaxis=L"Root Bending Moment $(N\cdot m)$", leg=:topright)
-plot!(tvec, Mx_of, lab="OF")
-plot!(tvec, Mx_r, lab="R")
-# plot!(tvec, Mx_r_smooth, lab="smooth")
-display(Mplt)
-# savefig(Mplt, "/Users/adamcardoza/Desktop/SimpleNRELrootbendingmoment_varyingairfoils_chords_twists_gravity_shear_1seconds_071223.pdf")
-
-# Mxerr = @. 100*(Mx_r-Mx_of)/Mx_of
-
-# avgMerr = mean(Mxerr)
-
-# Mxamp_of = maximum(Mx_of[2500:end])-minimum(Mx_of[2500:end])
-# Mxamp_r = maximum(Mx_r[2500:end])-minimum(Mx_r[2500:end])
+# meantiploaderr = mean(tiploaderr)
+# meantipdeferr = mean(tipdeferr)
 
 
 
-# DEMx_of = of.damage_equivalent_load(Mx_of)
-# DEMx_r = of.damage_equivalent_load(Mx_r)
-# # DEMx_r = of.damage_equivalent_load(Mx_r_smooth)
+# nodeidx = 300
+
+# # alphaplt = plot(xaxis="Time (s)", yaxis="Angle of Attack (deg)")
+# # plot!(tvec, aerostates.alpha[:,nodeidx].*(180/pi), lab="R")
+# # plot!(tvec, outs["AB1N$nodeidx"*"Alpha"], lab="OF")
+# # plot!(tvec[2:end], iouts["alpha"].*(180/pi), lab="AD")
+# # display(alphaplt)
 
 
-# DEMx_err = 100*(DEMx_r-DEMx_of)/DEMx_of
-
-#=
-I'm a little confused. I thought with the damage equivalent moment, if I smoothed the sucker out that it would become.... less. I guess not? Is it purely dependent on the the amplitude of the loads? 
-
-Also, with a difference in the max amplitudes of 100,000 I wouldn't expect the difference in the DEM to be 420,000.... 
-
-=#
+# Wof = @. sqrt(outs["AB1N$nodeidx"*"Vx"]^2 + outs["AB1N$nodeidx"*"Vy"]^2)
 
 
+# # Uplt = plot(xaxis = "Time (s)", yaxis="Inflow Velocity (m/s)")
+# # plot!(tvec, aerostates.W[:,nodeidx], lab="R")
+# # plot!(tvec, Wof, lab="OF")
+# # plot!(tvec[2:end], iouts["U"], lab="AD")
+# # display(Uplt)
 
-### Comparing blade mass
-# Mass calculated by BeamDyn: 16844.336
-m_bd = 16844.336
-m_r = Rotors.get_blade_weight(assembly)
+# # Vxr = cchistory[:,nodeidx].u./cchistory[:,nodeidx].G
 
-masserr = 100*(m_r-m_bd)/m_bd
+# # Vxplt = plot(xaxis = "Time (s)", yaxis="Vx (m/s)", leg=:bottomright)
+# # plot!(Vxmat[:,nodeidx], lab="R")
+# # plot!(outs["AB1N$nodeidx"*"Vx"], lab="OF")
+# # # plot!(bouts["Vx"], lab="AD")
+# # # display(Vxplt)
 
-@show masserr
+# # Vyplt = plot(xaxis = "Time (s)", yaxis="Vy (m/s)", leg=:topright)
+# # plot!(Vymat[:,nodeidx], lab="R")
+# # plot!(outs["AB1N$nodeidx"*"Vy"], lab="OF")
+# # # plot!(bouts["Vy"], lab="AD")
+# # # display(Vyplt)
+
+# # aplt = plot(xaxis="Time (s)", yaxis="Axial induction factor")
+# # plot!(tvec, aerostates.a[:,nodeidx], lab="R")
+# # plot!(tvec, outs["AB1N$nodeidx"*"AxInd"], lab="AD")
+# # # display(aplt)
+
+# # applt = plot(xaxis="Time (s)", yaxis="Tangential Induction factor")
+# # plot!(tvec, aerostates.ap[:,nodeidx], lab="R")
+# # plot!(tvec, outs["AB1N$nodeidx"*"TnInd"], lab="AD")
+# # # display(applt)
+
+# phiplt = plot(xaxis="Time (s)", yaxis="Inflow Angle (deg)", leg=:topleft)
+# plot!(tvec, aerostates.phi[:,nodeidx].*(180/pi), lab="R")
+# plot!(tvec, outs["AB1N$nodeidx"*"Phi"], lab="AD")
+# display(phiplt)
+# # savefig(phiplt, "simpleNREL_inflow_angle_1sec_7.12.23.pdf")
+
+# # twist = @. (aerostates.phi[:,nodeidx] + -aerostates.alpha[:,nodeidx])*180/pi
+# # twistof = @. outs["AB1N$nodeidx"*"Phi"] + -outs["AB1N$nodeidx"*"Alpha"]
+
+# # twistplt = plot(xaxis="Time (s)", yaxis="Twist Angle (deg)")
+# # plot!(tvec, twist, lab="R")
+# # plot!(tvec, outs["AB1N$nodeidx"*"Theta"], lab="AD")
+# # # plot!(tvec, twistof, lab="OF", linestyle=:dash)
+# # display(twistplt)
+
+# thetaplt = plot(xaxis = "Time (s)", yaxis=L"\delta_\theta (deg)", leg=:topleft)
+# plot!(tvec, -tiptheta_z.*(180/pi), lab="R - x")
+# plot!(tvec, tiptheta_y.*(180/pi), lab="R - y")
+# plot!(tvec, tiptheta_x.*(180/pi), lab="R - z")
+# # plot!(tvec, outs["B1TipRDxr"], lab="OF - x", linestyle=:dash)
+# # plot!(tvec, outs["B1TipRDyr"], lab="OF - y", linestyle=:dash)
+# # plot!(tvec, outs["B1TipRDzr"], lab="OF - z", linestyle=:dash)
+# plot!(tvec, tiptheta_xof.*(180/pi), lab="OF - x", linestyle=:dash)
+# plot!(tvec, tiptheta_yof.*(180/pi), lab="OF - y", linestyle=:dash)
+# plot!(tvec, tiptheta_zof.*(180/pi), lab="OF - z", linestyle=:dash)
+# display(thetaplt)
+# # savefig(thetaplt, "simpleNREL_angular_def_1s_7.12.23.pdf")
+
+# # aziplt = plot(tvec, azimuth, lab="AeroDyn", xaxis="Time (s)", yaxis="Azimuthal angle (deg)", leg=:top)
+# # plot!(tvec, aerostates.azimuth.*(180/pi), lab="Rotors")
+# # plot!(tvec, outs["Azimuth"], lab="ElastoDyn", linestyle=:dash)
+# # display(aziplt)
+# # savefig(aziplt, "/Users/adamcardoza/Desktop/azimuthplot_AD_ED.png") #The Aerodyn azimuth is a value for wake correction models. 
+
+# # Fxamp_of = maximum(fxmat[2500:end,end]) - minimum(fxmat[2500:end,end]) #427.0
+# # Fxamp_R = maximum(loads.Fx[2500:end, end])-minimum(loads.Fx[2500:end, end]) #448.517
+
+# Mx_of = zeros(nt)
+# Mx_r = zeros(nt)
+
+
+# for i = 1:nt
+#     Mx_of[i] = of.root_bending_moment(rvec, fxmat[i,:])
+#     Mx_r[i] = of.root_bending_moment(rvec, aerostates.fx[i,:])
+# end
+
+# using Dierckx
+# Mx_r_smooth_fit = Spline1D(tvec, Mx_r;w=ones(length(tvec)), k=3, bc="nearest", s=1.0e14)
+
+# Mx_r_smooth = Mx_r_smooth_fit.(tvec)
+
+# Mplt = plot(xaxis="Time (s)", yaxis=L"Root Bending Moment $(N\cdot m)$", leg=:topright)
+# plot!(tvec, Mx_of, lab="OF")
+# plot!(tvec, Mx_r, lab="R")
+# # plot!(tvec, Mx_r_smooth, lab="smooth")
+# display(Mplt)
+# # savefig(Mplt, "/Users/adamcardoza/Desktop/SimpleNRELrootbendingmoment_varyingairfoils_chords_twists_gravity_shear_1seconds_071223.pdf")
+
+# # Mxerr = @. 100*(Mx_r-Mx_of)/Mx_of
+
+# # avgMerr = mean(Mxerr)
+
+# # Mxamp_of = maximum(Mx_of[2500:end])-minimum(Mx_of[2500:end])
+# # Mxamp_r = maximum(Mx_r[2500:end])-minimum(Mx_r[2500:end])
+
+
+
+# # DEMx_of = of.damage_equivalent_load(Mx_of)
+# # DEMx_r = of.damage_equivalent_load(Mx_r)
+# # # DEMx_r = of.damage_equivalent_load(Mx_r_smooth)
+
+
+# # DEMx_err = 100*(DEMx_r-DEMx_of)/DEMx_of
+
+# #=
+# I'm a little confused. I thought with the damage equivalent moment, if I smoothed the sucker out that it would become.... less. I guess not? Is it purely dependent on the the amplitude of the loads? 
+
+# Also, with a difference in the max amplitudes of 100,000 I wouldn't expect the difference in the DEM to be 420,000.... 
+
+# =#
+
+
+
+# ### Comparing blade mass
+# # Mass calculated by BeamDyn: 16844.336
+# m_bd = 16844.336
+# m_r = Rotors.get_blade_weight(assembly)
+
+# masserr = 100*(m_r-m_bd)/m_bd
+
+# @show masserr
 
 
 
@@ -676,6 +677,6 @@ When you look at things in the grand scheme of things, it really isn't that big 
 # end
 
 # mkpath("simpleturbine/viz/simpleturbine-simulation")
-# write_vtk("simpleturbine/viz/simpleturbine-simulation/wind-turbine-blade-simulation", assembly, gxstates[1:2500], tvec[1:2500]; sections = sections)
+# write_vtk("simpleturbine/viz/simpleturbine-simulation/wind-turbine-blade-simulation", assembly, gxhistory[1:2500], tvec[1:2500]; sections = sections)
 
 nothing

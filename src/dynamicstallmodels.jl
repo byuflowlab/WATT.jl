@@ -17,7 +17,7 @@ function initialize_ds_model(airfoils::AbstractVector{<:Airfoil}, nt; inittype=t
     return states, stateidx, y
 end
 
-function dsmodel_initial_condition(aerostates, mesh::Mesh, blade::Blade, turbine::Bool, t0, pitch)
+function dsmodel_initial_condition(aerostates, mesh, blade::Blade, turbine::Bool, t0, pitch)
 
     for i in eachindex(blade.airfoils)
         nsi1, nsi2 = DS.state_indices(blade.airfoils[i].model, mesh.xds_idxs[i])

@@ -1,6 +1,7 @@
 module Rotors
 
-using FLOWMath, CCBlade, GXBeam, LinearAlgebra, StaticArrays, CurveFit, NLsolve, DynamicStallModels
+using FLOWMath, LinearAlgebra, StaticArrays, CurveFit, NLsolve, UnPack
+using CCBlade, GXBeam, DynamicStallModels
 using ImplicitAD, ForwardDiff, ReverseDiff
 using Infiltrator
 using Plots
