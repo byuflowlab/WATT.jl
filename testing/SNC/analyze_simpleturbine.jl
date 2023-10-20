@@ -127,7 +127,7 @@ end
 
 runflag = true
 if runflag
-    aerostates, gxstates, gxhistory = simulate!(rotor_r, env, tvec, aerostates, gxstates, gxhistory, mesh; verbose=true)
+    aerostates, gxstates, gxhistory = simulate!(rotor_r, env, tvec, aerostates, gxstates, gxhistory, blade, mesh; verbose=true)
 
     runflag = false 
 end
