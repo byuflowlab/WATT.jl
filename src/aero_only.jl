@@ -37,12 +37,25 @@ end
 
 Take an in-place step of the aerodynamic models. 
 
-"""
-function take_aero_step!(aerostates::AeroStates, mesh, rotor::Rotor, blade::Blade, env::Environment, tvec, i, pitch; solver::Solver=RK4(), pfunc = (p,t) -> (;), prepp=nothing, p=nothing)
-    na = length(blade.r)
+**Arguments**
+- phi::Vector{TF} - The inflow angle at every aerodynamic node. Calculating inplace. 
+- alpha::Vector{TF} - The angle of attack at every aerodynamic node. Calculating inplace.
+- W::Vector{TF} - The inflow velocity at every aerodynamic node. Calculating inplace. 
+- xds::Vector{TF} - The new dynamic stall states at every aerodynamic node. Calculating inplace. 
+- cx::Vector{TF} - The coefficient of force in the x direction at every aerodynamic node. Calculating inplace. 
+- cy
+- cm
+- fx
+- fy
+- mx
+- xds_old::Vector{TF} - The old dynamic stall states (referenced to calculate new states). 
 
-    t = tvec[i]
-    dt = tvec[i] - tvec[i-1]
+"""
+function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, azimuth, t, dt, pitch, mesh, rotor::Rotor, blade::Blade, env::Environment; solver::Solver=RK4(), pfunc = (p,t) -> (;), prepp=nothing, p=nothing)
+    #TODO: I don't think that I need pfunc, nor prepp, nor p here. 
+    #TODO: I'm thinking that I won't have any optional arguments here. It doesn't seem needed... Well... maybe it'd be handy when I'm using the function outside of the package for optimization. 
+
+    na = length(blade.r)
     
     
     if dt<0
@@ -50,38 +63,43 @@ function take_aero_step!(aerostates::AeroStates, mesh, rotor::Rotor, blade::Blad
     end
 
     #update azimuthal position
-    aerostates.azimuth[i] = env.RS(t)*dt + aerostates.azimuth[i-1] #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
+    # azimuth = env.RS(t)*dt + azimuth0 #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
 
-    if aerostates.azimuth[i]<aerostates.azimuth[i-1]
-        @warn("Blade moved backwards")
-    end
+    
 
     ### Update BEM inputs and solve
     for j = 1:na
         ### Update base inflow velocities
-        Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, aerostates.azimuth[i], mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
+        # @show mesh.aerov[j][1].value, mesh.aerov[j][2].value, mesh.aerov[j][2].value
+        # @show mesh.aerov[j]
+        Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
         
         #TODO: Write a solver that is initialized with the previous inflow angle.
         # mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
         ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
 
-        update_aerostates!(aerostates, ccout, i, j)
-        # update_aerostates!(aerostates, mesh, i, j)
+        phi[j] = ccout.phi
+        alpha[j] = ccout.alpha
+        W[j] = ccout.W
     end
     
     ### Update Dynamic Stall model inputs 
-    update_ds_inputs!(blade.airfoils, view(mesh.p_ds, :), view(aerostates.W, i, :), view(aerostates.phi, i, :), blade.twist, pitch, dt, rotor.turbine)
+    update_ds_inputs!(blade.airfoils, view(mesh.p_ds, :), W, phi, blade.twist, pitch, dt, rotor.turbine)
     
     ### Integrate Dynamic Stall model
-    update_ds_states!(solver, blade.airfoils, view(aerostates.xds, i-1, :), view(aerostates.xds, i, :), mesh.xds_idxs, mesh.p_ds, t, dt)
+    update_ds_states!(solver, blade.airfoils, xds_old, xds, mesh.xds_idxs, mesh.p_ds, t, dt)
 
     ### Extract loads 
-    extract_ds_loads!(blade.airfoils, view(aerostates.xds, i, :), mesh.xds_idxs, view(aerostates.phi, i, :), mesh.p_ds, view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :))
+    extract_ds_loads!(blade.airfoils, xds, mesh.xds_idxs, phi, mesh.p_ds, cx, cy, cm)
  
     
-    dimensionalize!(view(aerostates.fx, i, :), view(aerostates.fy, i, :), view(aerostates.mx, i, :), view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :), blade::Blade, env::Environment, view(aerostates.W, i, :))
+    dimensionalize!(fx, fy, mx, cx, cy, cm, blade::Blade, env::Environment, W)
     #These loads do not need to be rotated because they will be applied in the deflected frame (a follower load). This should also be true for things like precone, tilt, and yaw if they are defined correctly in GXBeam. 
+
 end
+
+
+
 
 """
     simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
@@ -149,7 +167,7 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
     xcc = zeros(11) #Todo: Typing
 
 
-    for j = 1:na
+    for j = 1:na #TODO: Write a solver that is initialized with the previous inflow angle.
         Vxvec[j], Vyvec[j] = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
 
         cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)

@@ -17,26 +17,26 @@ function initialize_ds_model(airfoils::AbstractVector{<:Airfoil}, nt; inittype=t
     return states, stateidx, y
 end
 
-function dsmodel_initial_condition(aerostates, mesh, blade::Blade, turbine::Bool, t0, pitch)
+function dsmodel_initial_condition!(xds, phi, W, mesh, blade::Blade, turbine::Bool, t0, pitch)
 
     for i in eachindex(blade.airfoils)
         nsi1, nsi2 = DS.state_indices(blade.airfoils[i].model, mesh.xds_idxs[i])
         
         paramidx = 4*(i-1)+1:4*i 
 
-        theta = (blade.twist[i] + pitch) - aerostates.phi[1,i]
+        theta = (blade.twist[i] + pitch) - phi[i] #Todo: Isn't this alpha???
         
         if turbine
             theta *= -1
         end
 
         ys = view(mesh.p_ds, paramidx)
-        ys[1] = aerostates.W[1, i] #Uvec[i]
+        ys[1] = W[i] #Uvec[i]
         ys[2] = 0.0 #TODO: This will probably need to be updated later down the line. 
         ys[3] = theta
         ys[4] = 0.0
         
-        aerostates.xds[1, nsi1:nsi2], _ = DS.initialize(blade.airfoils[i], [t0], ys) 
+        xds[nsi1:nsi2], _ = DS.initialize(blade.airfoils[i], [t0], ys) 
     end
 end
 

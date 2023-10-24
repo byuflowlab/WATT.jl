@@ -354,42 +354,73 @@ end
 function gxbeam_initial_conditions!(env::Environment, system, assembly, prescribed_conditions, distributed_loads, t0, azimuth0, g, structural_damping, linear, flag, pfunc, p)
 
     Omega0 = SVector(0.0, 0.0, -env.RS(t0))
-    gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0)
+    gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0) #TODO: have g be a vector to pass in. 
 
-    # @show typeof(Omega0) #None of these are duals. 
-    # @show typeof(gravity0)
-    # @show eltype(prescribed_conditions)
-    # @show eltype(assembly)
-    # @show typeof(t0)
 
     if flag==:steady
         @warn("Steady initialization not yet prepared, starting from no load no deflection. ")
 
         # system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false) 
-        system, gxstate, converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
+        x0, dx0, gxstate, converged = GXBeam.initial_state_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
 
     elseif flag==:spinning
+        error("Steady state not set up yet with GXBeam. ")
         # system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady_state=true, structural_damping, linear, pfunc, p, show_trace=false)
         system, gxstate, converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=true, structural_damping, linear, pfunc, p, show_trace=false)
 
     else #No load, no deflection initialization. 
         # @infiltrate
-        # error("break here. ")
-        # system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false) 
-        system, gxstate, converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
+
+        # @show prescribed_conditions #Free of derivatives
+        # @show distributed_loads 
+        # @show Omega0 #clean 
+        # @show gravity0 #clean
+
+
+        x0, dx0, gxstate, converged = GXBeam.initial_state_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
     end
 
 
     # gxstate = history0[end]
-    return gxstate, system
+    return x0, dx0, gxstate, system
 end
 
 function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.Linear)
 
-    #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. ) #Todo: I need to nail down behavior outside of the aero node regions.
-    Fzfit = fit(blade.r, -Fx)  
-    Fyfit = fit(blade.r, Fy) 
-    Mxfit = fit(blade.r, Mx)
+    #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. ) #Todo: I need to nail down behavior outside of the aero node regions. 
+    #Todo: I might need to extract the value out of Fx, Fy, and Mx if there is a tracked real present. 
+    # @show eltype(Fx)
+    if isa(Fx[1], ReverseDiff.TrackedReal)
+        # println("Entered cleansing function..")
+        fx = zeros(length(Fx))
+        fy = zeros(length(Fx))
+        # mx = zeros(length(Fx))
+
+        GXBeam.dual_safe_copy!(fx, Fx)
+        GXBeam.dual_safe_copy!(fy, Fy)
+        # GXBeam.dual_safe_copy!(fx, Fx)
+
+        Fzfit = fit(blade.r, -fx)  
+        Fyfit = fit(blade.r, fy) 
+        # Mxfit = fit(blade.r, Mx)
+    elseif isa(Fx[1], ForwardDiff.Dual)
+        # println("Entered cleansing function..")
+        fx = zeros(length(Fx))
+        fy = zeros(length(Fx))
+        # mx = zeros(length(Fx))
+
+        GXBeam.dual_safe_copy!(fx, Fx)
+        GXBeam.dual_safe_copy!(fy, Fy)
+        # GXBeam.dual_safe_copy!(fx, Fx)
+
+        Fzfit = fit(blade.r, -fx)  
+        Fyfit = fit(blade.r, fy) 
+        # Mxfit = fit(blade.r, Mx)
+    else
+        Fzfit = fit(blade.r, -Fx)  
+        Fyfit = fit(blade.r, Fy) 
+        # Mxfit = fit(blade.r, Mx)
+    end
 
 
     for ielem = eachindex(assembly.elements)
@@ -397,6 +428,7 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.L
         # r2 = assembly.points[ielem+1][1]
         r1 = norm(assembly.points[ielem])
         r2 = norm(assembly.points[ielem+1])
+        # @show typeof(r1), typeof(r2) #Correct types
         distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
         # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
         #Todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
