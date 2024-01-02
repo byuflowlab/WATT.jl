@@ -354,7 +354,7 @@ end
 function gxbeam_initial_conditions!(env::Environment, system, assembly, prescribed_conditions, distributed_loads, t0, azimuth0, g, structural_damping, linear, flag, pfunc, p)
 
     Omega0 = SVector(0.0, 0.0, -env.RS(t0))
-    gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0) #TODO: have g be a vector to pass in. 
+    gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0) #todo: have g be a vector to pass in. 
 
 
     if flag==:steady
@@ -387,12 +387,12 @@ end
 
 function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.Linear)
 
-    #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. ) #Todo: I need to nail down behavior outside of the aero node regions. 
-    #Todo: I might need to extract the value out of Fx, Fy, and Mx if there is a tracked real present. 
+    #todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. ) #todo: I need to nail down behavior outside of the aero node regions. 
+    #todo: I might need to extract the value out of Fx, Fy, and Mx if there is a tracked real present. 
     # @show eltype(Fx)
     if isa(Fx[1], ReverseDiff.TrackedReal)
         # println("Entered cleansing function..")
-        fx = zeros(length(Fx))
+        fx = zeros(length(Fx)) #TODO: Allocation every time step!!!
         fy = zeros(length(Fx))
         # mx = zeros(length(Fx))
 
@@ -431,7 +431,7 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.L
         # @show typeof(r1), typeof(r2) #Correct types
         distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
         # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
-        #Todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
+        #todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
     end
 
 end
@@ -456,7 +456,7 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
 
     ### Extract CCBlade Loads and create a distributed load 
     # Fzfit = Linear(vcat(rhub, rvec, rtip), vcat(0, -Fx[1,:], 0)) 
-    # Fyfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Fy[1,:], 0))  #Todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? 
+    # Fyfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Fy[1,:], 0))  #todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? 
     # Mxfit = Linear(vcat(rhub, rvec, rtip), vcat(0, Mx[1,:], 0))
 
     # Fzfit = Linear(rvec, -Fx[1,:]) 

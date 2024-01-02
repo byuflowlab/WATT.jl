@@ -1,6 +1,5 @@
 using Revise
 using OpenFASTTools, DelimitedFiles, GXBeam, Rotors, LinearAlgebra, DynamicStallModels
-using YAML
 # using Infiltrator
 using StaticArrays
 # using Plots
@@ -85,6 +84,7 @@ if readflag
     outs = Dict(names[i] => data[:,i] for i in eachindex(names))
 
     tvec = outs["Time"]
+    
 
 
     nt = length(tvec)
@@ -171,68 +171,69 @@ if readflag
 
     # end
 
-    yamlfile = YAML.load_file("sn5_input.BD1.sum.yaml")
+    # using YAML
+    # yamlfile = YAML.load_file("sn5_input.BD1.sum.yaml")
     
 
-    # nfea = 150
-    # nelem = 1
+    # # nfea = 150
+    # # nelem = 1
+    # # rnodes = zeros(nfea)
+
+    # # global tempij = 1
+    # # for i = 1:nelem
+    # #     global tempij
+
+    # #     temp = yamlfile["Init_QP_E$i"]
+    # #     rnodes[tempij] = temp[1][3]
+    # #     tempij += 1
+
+    # #     rnodes[tempij] = temp[2][3]
+    # #     tempij += 1
+
+    # #     rnodes[tempij] = temp[3][3]
+    # #     tempij += 1
+
+    # # end
+    # # rnodes .+= rhub
+
+    # nfea = 9
     # rnodes = zeros(nfea)
+    # temp = yamlfile["Init_Nodes_E1"]
 
-    # global tempij = 1
-    # for i = 1:nelem
-    #     global tempij
-
-    #     temp = yamlfile["Init_QP_E$i"]
-    #     rnodes[tempij] = temp[1][3]
-    #     tempij += 1
-
-    #     rnodes[tempij] = temp[2][3]
-    #     tempij += 1
-
-    #     rnodes[tempij] = temp[3][3]
-    #     tempij += 1
-
+    # for i = 1:nfea
+    #     rnodes[i] = temp[i][3]
     # end
-    # rnodes .+= rhub
 
-    nfea = 9
-    rnodes = zeros(nfea)
-    temp = yamlfile["Init_Nodes_E1"]
+    # global dxmat = zeros(nt, nfea)
+    # global dymat = zeros(nt, nfea)
+    # global dzmat = zeros(nt, nfea)
+    # global dfx = zeros(nt, nfea)
+    # global dfy = zeros(nt, nfea)
+    # global dfz = zeros(nt, nfea)
 
-    for i = 1:nfea
-        rnodes[i] = temp[i][3]
-    end
+    # for i = 1:nfea
+    #     if i<10
+    #         number = "00$i"
+    #     elseif i<100
+    #         number = "0$i"
+    #     else
+    #         number = "$i"
+    #     end
 
-    global dxmat = zeros(nt, nfea)
-    global dymat = zeros(nt, nfea)
-    global dzmat = zeros(nt, nfea)
-    global dfx = zeros(nt, nfea)
-    global dfy = zeros(nt, nfea)
-    global dfz = zeros(nt, nfea)
+    #     namedx = "B1N"*number*"_TDxr"
+    #     namedy = "B1N"*number*"_TDyr"
+    #     namedz = "B1N"*number*"_TDzr"
+    #     # namedfx = "B1N"*number*"_DFxR"
+    #     # namedfy = "B1N"*number*"_DFyR"
+    #     # namedfz = "B1N"*number*"_DFzR"
 
-    for i = 1:nfea
-        if i<10
-            number = "00$i"
-        elseif i<100
-            number = "0$i"
-        else
-            number = "$i"
-        end
-
-        namedx = "B1N"*number*"_TDxr"
-        namedy = "B1N"*number*"_TDyr"
-        namedz = "B1N"*number*"_TDzr"
-        # namedfx = "B1N"*number*"_DFxR"
-        # namedfy = "B1N"*number*"_DFyR"
-        # namedfz = "B1N"*number*"_DFzR"
-
-        dxmat[:,i] = outs[namedx]
-        dymat[:,i] = outs[namedy]
-        dzmat[:,i] = outs[namedz]
-        # dfx[:,i] = outs[namedfx]
-        # dfy[:,i] = outs[namedfy]
-        # dfz[:,i] = outs[namedfz]
-    end
+    #     dxmat[:,i] = outs[namedx]
+    #     dymat[:,i] = outs[namedy]
+    #     dzmat[:,i] = outs[namedz]
+    #     # dfx[:,i] = outs[namedfx]
+    #     # dfy[:,i] = outs[namedfy]
+    #     # dfz[:,i] = outs[namedfz]
+    # end
 
     # global rdx = zeros(nt, ne)
     # global rdy = zeros(nt, ne)
@@ -265,17 +266,17 @@ if readflag
     #     dfz[:,i] = outs[namedfz]
     # end
 
-    intermediatefile = readdlm("BLADG_intermediate_states.txt")
+    # intermediatefile = readdlm("BLADG_intermediate_states.txt")
 
-    inames = intermediatefile[1,:]
-    idata = intermediatefile[2:end, :]
+    # inames = intermediatefile[1,:]
+    # idata = intermediatefile[2:end, :]
 
-    iouts = Dict(inames[i] => idata[:,i] for i in eachindex(inames))
+    # iouts = Dict(inames[i] => idata[:,i] for i in eachindex(inames))
 
-    bemif = readdlm("BEM_intermediate_states.txt")
-    bemnames = ["i", "theta", "cant", "toe", "Vx", "Vy", "Vz", "chord"]
+    # bemif = readdlm("BEM_intermediate_states.txt")
+    # bemnames = ["i", "theta", "cant", "toe", "Vx", "Vy", "Vz", "chord"]
 
-    bouts = Dict(bemnames[i] => bemif[:,i] for i in eachindex(bemnames))
+    # bouts = Dict(bemnames[i] => bemif[:,i] for i in eachindex(bemnames))
 
     readflag = false
 end
@@ -327,10 +328,14 @@ if !@isdefined(defflag)
     defflag = true
 end
 
-# defflag = false
+# tvec_r = tvec[1]:0.01:tvec[end]
+# tvec_r = tvec[1:5]
+tvec_r = tvec
+
+defflag = true
 if defflag
     println("initialize...")
-    aerostates, gxstates, gxhistory, mesh = initialize(blade, assembly, tvec; verbose=true)
+    aerostates, gxhistory, mesh = Rotors.initialize_sim(blade, assembly, tvec_r; verbose=true)
     defflag = false
 end
 
@@ -339,9 +344,11 @@ if !@isdefined(runflag)
 end
 
 
-# runflag = false
-if runflag #Ran up to 801
-    aerostates, gxstates, gxhistory = simulate!(rotor_r, env, tvec, aerostates, gxstates, gxhistory, blade, mesh; verbose=true)
+runflag = true
+if runflag 
+    println("Running simulation...")
+    Rotors.run_sim!(rotor_r, blade, mesh, env, tvec_r, aerostates, gxhistory; verbose=true)
+    
 
     runflag = false 
 end
@@ -349,24 +356,27 @@ end
 
  
 #Tip deflections
-tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec[1:801])]
-tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec[1:801])]
-tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec[1:801])]
+ntr = length(tvec_r)
+tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec_r)]
+tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec_r)]
+tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec_r)]
 
-tiptheta_x = zeros(nt)
-tiptheta_y = zeros(nt)
-tiptheta_z = zeros(nt)
+tiptheta_x = zeros(ntr)
+tiptheta_y = zeros(ntr)
+tiptheta_z = zeros(ntr)
 
 tiptheta_xof = zeros(nt)
 tiptheta_yof = zeros(nt)
 tiptheta_zof = zeros(nt)
 
-for i = 1:801 #nt
+for i = 1:ntr
     theta = Rotors.WMPtoangle(gxhistory[i].points[end].theta)
     tiptheta_x[i] = theta[1]
     tiptheta_y[i] = theta[2]
     tiptheta_z[i] = theta[3]
+end
 
+for i = 1:nt #nt
     thetawmp = SVector(outs["B1TipRDxr"][i], outs["B1TipRDyr"][i], outs["B1TipRDzr"][i])
     theta = Rotors.WMPtoangle(thetawmp)
     tiptheta_xof[i] = theta[1]
@@ -376,11 +386,11 @@ end
 
 nr = length(rvec)
 nt = length(tvec)
-defx_gx = zeros(nt, nr)
-defy_gx = zeros(nt, nr)
-defz_gx = zeros(nt, nr)
+defx_gx = zeros(ntr, nr)
+defy_gx = zeros(ntr, nr)
+defz_gx = zeros(ntr, nr)
 
-for i in eachindex(tvec[1:801])
+for i in eachindex(tvec_r)
     for j in eachindex(rvec)
         defx_gx[i,j] = gxhistory[i].points[j].u[1]
         defy_gx[i,j] = gxhistory[i].points[j].u[2]
@@ -414,7 +424,7 @@ end
 
 using Plots, LaTeXStrings
 
-
+println("Plotting... ")
 
 # loadplt = plot(xaxis="Radius (m)", yaxis="Distributed Load (N/m)", leg=:topleft)
 # plot!(rvec, fxmat[end,:], lab=L"F_x")
@@ -434,26 +444,26 @@ using Plots, LaTeXStrings
 # plot!(rvec, dfy[end,:], lab=L"F_y")
 # display(loadplt)
 
-
+idxs = 1:length(tvec)
 
 tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=(0.9, 0.3))
-plot!(tvec, fxmat[:,end], lab=L"$F_x$ - OF", seriescolor=:blue)
-plot!(tvec, -fymat[:,end], lab=L"$F_y$ - OF", seriescolor=:red)
-# plot!(tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
-plot!(tvec[1:801], aerostates.fx[1:801,end], lab=L"$F_x$ - R", linestyle=:dash)
-plot!(tvec[1:801], aerostates.fy[1:801,end], lab=L"$F_y$ - R", linestyle=:dash)
-# plot!(tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
+plot!(tiploads, tvec[idxs], fxmat[idxs,end], lab=L"$F_x$ - OF", seriescolor=:blue)
+plot!(tiploads, tvec[idxs], -fymat[idxs,end], lab=L"$F_y$ - OF", seriescolor=:red)
+# plot!(tiploads, tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
+plot!(tiploads, tvec_r, aerostates.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash)
+plot!(tiploads, tvec_r, aerostates.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash)
+# plot!(tiploads, tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
 display(tiploads)
 # savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_1seconds_102023.pdf")
 
 
 tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=(0.9, 0.5)) #
-plot!(tvec, tipdx, lab=L"$\delta x$ - OF", linestyle=:dash)
-plot!(tvec, tipdy, lab=L"$\delta y$ - OF", linestyle=:dash)
-plot!(tvec, tipdz, lab=L"$\delta z$ - OF", linestyle=:dash)
-plot!(tvec[1:801], -tipdef_z[1:801], lab=L"\delta x")
-plot!(tvec[1:801], tipdef_y[1:801], lab=L"\delta y")
-plot!(tvec[1:801], tipdef_x[1:801], lab=L"\delta z")
+plot!(tvec[idxs], tipdx[idxs], lab=L"$\delta x$ - OF")
+plot!(tvec[idxs], tipdy[idxs], lab=L"$\delta y$ - OF")
+plot!(tvec[idxs], tipdz[idxs], lab=L"$\delta z$ - OF")
+plot!(tvec_r, -tipdef_z, lab=L"\delta x", linestyle=:dash) #, markershape=:vline)
+plot!(tvec_r, tipdef_y, lab=L"\delta y", linestyle=:dash) #, markershape=:cross)
+plot!(tvec_r, tipdef_x, lab=L"\delta z", linestyle=:dash) #, markershape=:x)
 display(tipdefs2)
 # savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_gravity_shear_1seconds_0102023.pdf")
 

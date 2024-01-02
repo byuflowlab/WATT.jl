@@ -27,7 +27,7 @@ bdblade = of.read_bdblade("NREL5MW_bdblade.dat", ofpath)
 bddriver = of.read_bddriver("NREL5MW_bddriver.inp", ofpath)
 
 ### Simulation control
-tmax = 1.0
+tmax = 3.0
 dt = 0.001
 # dt_out = 0.01 # "\"default\""
 dt_out = dt
@@ -67,7 +67,7 @@ rtip = 63.0 #Tip radius
 # rfrac = (rvec .- rhub)/(rtip-rhub)
 
 nelem = 1
-np_elem = 10
+np_elem = 25
 
 # chordvec = ones(n)
 # twistvec = zeros(n)
