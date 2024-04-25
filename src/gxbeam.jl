@@ -385,40 +385,91 @@ function gxbeam_initial_conditions!(env::Environment, system, assembly, prescrib
     return x0, dx0, gxstate, system
 end
 
-function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.Linear)
+
+# function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.Linear)
+
+#     #todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. ) #todo: I need to nail down behavior outside of the aero node regions. 
+#     #todo: I might need to extract the value out of Fx, Fy, and Mx if there is a tracked real present. 
+#     # @show eltype(Fx)
+#     if isa(Fx[1], ReverseDiff.TrackedReal)
+#         # println("Entered cleansing function..")
+#         fx = zeros(length(Fx)) #TODO: Allocation every time step!!!
+#         fy = zeros(length(Fx))
+#         # mx = zeros(length(Fx))
+
+#         GXBeam.dual_safe_copy!(fx, Fx)
+#         GXBeam.dual_safe_copy!(fy, Fy)
+#         # GXBeam.dual_safe_copy!(fx, Fx)
+
+#         Fzfit = fit(blade.r, -fx)  
+#         Fyfit = fit(blade.r, fy) 
+#         # Mxfit = fit(blade.r, Mx)
+#     elseif isa(Fx[1], ForwardDiff.Dual)
+#         # println("Entered cleansing function..")
+#         fx = zeros(length(Fx))
+#         fy = zeros(length(Fx))
+#         # mx = zeros(length(Fx))
+
+#         GXBeam.dual_safe_copy!(fx, Fx)
+#         GXBeam.dual_safe_copy!(fy, Fy)
+#         # GXBeam.dual_safe_copy!(fx, Fx)
+
+#         Fzfit = fit(blade.r, -fx)  
+#         Fyfit = fit(blade.r, fy) 
+#         # Mxfit = fit(blade.r, Mx)
+#     else
+#         Fzfit = fit(blade.r, -Fx)  
+#         Fyfit = fit(blade.r, Fy) 
+#         # Mxfit = fit(blade.r, Mx)
+#     end
+
+
+#     for ielem = eachindex(assembly.elements)
+#         # r1 = assembly.points[ielem][1] #Todo,: I want a vector of just lengths, of the points. Not just the X distance. 
+#         # r2 = assembly.points[ielem+1][1]
+#         r1 = norm(assembly.points[ielem])
+#         r2 = norm(assembly.points[ielem+1])
+#         # @show typeof(r1), typeof(r2) #Correct types
+#         distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
+#         # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
+#         #todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
+#     end
+
+# end
+
+
+function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.linear)
+
+    #Todo: The problem here is that I'm creating a new interpolation struct every iteration... which is taking a significant amount of time. So I need to rethink how this is being done. If I'm going to use an arbitrary interpolation like this, then I need to pass the interpolation from timestep to time step and update it. Otherwise, I need to manually interpolate (without a functor). -> I think the function approach should work well here. 
 
     #todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. ) #todo: I need to nail down behavior outside of the aero node regions. 
     #todo: I might need to extract the value out of Fx, Fy, and Mx if there is a tracked real present. 
     # @show eltype(Fx)
     if isa(Fx[1], ReverseDiff.TrackedReal)
         # println("Entered cleansing function..")
-        fx = zeros(length(Fx)) #TODO: Allocation every time step!!!
+        fz = zeros(length(Fx)) #TODO: Allocation every time step!!!
         fy = zeros(length(Fx))
         # mx = zeros(length(Fx))
 
-        GXBeam.dual_safe_copy!(fx, Fx)
+        GXBeam.dual_safe_copy!(fz, -Fx)
         GXBeam.dual_safe_copy!(fy, Fy)
         # GXBeam.dual_safe_copy!(fx, Fx)
 
-        Fzfit = fit(blade.r, -fx)  
-        Fyfit = fit(blade.r, fy) 
-        # Mxfit = fit(blade.r, Mx)
     elseif isa(Fx[1], ForwardDiff.Dual)
         # println("Entered cleansing function..")
-        fx = zeros(length(Fx))
+        fz = zeros(length(Fx))
         fy = zeros(length(Fx))
         # mx = zeros(length(Fx))
 
-        GXBeam.dual_safe_copy!(fx, Fx)
+        GXBeam.dual_safe_copy!(fz, -Fx)
         GXBeam.dual_safe_copy!(fy, Fy)
         # GXBeam.dual_safe_copy!(fx, Fx)
 
-        Fzfit = fit(blade.r, -fx)  
-        Fyfit = fit(blade.r, fy) 
-        # Mxfit = fit(blade.r, Mx)
     else
-        Fzfit = fit(blade.r, -Fx)  
-        Fyfit = fit(blade.r, Fy) 
+        fz = -Fx
+        fy = Fy
+        # Fzfit = fit(blade.r, -Fx)  
+        # Fyfit = fit(blade.r, Fy) 
         # Mxfit = fit(blade.r, Mx)
     end
 
@@ -429,7 +480,9 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.L
         r1 = norm(assembly.points[ielem])
         r2 = norm(assembly.points[ielem+1])
         # @show typeof(r1), typeof(r2) #Correct types
-        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
+
+        # linear(xnew, x0, x1, y0, y1)
+        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> fit(s, blade.r, fy), fz_follower = (s) -> fit(s, blade.r, fz), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
         # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
         #todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
     end

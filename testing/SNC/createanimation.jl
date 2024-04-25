@@ -112,21 +112,21 @@ if !@isdefined(defflag)
 end
 
 # tvec = [0.000, 0.001]
-tvec = 0:0.01:2
+tvec = 0:0.01:1
 # tvec = 0:0.01:9.6
 
-# if defflag
-# println("initialize...")
+if defflag
+println("initialize...")
 aerostates, gxstates, gxhistory, mesh = initialize(blade, assembly, tvec; verbose=true)
-    # defflag = false
-# end
+    defflag = false
+end
 
 if !@isdefined(runflag)
     runflag = true
 end
 
 
-runflag = true
+runflag = false
 if runflag
     aerostates, gxstates, gxhistory = simulate!(rotor_r, env, tvec, aerostates, gxstates, gxhistory, blade, mesh; verbose=true)
 
@@ -138,24 +138,76 @@ tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec)]
 
 # @show tipdef_x
 
-include("randomairfoil.jl")
+# include("randomairfoil.jl")
 
-airfoil = airfoil.*5
+# airfoil = airfoil.*5
 
-section = zeros(3, size(airfoil, 1))
-for ic = 1:size(airfoil, 1)
-    section[1,ic] = airfoil[ic,1] - 0.5
-    section[2,ic] = 0
-    section[3,ic] = airfoil[ic,2]
+# section = zeros(3, size(airfoil, 1))
+# for ic = 1:size(airfoil, 1)
+#     section[1,ic] = airfoil[ic,1] - 0.5
+#     section[2,ic] = 0
+#     section[3,ic] = airfoil[ic,2]
+# end
+
+### Read in the individual airfoils
+names = []
+push!(names,  readdlm("./Airfoils/Cylinder1_coords.txt", skipstart=8)) 
+push!(names, readdlm("./Airfoils/Cylinder2_coords.txt", skipstart=8))
+push!(names, readdlm("./Airfoils/DU40_A17_coords.txt", skipstart=8))
+push!(names, readdlm("./Airfoils/DU35_A17_coords.txt", skipstart=8))
+push!(names, readdlm("./Airfoils/DU30_A17_coords.txt", skipstart=8))
+push!(names, readdlm("./Airfoils/DU25_A17_coords.txt", skipstart=8))
+push!(names, readdlm("./Airfoils/DU21_A17_coords.txt", skipstart=8))
+push!(names, readdlm("./Airfoils/NACA64_A17_coords.txt", skipstart=8))
+
+
+nc = 100
+nch = Int(nc/2)
+
+airfoil_coords = zeros(length(names), nc, 2)
+
+using FLOWMath
+
+xtop = collect(range(1, 0, 51))
+xbot = collect(range(xtop[end-1], 1, 49))
+xrng = vcat(xtop, xbot)
+
+for i in eachindex(names)
+    _, idx = findmin(names[i][:,1])
+    topfit = Akima(reverse(names[i][1:idx, 1]), reverse(names[i][1:idx, 2])) 
+    botfit = Akima(names[i][idx:end, 1], names[i][idx:end,2])
+
+    ytop = topfit.(xtop)
+    ybot = botfit.(xbot)
+
+    # plt = plot(xtop, ytop, lab="Top")
+    # plot!(plt, xbot, ybot, lab="Bot")
+    # display(plt)
+
+    airfoil_coords[i, :, 1] = xrng
+    airfoil_coords[i, 1:nch+1, 2] = ytop
+    airfoil_coords[i, nch+2:end, 2] = ybot
+
+    #I might need to close the trailing edge. 
+end
+
+sections =  zeros(3, nc, length(mesh.assembly.points))
+
+for i in eachindex(mesh.assembly.points)
+    airfoil = airfoil_coords[af_idx[i], :, :].*chordvec[i]
+    
+    # Loop through the airfoil coordinates
+    for ic = 1:nc
+        sections[1, ic, i] = airfoil[ic,2] # - 0.5 #X coordinates
+        sections[2, ic, i] = 0 #Z Coordinates (sweep)
+        sections[3, ic, i] = airfoil[ic,1] #Y coordinates
+    end
 end
 
 
 
-mkpath("dynamic-simulation")
-write_vtk("dynamic-simulation/dynamic-simulation", assembly, gxhistory, tvec, scaling=5;
-    sections = section)
-
-#Note: Correct solution. (Or rather the solution I was getting with time_domain_analysis) #tvec = 0:0.001:0.01
-#[0.0, 3.9924964120256665e-5, 0.00015876402804123688, 0.0003542923417708522, 0.0006238931195408572, 0.0009641344237213083, 0.0013719055459919265, 0.001843945046587685, 0.002376257741316404, 0.0029647096623815136, 0.0036052055288560625]
+mkpath("full_sections")
+write_vtk("full_sections/dynamic-simulation", assembly, gxhistory, tvec, scaling=5;
+    sections)
 
 nothing

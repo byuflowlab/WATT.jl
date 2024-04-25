@@ -1,3 +1,9 @@
+#=
+Testing the simulate! function that only uses the aerodynamic models.
+
+Adam Cardoza4/24/24
+=#
+
 using Revise
 using OpenFASTTools, DelimitedFiles, GXBeam, Rotors, LinearAlgebra, DynamicStallModels
 # using Infiltrator
@@ -73,7 +79,7 @@ end
 if readflag
     println("Reading OpenFAST files...")
     # fullouts = readdlm("./simpleNREL/sn5_ADdriver.1.out", skipstart=6)
-    fullouts = readdlm("./sn5_input.out", skipstart=6)
+    fullouts = readdlm("./sn5_ADdriver.out", skipstart=6)
 
     names = fullouts[1,:]
 
@@ -125,13 +131,9 @@ if readflag
     readflag = false
 end
 
-azimuth = outs["Azimuth"]
-tipdx = outs["B1TipTDxr"]
-tipdy = outs["B1TipTDyr"]
-tipdz = outs["B1TipTDzr"]
 
 
-assembly = of.make_assembly(edfile, bdfile, bdblade)
+# assembly = of.make_assembly(edfile, bdfile, bdblade)
 
 ### Prep the ASD rotor and operating conditions 
 aftypes = Array{of.AirfoilInput}(undef, 8)
@@ -165,8 +167,7 @@ turbine = true
 rotor_r = Rotors.Rotor(Int(B), hubht, turbine; tilt, yaw)
 
 
-# dsmodel = DS.BeddoesLeishman(DS.Indicial(), n, airfoils, 3)
-# dsmodelinit = Rotors.BeddoesLeishman()
+
 
 if !@isdefined(defflag)
     defflag = true
@@ -176,10 +177,10 @@ end
 # tvec_r = tvec[1:5]
 tvec_r = tvec
 
-# defflag = true
+defflag = true
 if defflag
     println("initialize...")
-    aerostates, gxhistory, mesh = Rotors.initialize_sim(blade, assembly, tvec_r; verbose=true)
+    aerostates, mesh = Rotors.initialize(blade, tvec_r; verbose=true)
     defflag = false
 end
 
@@ -188,59 +189,17 @@ if !@isdefined(runflag)
 end
 
 
-# runflag = true
+runflag = true
 if runflag 
     println("Running simulation...")
-    Rotors.run_sim!(rotor_r, blade, mesh, env, tvec_r, aerostates, gxhistory; verbose=true)
+    Rotors.simulate!(aerostates, mesh, rotor_r, blade, env, tvec_r; verbose=true)
     
 
     runflag = false 
 end
 
 
- 
-#Tip deflections
-ntr = length(tvec_r)
-tipdef_x = [gxhistory[i].points[end].u[1] for i in eachindex(tvec_r)]
-tipdef_y = [gxhistory[i].points[end].u[2] for i in eachindex(tvec_r)]
-tipdef_z = [gxhistory[i].points[end].u[3] for i in eachindex(tvec_r)]
 
-tiptheta_x = zeros(ntr)
-tiptheta_y = zeros(ntr)
-tiptheta_z = zeros(ntr)
-
-tiptheta_xof = zeros(nt)
-tiptheta_yof = zeros(nt)
-tiptheta_zof = zeros(nt)
-
-for i = 1:ntr
-    theta = Rotors.WMPtoangle(gxhistory[i].points[end].theta)
-    tiptheta_x[i] = theta[1]
-    tiptheta_y[i] = theta[2]
-    tiptheta_z[i] = theta[3]
-end
-
-for i = 1:nt #nt
-    thetawmp = SVector(outs["B1TipRDxr"][i], outs["B1TipRDyr"][i], outs["B1TipRDzr"][i])
-    theta = Rotors.WMPtoangle(thetawmp)
-    tiptheta_xof[i] = theta[1]
-    tiptheta_yof[i] = theta[2]
-    tiptheta_zof[i] = theta[3]
-end
-
-nr = length(rvec)
-nt = length(tvec)
-defx_gx = zeros(ntr, nr)
-defy_gx = zeros(ntr, nr)
-defz_gx = zeros(ntr, nr)
-
-for i in eachindex(tvec_r)
-    for j in eachindex(rvec)
-        defx_gx[i,j] = gxhistory[i].points[j].u[1]
-        defy_gx[i,j] = gxhistory[i].points[j].u[2]
-        defz_gx[i,j] = gxhistory[i].points[j].u[3]
-    end
-end
 
 
 # Vx1 = [gxhistory[1].points[i].V[1] for i in eachindex(assembly.points)]
@@ -289,7 +248,7 @@ println("Plotting... ")
 # display(loadplt)
 
 idxs = 1:length(tvec)
-marks = 1:20:length(tvec)
+
 
 tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=(0.9, 0.3))
 plot!(tiploads, tvec[idxs], fxmat[idxs,end], lab=L"$F_x$ - OF", seriescolor=1)
@@ -297,33 +256,12 @@ plot!(tiploads, tvec[idxs], -fymat[idxs,end], lab=L"$F_y$ - OF", seriescolor=2)
 # plot!(tiploads, tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
 plot!(tiploads, tvec_r, aerostates.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash, seriescolor=4, lw=2.5)
 plot!(tiploads, tvec_r, aerostates.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash, seriescolor=5, lw=2.5)
-scatter!(tiploads, tvec[marks], fxmat[marks,end], lab=false, seriescolor=1, markershape=:x)
-scatter!(tiploads, tvec[marks], -fymat[marks,end], lab=false, seriescolor=2, markershape=:cross)
 # plot!(tiploads, tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
 display(tiploads)
 # savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_1seconds_010224_runsim.pdf")
 
 
-tipdefs2 = plot(xaxis="Time (s)", yaxis="Tip Deflection (m)", legend=(0.9, 0.5)) #
-plot!(tipdefs2, tvec[idxs], tipdx[idxs], lab=L"$\delta x$ - OF", seriescolor=1)
-plot!(tipdefs2, tvec[idxs], tipdy[idxs], lab=L"$\delta y$ - OF", seriescolor=2)
-plot!(tipdefs2, tvec[idxs], tipdz[idxs], lab=L"$\delta z$ - OF", seriescolor=3)
-plot!(tipdefs2, tvec_r, -tipdef_z, lab=L"$\delta x$ - R", linestyle=:dash, seriescolor=4, lw=2.5) #, markershape=:vline)
-plot!(tipdefs2, tvec_r, tipdef_y, lab=L"$\delta y$ - R", linestyle=:dash, seriescolor=5, lw=2.5) #, markershape=:cross)
-plot!(tipdefs2, tvec_r, tipdef_x, lab=L"$\delta z$ - R", linestyle=:dash, seriescolor=6, lw=2.5) #, markershape=:x)
-scatter!(tipdefs2, tvec[marks], tipdx[marks], lab=false, seriescolor=1, markershape=:x)
-scatter!(tipdefs2, tvec[marks], tipdy[marks], lab=false, seriescolor=2, markershape=:cross)
-scatter!(tipdefs2, tvec[marks], tipdz[marks], lab=false, seriescolor=3, markershape=:vline)
-display(tipdefs2)
-# savefig(tipdefs2, "/Users/adamcardoza/Desktop/SimpleNRELTipDeflections_varyingairfoils_chords_twists_gravity_shear_1seconds_0102024_runsim.pdf")
 
-# using Statistics
-
-# tiploaderr = @. 100*(aerostates.fx[:,end] - fxmat[:,end])./fxmat[:,end]
-# tipdeferr = @. (-tipdef_z-tipdx)
-
-# meantiploaderr = mean(tiploaderr)
-# meantipdeferr = mean(tipdeferr)
 
 
 

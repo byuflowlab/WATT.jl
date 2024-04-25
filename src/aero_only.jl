@@ -12,11 +12,11 @@ export simulate
 function dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade::Blade, env::Environment, W)
     
     for j in eachindex(blade.r)
-        qinf = 0.5*env.rho*W[j]^2
+        q_local = 0.5*env.rho*W[j]^2 #Local dynamic pressure
         
-        Fx[j] = Cx[j]*qinf*blade.airfoils.c[j] 
-        Fy[j] = Cy[j]*qinf*blade.airfoils.c[j] 
-        Mx[j] = Cm[j]*qinf*blade.airfoils.c[j]^2 #The coefficient of moment is positive about the negative Z aero axis, so we need the negative of this to move it to the structural X axis. 
+        Fx[j] = Cx[j]*q_local*blade.airfoils.c[j] 
+        Fy[j] = Cy[j]*q_local*blade.airfoils.c[j] 
+        Mx[j] = Cm[j]*q_local*blade.airfoils.c[j]^2 #The coefficient of moment is positive about the negative Z aero axis, so we need the negative of this to move it to the structural X axis. 
     end
 end
 
@@ -30,6 +30,84 @@ function update_aerostates!(aerostates::AeroStates, ccout, i, j)
     aerostates.alpha[i,j] = ccout.alpha
     aerostates.W[i,j] = ccout.W
     
+end
+
+
+"""
+    initialize()
+
+Prepare data structures for an aerodynamic only simulation. 
+
+**Arguments**
+- blade::Blade - The blade object that contains the airfoils, twist, and chord.
+- tvec::Vector{TF} - The time vector that the simulation will be run over.
+
+**Outputs**
+- aerostates::AeroStates - The aerodynamic states that are calculated during the simulation.
+- mesh::Mesh - The mesh that is used to store the structural deflections and velocities.
+"""
+function initialize(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
+    #Todo: This still needs to be completed. And it'll need a initial condition function. But for now, it looks like the simulate function initializes, finds the initial condition, and then simulates. 
+
+    if verbose
+        println("Rotors.jl initializing solution...")
+    end
+
+    
+    # if warnings
+    #     checkforwarnings(rvec, twistvec, rhub, rtip, pitch, precone, tilt, yaw)
+    # end
+
+    
+    #TODO: It might be a good idea to check rvec, chordvec, and twistvec to get the design variables to get the right types.
+
+    ### Initialization information
+    na = length(blade.rR)
+    nt = length(tvec)
+
+    t0 = first(tvec)
+
+    if isnothing(inittype)
+        inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+    end #TODO: I should probably check if the passed in type is a valid type. 
+
+
+    ### ----- Prepare data storage for aerodynamic models ----- ###
+    azimuth = Array{inittype}(undef, nt)
+    phi = Array{inittype}(undef,(nt, na))
+    alpha = Array{inittype}(undef,(nt, na))
+    W = Array{inittype}(undef,(nt, na))
+
+    Cx = Array{inittype}(undef,(nt, na))
+    Cy = Array{inittype}(undef,(nt, na))
+    Cm = Array{inittype}(undef,(nt, na))
+
+    Fx = Array{inittype}(undef,(nt, na))
+    Fy = Array{inittype}(undef,(nt, na))
+    Mx = Array{inittype}(undef,(nt, na))
+
+    # A vector that CCBlade uses for solving. 
+    xcc = Vector{inittype}(undef, 11)
+
+    # Initialize DS solution
+    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
+
+    # Store everything in the aerostates 
+    aerostates = (;azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
+
+
+    
+
+    #Placeholders for strucutral deflections
+    delta = Vector{SVector{3, inittype}}(undef, na) #todo: What is this used for? 
+    def_theta = Vector{SVector{3, inittype}}(undef, na) #todo. What is this used for
+    #The structural velocities interpolated to the aerodynamic nodes.
+    aerov = Vector{SVector{3, inittype}}(undef, na)
+
+    
+    mesh = (; delta, def_theta, aerov, xcc, xds_idxs, p_ds)
+
+    return aerostates, mesh
 end
 
 """
@@ -51,9 +129,11 @@ Take an in-place step of the aerodynamic models.
 - xds_old::Vector{TF} - The old dynamic stall states (referenced to calculate new states). 
 
 """
-function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, azimuth, t, dt, pitch, mesh, rotor::Rotor, blade::Blade, env::Environment; solver::Solver=RK4(), pfunc = (p,t) -> (;), prepp=nothing, p=nothing)
+function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, azimuth, t, dt, pitch, mesh, rotor::Rotor, blade::Blade, env::Environment; solver::Solver=RK4())
     #TODO: I don't think that I need pfunc, nor prepp, nor p here. 
     #TODO: I'm thinking that I won't have any optional arguments here. It doesn't seem needed... Well... maybe it'd be handy when I'm using the function outside of the package for optimization. 
+
+    # println("Using this function")
 
     na = length(blade.r)
     
@@ -75,8 +155,9 @@ function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, az
         Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
         
         #TODO: Write a solver that is initialized with the previous inflow angle.
-        # mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
-        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) #Todo: Need to create some sort of fail safe for not converging. 
+        
+        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) 
+        # ccout = solve_BEM!(rotor, blade, env, phi_old[j], j, Vx, Vy, pitch, mesh.xcc) #Todo: Need to create some sort of fail safe for not converging. 
 
         phi[j] = ccout.phi
         alpha[j] = ccout.alpha
@@ -102,7 +183,7 @@ end
 
 
 """
-    simulate(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
+    simulate!(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
 
 Simulate the rotor's response for a given rotor and environmental condition. 
 
@@ -115,7 +196,7 @@ Simulate the rotor's response for a given rotor and environmental condition.
 
 ### Notes
 """
-function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
+function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
      pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter=100,
      azimuth0=0.0)
 
@@ -124,7 +205,11 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
         println("Rotors.jl initializing solution...")
     end
 
-    #Todo: This will break without dsmodel exposed. 
+    # if isnothing(inittype)
+    #     inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+    # end #TODO: I should probably check if the passed in type is a valid type. 
+
+    #TODO: This will break without dsmodel exposed. 
     # if isa(dsmodel.detype, DS.Functional)
     #     error("Rotors isn't set up to simulate with functional forms of the dsmodel yet, choose the iterative model.")
     # elseif isa(dsmodel.detype, DS.Indicial)
@@ -148,7 +233,13 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
 
     t0 = tvec[1]
 
-    turbine = rotor.turbine
+    @unpack azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds = aerostates
+
+    @unpack p_ds, xds_idxs = mesh
+
+
+
+    turbine = rotor.turbine #Flag: Is this a turbine or a propeller?
 
     # rvec = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
     twistvec = blade.twist
@@ -157,53 +248,45 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
     chordvec = airfoils.c
 
 
-    ### Initialize BEM solution
-    Vxvec = Array{eltype(chordvec)}(undef, na)
-    Vyvec = Array{eltype(chordvec)}(undef, na)
-    azimuth = Array{eltype(chordvec)}(undef, nt)
+    ### Initial Condition
     azimuth[1] = azimuth0
 
-    cchistory = Array{CCBlade.Outputs{eltype(chordvec)}, 2}(undef, nt, na)
-    xcc = zeros(11) #Todo: Typing
+    phi0 = view(phi, 1, :)
+    alpha0 = view(alpha, 1, :)
+    W0 = view(W, 1, :)
 
+    ### Initialize BEM solution
+    for j = 1:na #TODO. Write a solver that is initialized with the previous inflow angle. -> Doesn't drastically change much.
+        Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
 
-    for j = 1:na #TODO: Write a solver that is initialized with the previous inflow angle.
-        Vxvec[j], Vyvec[j] = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
-
-        cchistory[1,j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
+        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) #TODO: Does mesh.xcc allocate a new vector? 
+        phi0[j] = ccout.phi
+        alpha0[j] = ccout.alpha
+        W0[j] = ccout.W
     end
 
+    # @show phi[1, :] #Real numbers (all three)
+    # @show alpha[1, :]
+    # @show W[1, :]
+
+    # error("")
 
 
-    ### Initialize DS solution #Todo: Create a get Wdot function (from the environment struct. )
-    Wdotvec = zeros(na) #[sqrt(env.Vinfdot(t0)^2 + (env.RSdot(t0)*rvec[i]*cos(precone))^2) for i in 1:na] #TODO: I probably need to update if there is precone, tilt, yaw, etc. -> Maybe I'll make a function to do this. -> Currently not used by BLADG. 
-    alphadotvec = zero(Wdotvec) #TODO: 
+    ### Initialize DS solution 
+    xds0 = view(xds, 1, :)
+    dsmodel_initial_condition!(xds0, phi0, W0, mesh, blade, rotor.turbine, t0, pitch) #
 
-    #Todo: This is going to need to be rearrange now. 
-    xds, xds_idxs, p_ds = initialize_ds_model(airfoils, turbine, nt, tvec, cchistory[1,:], Wdotvec, alphadotvec, twistvec, pitch)
+    Cx0 = view(Cx, 1, :)
+    Cy0 = view(Cy, 1, :)
+    Cm0 = view(Cm, 1, :)
+    extract_ds_loads!(airfoils, xds0, xds_idxs, phi0, p_ds, Cx0, Cy0, Cm0)
 
-
-
-
-
-    ### Prepare data storage
-    Cx = Array{eltype(chordvec)}(undef,(nt, na))
-    Cy = Array{eltype(chordvec)}(undef,(nt, na))
-    Cm = Array{eltype(chordvec)}(undef,(nt, na))
-
-    Fx = Array{eltype(chordvec)}(undef,(nt, na))
-    Fy = Array{eltype(chordvec)}(undef,(nt, na))
-
-
-    extract_ds_loads!(airfoils, view(xds, 1, :), xds_idxs, cchistory[1,:], p_ds, view(Cx, 1, :), view(Cy, 1, :), view(Cm, 1, :))
+    # @show Cx[1, :] #Has NaNs (all three)
+    # @show Cy[1, :]
+    # @show Cm[1, :]
     
-
-    ### Dimensionalize
-    for j = 1:na
-        u_1 = cchistory[1, j].W
-        Fx[1,j] = Cx[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
-        Fy[1,j] = Cy[1,j]*0.5*env.rho*u_1^2*chordvec[j] 
-    end
+    # error("")
+    dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade, env, W) 
 
 
 
@@ -212,40 +295,32 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
         t = tvec[i-1]
         dt = tvec[i] - tvec[i-1]
 
+        if dt<0
+            error("Time step is negative")
+        end
+
         #update azimuthal position
         azimuth[i] = env.RS(t)*dt + azimuth[i-1] #Euler step for azimuthal position. 
 
-        ### Update BEM inputs & solve BEM
-        for j = 1:na
-            Vxvec[j], Vyvec[j] = get_aero_velocities(rotor, blade, env, t, j, azimuth[i])
-
-            cchistory[i, j] = solve_BEM!(rotor, blade, env, j, Vxvec[j], Vyvec[j], pitch, xcc)
+        if azimuth[i]<azimuth[i-1]
+            @warn("Blade moved backwards")
         end
 
+        ### Unpack
+        phi_i = view(phi, i, :)
+        alpha_i = view(alpha, i, :)
+        W_i = view(W, i, :)
+        cx_i = view(Cx, i, :)
+        cy_i = view(Cy, i, :)
+        cm_i = view(Cm, i, :)
+        fx_i = view(Fx, i, :)
+        fy_i = view(Fy, i, :)
+        mx_i = view(Mx, i, :)
+        xds_i = view(xds, i, :)
+        # phi_im1 = view(phi, i-1, :)
+        xds_im1 = view(xds, i-1, :)
 
-        
-        ### Update Dynamic Stall model inputs
-        update_ds_inputs!(airfoils, p_ds, cchistory[i, :].W, cchistory[i, :].phi, twistvec, pitch, dt, turbine) #Todo: There is probably a more efficient way of passing in W, and Phi. Maybe I keep a running vector of W and phi that I just update. That way I'm not allocating every iteration. Better yet. I wonder if I should just copy out code from CCBlade and get rid of the Outputs struct and just store it in a matrix. 
-
-
-        ### Integrate Dynamic Stall model
-        update_ds_states!(solver, airfoils, view(xds, i-1, :), view(xds, i, :), xds_idxs, p_ds, t, dt)
-
-
-
-
-
-        ### Extract loads 
-        extract_ds_loads!(airfoils, view(xds, i, :), xds_idxs, cchistory[i, :], p_ds, view(Cx, i, :), view(Cy, i, :), view(Cm, i, :))
-
-
-
-        ### Dimensionalize
-        for j = 1:na
-            u_i = cchistory[i, j].W 
-            Fx[i,j] = Cx[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
-            Fy[i,j] = Cy[i,j]*0.5*env.rho*u_i^2*chordvec[j] 
-        end
+        take_aero_step!(phi_i, alpha_i, W_i, xds_i, cx_i, cy_i, cm_i, fx_i, fy_i, mx_i, xds_im1, azimuth[i], t, dt, pitch, mesh, rotor, blade, env; solver)
 
 
 
@@ -254,8 +329,6 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
         end
     end #End iterating through time. 
 
-
-    return (Fx=Fx, Fy=Fy), (Cx=Cx, Cy=Cy, Cm=Cm), cchistory, xds, azimuth 
 end
 
 

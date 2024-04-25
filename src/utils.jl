@@ -132,6 +132,129 @@ function plotdshistory(dshistory, tvec, index; legloc=:topright, titletext=nothi
     return plt
 end
 
+
+function linear_interp(xnew, x0, x1, y0, y1)
+    top = y0*(x1-xnew) + y1*(xnew-x0)
+    bot = x1-x0
+    return top/bot
+end
+
+
+# """
+#     brent_init(f, a, b, x0; args=(), atol=2e-12, rtol=4*eps(), maxiter=100)
+
+# As Brent's method from FLOWMath, but with an initial guess. 
+
+# **Inputs**
+# """
+# function brent_init(f, a, b, x0; args=(), atol=2e-12, rtol=4*eps(), maxiter=100)
+
+#     fx0 = f(x0)
+#     if isapprox(fx0, 0; atol, rtol)
+#         return x0, (iter=0, fcalls=1, flag="CONVERGED")
+#     end
+
+#     fa = f(a)
+#     fb = f(b)
+
+#     #Todo: I need to come up with a way to select out of the three spots which bound to use. -> Instead of creating a new function... I could just check if x0 is inbetween a and b outside of the loop. If it is, then I can check if it is a zero. If not, then replace one of the bounds into Brent's method. 
+#     if a<x0<b && fa*fx0<0
+#         xpre = a; xcur = b
+#     elseif x0<a
+#         xpre = a; xcur = b
+#     elseif b<x0
+#         xpre = a; xcur = b
+#     else #Original 
+#         xpre = a; xcur = b
+#     end
+    
+#     # xblk = 0.0; fblk = 0.0; spre = 0.0; scur = 0.0
+#     error_num = "INPROGRESS"
+
+#     fpre = f(xpre, args...)
+#     fcur = f(xcur, args...)
+#     xblk = zero(fpre); fblk = zero(fpre); spre = zero(fpre); scur = zero(fpre)
+#     funcalls = 3
+#     iterations = 0
+    
+#     if fpre*fcur > 0
+#         error_num = "SIGNERR"
+#         return 0.0, (iter=iterations, fcalls=funcalls, flag=error_num)
+#     end
+#     if fpre == zero(fpre)
+#         error_num = "CONVERGED"
+#         return xpre, (iter=iterations, fcalls=funcalls, flag=error_num)
+#     end
+#     if fcur == zero(fcur)
+#         error_num = "CONVERGED"
+#         return xcur, (iter=iterations, fcalls=funcalls, flag=error_num)
+#     end
+
+#     for i = 1:maxiter
+#         iterations += 1
+#         if fpre*fcur < 0
+#             xblk = xpre
+#             fblk = fpre
+#             spre = scur = xcur - xpre
+#         end
+#         if abs(fblk) < abs(fcur)
+#             xpre = xcur
+#             xcur = xblk
+#             xblk = xpre
+
+#             fpre = fcur
+#             fcur = fblk
+#             fblk = fpre
+#         end
+
+#         delta = (atol + rtol*abs(xcur))/2
+#         sbis = (xblk - xcur)/2
+#         if fcur == zero(fcur) || abs(sbis) < delta
+#             error_num = "CONVERGED"
+#             return xcur, (iter=iterations, fcalls=funcalls, flag=error_num)
+#         end
+
+#         if abs(spre) > delta && abs(fcur) < abs(fpre)
+#             if xpre == xblk
+#                 # interpolate
+#                 stry = -fcur*(xcur - xpre)/(fcur - fpre)
+#             else
+#                 # extrapolate
+#                 dpre = (fpre - fcur)/(xpre - xcur)
+#                 dblk = (fblk - fcur)/(xblk - xcur)
+#                 stry = -fcur*(fblk*dblk - fpre*dpre)/(dblk*dpre*(fblk - fpre))
+#             end
+#             if 2*abs(stry) < min(abs(spre), 3*abs(sbis) - delta)
+#                 # good short step
+#                 spre = scur
+#                 scur = stry
+#             else
+#                 # bisect
+#                 spre = sbis
+#                 scur = sbis
+#             end
+#         else 
+#             # bisect
+#             spre = sbis
+#             scur = sbis
+#         end
+
+#         xpre = xcur; fpre = fcur
+#         if abs(scur) > delta
+#             xcur += scur
+#         else
+#             xcur += (sbis > 0 ? delta : -delta)
+#         end
+
+#         fcur = f(xcur, args...)
+#         funcalls += 1
+#     end
+#     error_num = "CONVERR"
+#     return xcur, (iter=iterations, fcalls=funcalls, flag=error_num)
+# end
+
+
+
 """
     sub_brent()
 

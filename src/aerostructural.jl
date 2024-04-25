@@ -216,7 +216,7 @@ function initial_condition!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates
     extract_ds_loads!(blade.airfoils, xds, mesh.xds_idxs, phi, mesh.p_ds, cx, cy, cm)
 
 
-    dimensionalize!(fx, fy, mx, cx, cy, cm, blade::Blade, env::Environment, W) 
+    dimensionalize!(fx, fy, mx, cx, cy, cm, blade, env, W) 
 
     
     update_forces!(distributed_loads, fx, fy, mx, blade, assembly)
@@ -419,164 +419,6 @@ function take_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates, t, tpr
     return azimuth, gxhistory_new
 end
 
-#TODO: Function headers
-#Todo. I need to change this function to take the old state and new state... which I think means I want to change aerostates to a vector of structs. -> What's wrong with it taking the full state vector and an index? It's faster. You can make it work with ImplicitAD onestep by putting an indexer in the parameters tuple. 
-# """
-#     take_step!()
-
-# Take a step in the aerostructural simulation of the rotor. 
-# """
-# function take_step!(aerostates::AeroStates, gxstates, gxhistory, blade, mesh, rotor::Rotor, env::Environment, tvec, i, pitch; verbose::Bool=false, speakiter::Int=100, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter, solver::Solver=RK4(), prepp=nothing, p=nothing)
-
-#     @unpack assembly, system, prescribed_conditions, distributed_loads, point_masses, linear_velocity, xpfunc, pfunc, structural_damping, two_dimensional = mesh
-
-#     na = length(blade.r)
-
-#     t = tvec[i]
-#     tprev = tvec[i-1]
-#     dt = tvec[i] - tvec[i-1]
-#     if i == 2
-#         dtprev = 0.
-#     else
-#         dtprev = tvec[i-1] - tvec[i-2]
-#     end
-    
-    
-#     if dt<0
-#         error("Time step is negative")
-#     end
-
-#     #update azimuthal position
-#     azimuth = env.RS(t)*dt + azimuth0 #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
-
-#     if azimuth<azimuth0
-#         @warn("Blade moved backwards")
-#     end
-
-#     ### Update BEM inputs and solve
-#     for j = 1:na
-#         ### Update base inflow velocities
-#         Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, aerostates.azimuth[i], mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
-        
-#         #TODO: Write a solver that is initialized with the previous inflow angle.
-#         # mesh.cchistory[j] = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
-#         ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
-
-#         # update_aerostates!(aerostates, mesh, i, j)
-#         update_aerostates!(aerostates, ccout, i, j)
-#     end
-    
-#     ### Update Dynamic Stall model inputs 
-#     update_ds_inputs!(blade.airfoils, view(mesh.p_ds, :), view(aerostates.W, i, :), view(aerostates.phi, i, :), blade.twist, pitch, dt, rotor.turbine)
-    
-#     ### Integrate Dynamic Stall model
-#     update_ds_states!(solver, blade.airfoils, view(aerostates.xds, i-1, :), view(aerostates.xds, i, :), mesh.xds_idxs, mesh.p_ds, t, dt)
-
-#     ### Extract loads 
-#     extract_ds_loads!(blade.airfoils, view(aerostates.xds, i, :), mesh.xds_idxs, view(aerostates.phi, i, :), mesh.p_ds, view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :))
- 
-    
-#     dimensionalize!(view(aerostates.fx, i, :), view(aerostates.fy, i, :), view(aerostates.mx, i, :), view(aerostates.cx, i, :), view(aerostates.cy, i, :), view(aerostates.cm, i, :), blade::Blade, env::Environment, view(aerostates.W, i, :))
-#     #These loads do not need to be rotated because they will be applied in the deflected frame (a follower load). This should also be true for things like precone, tilt, and yaw if they are defined correctly in GXBeam. 
-    
-    
-#     ### Update GXBeam loads #Todo: Should I be skipping this? 
-#     ReverseDiff.@skip update_forces!(mesh.distributed_loads, view(aerostates.fx, i-1, :), view(aerostates.fy, i-1, :), view(aerostates.mx, i-1, :), blade, assembly) 
-
-#     Omega = SVector(0.0, 0.0, -env.RS(t)) #Todo: this is unused now!!!
-#     # gravity = SVector(-g*cos(aerostates.azimuth[i-1]), -g*sin(aerostates.azimuth[i-1]), 0.0) #TODO: I need to include tilt, and precone here. 
-
-#     # @show typeof(aerostates.azimuth)
-
-#     if isnothing(p)
-#         a0 = aerostates.azimuth[i-1]
-#         a1 = aerostates.azimuth[i]
-#     else
-#         a0 = aerostates.azimuth[i-1].value
-#         a1 = aerostates.azimuth[i].value
-#     end
-
-#     gravity = (tee) -> SVector(-g*cos((a0*(tvec[i]-tee) + a1*(tee-tvec[i-1]))/(tvec[i]-tvec[i-1])), -g*sin((a0*(tvec[i]-tee) + a1*(tee-tvec[i-1]))/(tvec[i]-tvec[i-1])), 0.0) ##Todo t = tvec[i].... So this be way wrong. Oh... this is an inline function so the solver can linearly interpolate the gravity vector across time. But... I think the time domain analysis only analyzes at the given time steps... which means that this function doesn't get called really... I dunno. 
-
-#     # @show typeof(gravity2)
-
-#     #Note: Taylor applies the gravitational load by C'*mass*C*gvec
-
-#     ### Solve GXBeam for time step 
-#     #TODO: This function is taking a lot of time. -> I might be able to save time by branching his code and writing another function, but most of the time is spent in nlsolve. I think all of the time spent is just time solving, not really inside of Taylor's code, but of course, if I make his code faster, then I make the solve faster. 
-#     # @show eltype(system)
-
-#     if isnothing(prepp) #Todo: I need to figure out how I'm passing my derivatives around. 
-#         p = nothing
-#         # println("Got here")
-#     else
-#         prepp(p, aerostates, i-1)
-#     end
-    
-
-#     # constants = (;.., t, dt, dtprev, x=system.x, p, distributed_loads=mesh.distributed_loads, gravity=gravity2, angular_velocity=Omega)
-
-#     # paug = mesh.paug
-
-#     ngx = length(system.x)
-
-#     xp = view(gxstates, i-1, 1:ngx)
-#     dxp = view(gxstates, i-1, ngx+1:2ngx)
-
-#     # @show xp
-#     # @show dxp
-
-#     # println("Running GXBeam...")
-#     xi, dxi = GXBeam.take_step(xp, dxp, system, assembly, t, tprev, prescribed_conditions, distributed_loads, point_masses, gravity, linear_velocity, Omega, xpfunc, pfunc, p, structural_damping, two_dimensional) 
-
-#     parameters = isnothing(xpfunc) ? pfunc(p, t) : xpfunc(xi, p, t)
-#     pcond = get(parameters, :prescribed_conditions, prescribed_conditions)
-#     pcond = typeof(pcond) <: AbstractDict ? pcond : pcond(t)
-
-#     gxstates[i,:] = vcat(xi, dxi) #Todo: There is probably a way to make it so I don't split and recombine the states and state rates quite so much. 
-#     gxhistory[i] = GXBeam.AssemblyState(dxi, xi, system, assembly; prescribed_conditions=pcond)
-     
-
-#     #TODO: Can I save memory by directly allocating to the gxstates vector? -> I can probably save allocations by augmenting the time_domain_analysis!() function to already have the results allocated. -> This would require a significant restructure of GXBeam.
-
-
-#     ### Update aero inputs from structures.
-#     update_mesh!(blade, mesh, assembly, gxhistory[i], env, t, na)
-
-
-
-#     if verbose & (mod(i-1, speakiter)==0)
-#         println("")
-#         println("Simulation time: ", t)
-#     end
-
-
-
-#     if plotbool & (mod(i-1, plotiter)==0) #TODO: Turn this into a runtime function. 
-#         # tipdef_x = [gxhistory[k].points[end].u[1] for k in eachindex(tvec[1:i])]
-#         # tipdef_y = [gxhistory[k].points[end].u[2] for k in eachindex(tvec[1:i])]
-#         # tipdef_z = [gxhistory[k].points[end].u[3] for k in eachindex(tvec[1:i])]
-#         # plt = plot(xaxis="Time (s)", yaxis="Tip Deflection", legend=:outerright)
-#         # plot!(tvec[1:i], tipdef_x, lab="X deflection")
-#         # plot!(tvec[1:i], tipdef_y, lab="Y deflection")
-#         # plot!(tvec[1:i], tipdef_z, lab="Z deflection")
-#         # display(plt)
-
-#         thetamat = zeros(i, 3)
-
-#         for k in 1:i
-#             thetamat[k,:] = gxhistory[k].points[end].theta
-#         end
-
-#         plt = plot(xaxis="Time (s)", yaxis="theta def", legend=:outerright)
-#         plot!(tvec[1:i], thetamat[:,1], lab="X deflection")
-#         plot!(tvec[1:i], thetamat[:,2], lab="Y deflection")
-#         plot!(tvec[1:i], thetamat[:,3], lab="Z deflection")
-#         display(plt)
-#     end
-
-#     # return system #Todo: Should this be returned? (For scoping and passing of data)
-# end
 
 function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
 
@@ -665,6 +507,13 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
         println("Rotors.jl initializing simulation...")
     end
 
+    #Created testing file
+    #TODO: Create tests
+
+    #TODO: Look into whether or not I really need this function. If I can just use the initialize function... then why would I need duplicate functions? 
+
+    
+
     # if warnings
     #     checkforwarnings(rvec, twistvec, rhub, rtip, pitch, precone, tilt, yaw)
     # end
@@ -684,7 +533,8 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
 
     ### ----- Prepare data storage for aerodynamic models ----- ###
 
-    azimuth = Array{inittype}(undef, nt)
+    # azimuth = Array{inittype}(undef, nt)
+    azimuth = Array{Float64}(undef, nt) #Note: I don't know of a situation that the azimuth would be a dual number.
     phi = Array{inittype}(undef,(nt, na))
     alpha = Array{inittype}(undef,(nt, na))
     W = Array{inittype}(undef,(nt, na))
@@ -712,6 +562,7 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     ### ----- Allocate the GXBeam Data ----- ###
 
     system = GXBeam.DynamicSystem(assembly)
+    # @show typeof(system)
 
     gxhistory = Array{GXBeam.AssemblyState{inittype, 
         Vector{GXBeam.PointState{inittype}},
@@ -766,6 +617,9 @@ The pre-allocated version of run_sim().
 """
 function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aerostates, gxhistory; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime = (aerostates, gxhistory, i) ->nothing, gxflag=nothing, prepp=nothing, p=nothing, azimuth0=0.0)
 
+    #Todo: I feel like this function could be simplified by having a function to initialize the sim, then .... wait... this looks like the step_system approach. This looks like exactly what I already need. Lol... did I already do this work? 
+
+    # println("unpacking...")
     ### unpack the data structures. 
     @unpack assembly, system, prescribed_conditions, distributed_loads, point_masses, linear_velocity, xpfunc, pfunc, structural_damping, two_dimensional, linear = mesh
 
@@ -796,12 +650,13 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
 
     initial_condition_checks(gxflag)
 
-
+    # println("Initializing...")
     ### Initialize BEM solution 
     for j = 1:na
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth0)
 
         ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
+        # ccout = solve_BEM!(rotor, blade, env, 0.0, j, Vx, Vy, pitch, mesh.xcc; newbounds=false)
 
         phi0[j] = ccout.phi
         alpha0[j] = ccout.alpha
@@ -834,9 +689,19 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     # #todo: Only works with initial response (not steady state or spinning solution. )
     # system, gxhistory[1], converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
 
-    system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true) #todo: This has extra allocations that I don't need.
+    # @show typeof(prescribed_conditions)
+    # @show typeof(distributed_loads)
+    # @show typeof(assembly)
+    # @show typeof(gravity0), typeof(Omega0)
+    # @show typeof(system)
+    # @show typeof(p)
+    # @show p
+
+    system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
     
     # @show typeof(gxstate), length(gxstate)
+    # println("Finished initializing GXBeam...")
+    # @show typeof(paug)
 
     #Todo. What does gxstate look like? -> A vector of assembly states (but that's because it's reallocating the history vector. )
 
@@ -887,14 +752,15 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
         xds_old = deepcopy(xds0)
     end
 
-    dt = tvec[2] - tvec[1]
-    take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
+    dt = tvec[2] - tvec[1] #Note: this passing in phi0 and replacing phi0 might break things... 
+    # take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, phi0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
+    take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver)
 
 
 
 
 
-
+    # println("Beginning time loop...")
     for i in 2:nt
 
         ### Unpack
@@ -908,6 +774,7 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
         fy_i = view(Fy, i, :)
         mx_i = view(Mx, i, :)
         xds_i = view(xds, i, :)
+        # phi_im1 = view(phi, i-1, :)
         xds_im1 = view(xds, i-1, :)
         
         t = tvec[i]
@@ -928,7 +795,8 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
         end
 
         #Note: Coupling from structural velocities doesn't appear to kick in until the third time step. 
-        take_aero_step!(phi_i, alpha_i, W_i, xds_i, cx_i, cy_i, cm_i, fx_i, fy_i, mx_i, xds_im1, azimuth[i], t, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
+        # take_aero_step!(phi_i, alpha_i, W_i, xds_i, cx_i, cy_i, cm_i, fx_i, fy_i, mx_i, phi_im1, xds_im1, azimuth[i], t, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
+        take_aero_step!(phi_i, alpha_i, W_i, xds_i, cx_i, cy_i, cm_i, fx_i, fy_i, mx_i, xds_im1, azimuth[i], t, dt, pitch, mesh, rotor, blade, env; solver)
 
         # @show fx_i[end]
         # println("")
@@ -1017,3 +885,4 @@ Simulate the physical response of a rotor blade.
 """
 function run_sim()
 end
+

@@ -3,8 +3,8 @@ Three bladed wind turbine, using basic geometry input
 ----- Input Configuration ---------------------------------------------------------------
 False           Echo         - Echo input parameters to "<rootname>.ech"?
         0       MHK          - MHK turbine type (switch) {0: not an MHK turbine, 1: fixed MHK turbine, 2: floating MHK turbine}
-        3       AnalysisType - {1: multiple turbines, one simulation, 2: one turbine, one time-dependent simulation, 3: one turbine, combined cases}
-        1.0     TMax         - Total run time [used only when AnalysisType/=3] (s)
+        2       AnalysisType - {1: multiple turbines, one simulation, 2: one turbine, one time-dependent simulation, 3: one turbine, combined cases}
+        3.0     TMax         - Total run time [used only when AnalysisType/=3] (s)
         0.1     DT           - Simulation time step [used only when AnalysisType/=3] (s)
 "./sn5_ADfile.dat"      AeroFile - Name of the primary AeroDyn input file
 ----- Environmental Conditions ----------------------------------------------------------
@@ -42,14 +42,13 @@ False           Echo         - Echo input parameters to "<rootname>.ech"?
 7               RotSpeed(1)            - Rotational speed of rotor in rotor coordinates (rpm)
 0               BldPitch(1)            - Blade 1 pitch (deg)
 ----- Time-dependent Analysis [used only when AnalysisType=2, numTurbines=1] ------------
-"unused"         TimeAnalysisFileName - Filename containing time series (6 column: Time, HWndSpeed, PLExp, RotSpd, Pitch, Yaw). 
+"sn5_ADtimeanalysis.dat"         TimeAnalysisFileName - Filename containing time series (6 column: Time, HWndSpeed, PLExp, RotSpd, Pitch, Yaw). 
 -----  Combined-Case Analysis [used only when AnalysisType=3, numTurbines=1 -------------
          1  NumCases     - Number of cases to run
 HWndSpeed  PLExp  RotSpd  Pitch   Yaw   dT    Tmax  DOF  Amplitude Frequency 
 (m/s)      (-)    (rpm)   (deg)  (deg)  (s)   (s)   (-)   (-)       (Hz)
-  10.0     0.00   50.00   0.0    0.0   0.1   1.0   0     0          0 
 ----- Output Settings -------------------------------------------------------------------
-"ES15.8E2"       OutFmt      - Format used for text tabular output, excluding the time channel.  Resulting field should be 10 characters. (quoted string)
+"ES15.8E2"       outFmt      - Format used for text tabular output, excluding the time channel.  Resulting field should be 10 characters. (quoted string)
 1                OutFileFmt  - Format for tabular (time-marching) output file (switch) {1: text file [<RootName>.out], 2: binary file [<RootName>.outb], 3: both}
 0                WrVTK       - VTK visualization data output: (switch) {0=none; 1=init; 2=animation}
 1                WrVTK_Type  - VTK visualization data type: (switch) {1=surfaces; 2=lines; 3=both}
