@@ -202,7 +202,7 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
 
 
     if verbose
-        println("Rotors.jl initializing solution...")
+        println("Rotors.jl finding initial solution...")
     end
 
     # if isnothing(inittype)
@@ -281,15 +281,27 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
     Cm0 = view(Cm, 1, :)
     extract_ds_loads!(airfoils, xds0, xds_idxs, phi0, p_ds, Cx0, Cy0, Cm0)
 
-    # @show Cx[1, :] #Has NaNs (all three)
+    # @show Cx[1, :] 
     # @show Cy[1, :]
     # @show Cm[1, :]
     
     # error("")
-    dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade, env, W) 
+    Fx0 = view(Fx, 1, :)
+    Fy0 = view(Fy, 1, :)
+    Mx0 = view(Mx, 1, :)
+
+    dimensionalize!(Fx0, Fy0, Mx0, Cx0, Cy0, Cm0, blade, env, W0) 
+
+    # @show Fx[1, :] 
+    # @show Fy[1, :]
+    # @show Mx[1, :]
+
+    # error("")
 
 
-
+    if verbose
+        println("Rotors.jl starting simulation...")
+    end
     ### Iterate through time 
     for i = 2:nt
         t = tvec[i-1]
@@ -329,6 +341,9 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
         end
     end #End iterating through time. 
 
+    if verbose
+        println("Rotors.jl simulation complete.")
+    end
 end
 
 
