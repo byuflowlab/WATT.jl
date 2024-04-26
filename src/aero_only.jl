@@ -99,10 +99,16 @@ function initialize(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
     
 
     #Placeholders for strucutral deflections
-    delta = Vector{SVector{3, inittype}}(undef, na) #todo: What is this used for? 
+    delta = Vector{SVector{3, inittype}}(undef, na) #todo. What is this used for? -> This is the deflection from the structural mesh projected onto the aero mesh. We keep it as zeros for aero-only simulations.
     def_theta = Vector{SVector{3, inittype}}(undef, na) #todo. What is this used for
     #The structural velocities interpolated to the aerodynamic nodes.
     aerov = Vector{SVector{3, inittype}}(undef, na)
+
+    for i = 1:na
+        delta[i] = SVector{3, inittype}(0.0, 0.0, 0.0)
+        def_theta[i] = SVector{3, inittype}(0.0, 0.0, 0.0)
+        aerov[i] = SVector{3, inittype}(0.0, 0.0, 0.0)
+    end
 
     
     mesh = (; delta, def_theta, aerov, xcc, xds_idxs, p_ds)
@@ -265,12 +271,6 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
         W0[j] = ccout.W
     end
 
-    # @show phi[1, :] #Real numbers (all three)
-    # @show alpha[1, :]
-    # @show W[1, :]
-
-    # error("")
-
 
     ### Initialize DS solution 
     xds0 = view(xds, 1, :)
@@ -281,22 +281,11 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
     Cm0 = view(Cm, 1, :)
     extract_ds_loads!(airfoils, xds0, xds_idxs, phi0, p_ds, Cx0, Cy0, Cm0)
 
-    # @show Cx[1, :] 
-    # @show Cy[1, :]
-    # @show Cm[1, :]
-    
-    # error("")
     Fx0 = view(Fx, 1, :)
     Fy0 = view(Fy, 1, :)
     Mx0 = view(Mx, 1, :)
 
     dimensionalize!(Fx0, Fy0, Mx0, Cx0, Cy0, Cm0, blade, env, W0) 
-
-    # @show Fx[1, :] 
-    # @show Fy[1, :]
-    # @show Mx[1, :]
-
-    # error("")
 
 
     if verbose
@@ -329,7 +318,6 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
         fy_i = view(Fy, i, :)
         mx_i = view(Mx, i, :)
         xds_i = view(xds, i, :)
-        # phi_im1 = view(phi, i-1, :)
         xds_im1 = view(xds, i-1, :)
 
         take_aero_step!(phi_i, alpha_i, W_i, xds_i, cx_i, cy_i, cm_i, fx_i, fy_i, mx_i, xds_im1, azimuth[i], t, dt, pitch, mesh, rotor, blade, env; solver)
