@@ -124,15 +124,15 @@ function Blade(span, twist, airfoils::AbstractVector{<:DS.Airfoil}; rhub=span[1]
     pi2 = pi/2
 
     if precone>pi2
-        error("Blade(): The precone angle you provided appears to be degrees, not radians.")
+        @warn("Blade(): The precone angle you provided appears to be degrees, not radians.")
     elseif any(i->i>pi2, sweep)
-        error("Blade(): The sweep angle(s) you provided appears to be degrees, not radians.")
+        @warn("Blade(): The sweep angle(s) you provided appears to be degrees, not radians.")
     elseif any(i->i>pi2, curve)
-        error("Blade(): The curve angle(s) you provided appears to be degrees, not radians.")
+        @warn("Blade(): The curve angle(s) you provided appears to be degrees, not radians.")
     end
 
     if any(i->i>pi2, twist)
-        error("Blade(): The twist angle appears to be in degrees, not radians.")
+        @warn("Blade(): The twist angle appears to be in degrees, not radians.")
     end
 
     # rx = zero(span)
@@ -156,42 +156,42 @@ end
 
 
 
-struct AeroStates{TF1, TF2, TA} #Todo: Parametric typing
-    azimuth::TF1 #Float
-    phi::TF2 #These are arrays of floats, all the same size     #Inflow angle
-    alpha::TF2   #Angle of attack
-    W::TF2       #Inflow velocity
-    cx::TF2
-    cy::TF2
-    cm::TF2
-    fx::TF2 #Todo: I should get rid of either the loads or the coefficients. I don't think that I need to store both... I think that I can have a function to fetch on based on the other. 
-    fy::TF2
-    mx::TF2
-    xds::TA #This is an array of floats, but different size than the rest. #Todo: I might be able to get rid of this. Do I really need the intermediate dynamic stall states? That would cut down my allocations by alot.  
-end
+# struct AeroStates{TF1, TF2, TA} #Todo: Parametric typing
+#     azimuth::TF1 #Float
+#     phi::TF2 #These are arrays of floats, all the same size     #Inflow angle
+#     alpha::TF2   #Angle of attack
+#     W::TF2       #Inflow velocity
+#     cx::TF2
+#     cy::TF2
+#     cm::TF2
+#     fx::TF2 #Todo: I should get rid of either the loads or the coefficients. I don't think that I need to store both... I think that I can have a function to fetch on based on the other. 
+#     fy::TF2
+#     mx::TF2
+#     xds::TA #This is an array of floats, but different size than the rest. #Todo: I might be able to get rid of this. Do I really need the intermediate dynamic stall states? That would cut down my allocations by alot.  
+# end
 
-function get_aerostate(aerostates::AeroStates, i)
-    nt = length(aerostates.azimuth) #Get the total number of time steps
+# function get_aerostate(aerostates::AeroStates, i)
+#     nt = length(aerostates.azimuth) #Get the total number of time steps
 
-    #check and see if the requested aerostate is in the vectors. 
-    if i>nt
-        error("get_aerostates(): There aren't that many time steps.")
-    end
+#     #check and see if the requested aerostate is in the vectors. 
+#     if i>nt
+#         error("get_aerostates(): There aren't that many time steps.")
+#     end
 
-    azimuth = aerostates.azimuth[i]
-    phi = aerostates.phi[i,:]
-    alpha = aerostates.alpha[i,:]
-    W = aerostates.W[i,:]
-    cx = aerostates.cx[i,:]
-    cy = aerostates.cy[i,:]
-    cm = aerostates.cm[i,:]
-    fx = aerostates.fx[i,:]
-    fy = aerostates.fy[i,:]
-    mx = aerostates.mx[i,:]
-    xds = aerostates.xds[i,:]
+#     azimuth = aerostates.azimuth[i]
+#     phi = aerostates.phi[i,:]
+#     alpha = aerostates.alpha[i,:]
+#     W = aerostates.W[i,:]
+#     cx = aerostates.cx[i,:]
+#     cy = aerostates.cy[i,:]
+#     cm = aerostates.cm[i,:]
+#     fx = aerostates.fx[i,:]
+#     fy = aerostates.fy[i,:]
+#     mx = aerostates.mx[i,:]
+#     xds = aerostates.xds[i,:]
 
-    return azimuth, phi, alpha, W, cx, cy, cm, fx, fy, mx, xds
-end
+#     return azimuth, phi, alpha, W, cx, cy, cm, fx, fy, mx, xds
+# end
 
 
 

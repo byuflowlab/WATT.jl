@@ -250,15 +250,21 @@ println("Plotting... ")
 idxs = 1:length(tvec)
 
 
-tiploads = plot(xaxis="Time (s)", yaxis="Tip Load (N)", legend=(0.9, 0.3))
-plot!(tiploads, tvec[idxs], fxmat[idxs,end], lab=L"$F_x$ - OF", seriescolor=1)
-plot!(tiploads, tvec[idxs], -fymat[idxs,end], lab=L"$F_y$ - OF", seriescolor=2)
-# plot!(tiploads, tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
-plot!(tiploads, tvec_r, aerostates.Fx[:,end], lab=L"$F_x$ - R", linestyle=:dash, seriescolor=4, lw=2.5)
-plot!(tiploads, tvec_r, aerostates.Fy[:,end], lab=L"$F_y$ - R", linestyle=:dash, seriescolor=5, lw=2.5)
+xtiploads = plot(yaxis=L"
+$F_x$ Tip Load (N/m)")
+plot!(xtiploads, tvec[idxs], fxmat[idxs,end], lab="OF", seriescolor=1)
+plot!(xtiploads, tvec_r, aerostates.Fx[:,end], lab="R", linestyle=:dash, seriescolor=2, lw=2.5)
+
+ytiploads = plot(tvec[idxs], -fymat[idxs,end], lab="OF", seriescolor=1, xaxis="Time (s)", yaxis=L"
+$F_y$ Tip Load (N/m)")
+plot!(ytiploads, tvec_r, aerostates.Fy[:,end], lab="R", linestyle=:dash, seriescolor=2, lw=2.5)
+
 # plot!(tiploads, tvec, loads.M[:,end], lab=L"D_z", linestyle=:dash)
-display(tiploads)
-# savefig(tiploads, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_1seconds_010224_runsim.pdf")
+# plot!(tiploads, tvec, Mmat[:,end], lab=L"$M_z$ - OF", seriescolor=:green)
+
+tiploadsplt = plot(xtiploads, ytiploads, layout=(2,1))
+display(tiploadsplt)
+# savefig(tiploadsplt, "/Users/adamcardoza/Desktop/SimpleNRELTipLoads_varyingairfoils_chords_twists_gravity_shear_1seconds_042624_aero_only.png")
 
 
 

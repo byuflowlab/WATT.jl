@@ -20,17 +20,17 @@ function dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade::Blade, env::Environment,
     end
 end
 
-function update_aerostates!(aerostates::AeroStates, ccout, i, j)
+# function update_aerostates!(aerostates::AeroStates, ccout, i, j)
 
-    # aerostates.phi[i,j] = mesh.cchistory[j].phi
-    # aerostates.alpha[i,j] = mesh.cchistory[j].alpha
-    # aerostates.W[i,j] = mesh.cchistory[j].W
+#     # aerostates.phi[i,j] = mesh.cchistory[j].phi
+#     # aerostates.alpha[i,j] = mesh.cchistory[j].alpha
+#     # aerostates.W[i,j] = mesh.cchistory[j].W
 
-    aerostates.phi[i,j] = ccout.phi
-    aerostates.alpha[i,j] = ccout.alpha
-    aerostates.W[i,j] = ccout.W
+#     aerostates.phi[i,j] = ccout.phi
+#     aerostates.alpha[i,j] = ccout.alpha
+#     aerostates.W[i,j] = ccout.W
     
-end
+# end
 
 
 """
@@ -245,13 +245,13 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
 
 
 
-    turbine = rotor.turbine #Flag: Is this a turbine or a propeller?
+    # turbine = rotor.turbine #Flag: Is this a turbine or a propeller?
 
     # rvec = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
-    twistvec = blade.twist
+    # twistvec = blade.twist
     
     airfoils = blade.airfoils
-    chordvec = airfoils.c
+    # chordvec = airfoils.c
 
 
     ### Initial Condition
