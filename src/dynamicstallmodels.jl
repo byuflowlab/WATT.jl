@@ -114,8 +114,9 @@ function extract_ds_loads!(airfoils::AbstractVector{<:Airfoil}, states, state_id
         # Cd = loads[2]
         # Cm[j] = loads[3]
 
-        cphi = cos(phi[j])
-        sphi = sin(phi[j])
+        # cphi = cos(phi[j])
+        # sphi = sin(phi[j])
+        sphi, cphi = sincos(phi[j])
         Cx[j] = Cl*cphi + Cd*sphi
         Cy[j] = -(Cl*sphi - Cd*cphi)
     end

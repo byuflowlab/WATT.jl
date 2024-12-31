@@ -14,6 +14,7 @@ end
 
 function update_BEM_variables!(xv, blade, airfoil, env, r, twist, Vx, Vy, pitch)
     # [r, airfoil.c, twist, blade.rhub, blade.rtip, Vx, Vy, env.rho, pitch, env.mu, env.a]
+    # @show typeof(twist) #Shows as a tracked real when it needs to.
     xv[1] = r
     xv[2] = airfoil.c
     xv[3] = twist
@@ -183,12 +184,13 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
                 end
             end
     
-            function solve(x, p) #TODO: Is there a more efficient way to do this instead of a closure? -> Is this a problem? 
+            function solve(x, p) #TODO: Is there a more efficient way to do this instead of a closure? -> Is this a problem? If phiL and phiU were vectors, I think it might be a problem, but since they are scalars, I don't think it is.
                 phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
                 return phistar
             end
 
             phistar = IAD.implicit(solve, residual, xv, pv)
+            @show typeof(phistar)
             _, outputs = CCBlade.residual_and_outputs(phistar, xv, pv) #TODO: Instead of creating a new function... I could just check if x0 is inbetween a and b outside of the loop. If it is, then I can check if it is a zero. If not, then replace one of the bounds into Brent's method. -> Is this even a problem? 
             return outputs
         end    
@@ -337,11 +339,16 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
         end
 
         # find bracket
+        # @show xv
+        if isa(xv[1], ReverseDiff.TrackedReal)
+            @show airfoil.c.value
+            println([xv[i].value for i in eachindex(xv)])
+        end
         success, phiL, phiU = CCBlade.firstbracket(phi -> residual(phi, xv, pv), phimin, phimax, npts, backwardsearch)
 
         # once bracket is found, solve root finding problem and compute loads
         if success
-            function solve(x, p) #Todo: Is there a more efficient way to do this instead of a closure? 
+            function solve(x, p) #todo: Is there a more efficient way to do this instead of a closure? 
                 phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
                 
                 return phistar
