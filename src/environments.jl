@@ -47,6 +47,26 @@ function environment(rho::Number, mu::Number, a::Number, U::Number, Omega::Numbe
     return SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
 end
 
+function environment(filename::String, rho::Number, mu::Number, a::Number, Omega::Number, shearexp::Number; fit=Akima)  #TODO: Originally using types for multiple dispatch. Need to change back. 
+
+    turb = readdlm(filename, skipstart=4)
+    n, m = size(turb)
+    tvec = range(turb[1, 1], turb[n, 1], length=n)
+    Ufit = fit(tvec, turb[:, 2])
+    Vfit = fit(tvec, turb[:, 5])
+    Wfit = fit(tvec, turb[:, 6])
+
+    ufun(t) = SVector(Ufit(t), Vfit(t), Wfit(t))
+    omegafun(t) = SVector(0.0, 0.0, 0.0)
+    udotfun(t) = SVector(0.0, 0.0, 0.0)
+    omegadotfun(t) = SVector(0.0, 0.0, 0.0)
+    Vinf(t) = Ufit(t)
+    RS(t) = Omega
+    Vinfdot(t) = 0.0
+    RSdot(t) = 0.0
+    return SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
+end
+
 
 
 """
@@ -65,6 +85,12 @@ function evaluate_flowfield_velocity(env::SimpleEnvironment, hubht, x, y, z, t)
 
     return env.U(t).*factor
 end
+
+
+
+
+
+
 
 """
     get_aero_velocities(rotor, blade, env, t, idx, azimuth)

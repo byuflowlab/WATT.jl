@@ -650,10 +650,15 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
 
     initial_condition_checks(gxflag)
 
+    # @show Vx #Not defined -> Good. It shouldn't be. 
+    # println(".") 
+
     # println("Initializing...")
     ### Initialize BEM solution 
     for j = 1:na
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth0)
+
+        # @show j, Vx, Vy #Fixed the name space problem. 
 
         ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
         # ccout = solve_BEM!(rotor, blade, env, 0.0, j, Vx, Vy, pitch, mesh.xcc; newbounds=false)
@@ -662,6 +667,8 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
         alpha0[j] = ccout.alpha
         W0[j] = ccout.W
     end
+
+    # @show phi0 #Fixed the name space problem. 
 
     #Note: I don't use take_aero_step because these functions are different. 
     dsmodel_initial_condition!(xds0, phi0, W0, mesh, blade, rotor.turbine, t0, pitch) #
@@ -762,6 +769,7 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
 
     # println("Beginning time loop...")
     for i in 2:nt
+        # println("i = $i")
 
         ### Unpack
         phi_i = view(phi, i, :)

@@ -6,6 +6,7 @@ version = "0.3.0"
 [deps]
 CCBlade = "e1828068-15df-11e9-03e4-ef195ea46fa4"
 CurveFit = "5a033b19-8c74-5913-a970-47c3779ef25c"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 DynamicStallModels = "1fe18b12-a608-438b-96ea-7dfa0357455b"
 FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
