@@ -51,7 +51,7 @@ function environment(filename::String, rho::Number, mu::Number, a::Number, Omega
 
     turb = readdlm(filename, skipstart=4)
     n, m = size(turb)
-    tvec = range(turb[1, 1], turb[n, 1], length=n)
+    tvec = range(turb[1, 1], turb[n, 1], length=n) #Because the file doesn't get the time vector correctly. 
     Ufit = fit(tvec, turb[:, 2])
     Vfit = fit(tvec, turb[:, 5])
     Wfit = fit(tvec, turb[:, 6])

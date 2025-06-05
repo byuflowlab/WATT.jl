@@ -77,7 +77,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
 
     t0 = first(tvec)
 
-    inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+    inittype = find_inittype(blade.c[1], blade.twist[1])
 
 
 
@@ -100,7 +100,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
     xcc = Vector{inittype}(undef, 11)
 
     # Initialize DS solution
-    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
+    xds, xds_idxs, y_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
 
     # Store everything in the aerostates 
     # aerostates = AeroStates(azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
@@ -149,7 +149,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
     aerov = Vector{SVector{3, inittype}}(undef, na)
 
     
-    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, p_ds,
+    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, y_ds,
                 assembly, system, prescribed_conditions, distributed_loads,
                 point_masses, linear_velocity, angular_velocity,
                 xpfunc, pfunc, two_dimensional, structural_damping, linear)
@@ -213,7 +213,7 @@ function initial_condition!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates
     dsmodel_initial_condition!(xds, phi, W, mesh, blade, rotor.turbine, t0, pitch) #
 
     
-    extract_ds_loads!(blade.airfoils, xds, mesh.xds_idxs, phi, mesh.p_ds, cx, cy, cm)
+    extract_ds_loads!(blade.airfoils, xds, mesh.xds_idxs, phi, mesh.y_ds, cx, cy, cm)
 
 
     dimensionalize!(fx, fy, mx, cx, cy, cm, blade, env, W) 
@@ -527,7 +527,7 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
 
     t0 = first(tvec)
 
-    inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+    inittype = find_inittype(blade.c[1], blade.twist[1])
 
 
 
@@ -551,7 +551,7 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     xcc = Vector{inittype}(undef, 11)
 
     # Initialize DS solution
-    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
+    xds, xds_idxs, y_ds, p_ds = initialize_ds_model(blade, nt, inittype)  
 
     # Store everything in the aerostates 
     # aerostates = AeroStates(azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
@@ -597,7 +597,7 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     aerov = Vector{SVector{3, inittype}}(undef, na)
 
     
-    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, p_ds,
+    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, y_ds, p_ds,
                 assembly, system, prescribed_conditions, distributed_loads,
                 point_masses, linear_velocity, angular_velocity,
                 xpfunc, pfunc, two_dimensional, structural_damping, linear)
@@ -668,13 +668,11 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
         W0[j] = ccout.W
     end
 
-    # @show phi0 #Fixed the name space problem. 
-
     #Note: I don't use take_aero_step because these functions are different. 
-    dsmodel_initial_condition!(xds0, phi0, W0, mesh, blade, rotor.turbine, t0, pitch) #
+    dsmodel_initial_condition!(xds0, phi0, W0, mesh, blade, rotor.turbine, t0, pitch)
 
     
-    extract_ds_loads!(blade.airfoils, xds0, mesh.xds_idxs, phi0, mesh.p_ds, cx0, cy0, cm0)
+    extract_ds_loads!(blade.airfoils, xds0, mesh.xds_idxs, phi0, mesh.y_ds, mesh.p_ds, cx0, cy0, cm0)
 
 
     dimensionalize!(fx0, fy0, mx0, cx0, cy0, cm0, blade::Blade, env::Environment, W0) 
@@ -729,35 +727,34 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     ### Take the first step then set that as the first value. -> This is what OpenFAST does. 
     # azimuth = env.RS(t)*dt + azimuth0
     
-    if isa(xds0[1], ReverseDiff.TrackedReal)
-        # ns = DS.numberofstates_total(airfoils)
-        # xds_old = Array{inittype, 1}(undef, ns) 
-        # xds_old = deepcopy(xds)
-        inittype = eltype(xds0)
-        ns = DS.numberofstates_total(blade.airfoils)
-        xds_old = Array{inittype, 1}(undef, ns)
+    # if isa(xds0[1], ReverseDiff.TrackedReal) #todo. Move this into a function. 
+   
+    #     inittype = eltype(xds0)
+    #     ns = DS.numberofstates_total(blade.airfoils)
+    #     xds_old = Array{inittype, 1}(undef, ns)
 
-        #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
-        for i in eachindex(xds0) 
-            xds_old[i] = xds0[i]
-        end
+    #     #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
+    #     for i in eachindex(xds0) 
+    #         xds_old[i] = xds0[i]
+    #     end
         
-    elseif isa(xds[1], ForwardDiff.Dual)
-        # xds_old = deepcopy(xds) #Derivatives are getting nuked
-        inittype = eltype(xds0)
-        ns = DS.numberofstates_total(blade.airfoils)
-        xds_old = Array{inittype, 1}(undef, ns)
+    # elseif isa(xds0[1], ForwardDiff.Dual)
+    #     # xds_old = deepcopy(xds) #Derivatives are getting nuked
+    #     inittype = eltype(xds0)
+    #     ns = DS.numberofstates_total(blade.airfoils)
+    #     xds_old = Array{inittype, 1}(undef, ns)
 
-        #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
-        for i in eachindex(xds0) 
-            xds_old[i] = xds0[i]
-        end
+    #     #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
+    #     for i in eachindex(xds0) 
+    #         xds_old[i] = xds0[i]
+    #     end
 
-        # @show xds[1].partials
-        # @show xds_old[1].partials
-    else
-        xds_old = deepcopy(xds0)
-    end
+    #     # @show xds[1].partials
+    #     # @show xds_old[1].partials
+    # else
+    #     xds_old = deepcopy(xds0)
+    # end
+    xds_old = dualcopy(xds0) #todo: I feel like there is a better way to do this. 
 
     dt = tvec[2] - tvec[1] #Note: this passing in phi0 and replacing phi0 might break things... 
     # take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, phi0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
