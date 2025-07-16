@@ -240,6 +240,8 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     # rR = blade.rR[idx]
     r = blade.r[idx]
     chord = blade.c[idx]
+
+    #todo: Add the cylinder bypass (based on the airfoil type). 
     
 
     # check if we are at hub/tip

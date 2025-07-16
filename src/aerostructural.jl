@@ -533,8 +533,8 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
 
     ### ----- Prepare data storage for aerodynamic models ----- ###
 
-    # azimuth = Array{inittype}(undef, nt)
-    azimuth = Array{Float64}(undef, nt) #Note: I don't know of a situation that the azimuth would be a dual number.
+    azimuth = Array{inittype}(undef, nt)
+    # azimuth = Array{Float64}(undef, nt) #Note: I don't know of a situation that the azimuth would be a dual number.
     phi = Array{inittype}(undef,(nt, na))
     alpha = Array{inittype}(undef,(nt, na))
     W = Array{inittype}(undef,(nt, na))

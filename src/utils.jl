@@ -9,12 +9,14 @@ end
 
 function dualcopy(x)
     if isa(x[1], ReverseDiff.TrackedReal) || isa(x[1], ForwardDiff.Dual)
-        TF = eltype(x)
+        TF = typeof(x[1])
         ns = length(x)
         xnew = Vector{TF}(undef, ns)
         for i = 1:ns
-            xnew[i] = xds0[i]
+            xnew[i] = x[i]
         end
+
+        return xnew
     else
         # If not, then just return the original vector.
         return deepcopy(x)
