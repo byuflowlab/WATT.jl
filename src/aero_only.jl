@@ -163,7 +163,8 @@ function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, az
         
         #TODO: Write a solver that is initialized with the previous inflow angle.
         
-        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) 
+        # ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) 
+        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch - mesh.def_theta[j][1], mesh.xcc) 
         # ccout = solve_BEM!(rotor, blade, env, phi_old[j], j, Vx, Vy, pitch, mesh.xcc) #Todo: Need to create some sort of fail safe for not converging. 
 
         phi[j] = ccout.phi
