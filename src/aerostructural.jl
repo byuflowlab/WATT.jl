@@ -617,9 +617,7 @@ The pre-allocated version of run_sim().
 """
 function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aerostates, gxhistory; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime = (aerostates, gxhistory, i) ->nothing, gxflag=nothing, prepp=nothing, p=nothing, azimuth0=0.0)
 
-    #Todo: I feel like this function could be simplified by having a function to initialize the sim, then .... wait... this looks like the step_system approach. This looks like exactly what I already need. Lol... did I already do this work? 
 
-    # println("unpacking...")
     ### unpack the data structures. 
     @unpack assembly, system, prescribed_conditions, distributed_loads, point_masses, linear_velocity, xpfunc, pfunc, structural_damping, two_dimensional, linear = mesh
 
@@ -650,15 +648,12 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
 
     initial_condition_checks(gxflag)
 
-    # @show Vx #Not defined -> Good. It shouldn't be. 
-    # println(".") 
 
     # println("Initializing...")
     ### Initialize BEM solution 
     for j = 1:na
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth0)
 
-        # @show j, Vx, Vy #Fixed the name space problem. 
 
         ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
         # ccout = solve_BEM!(rotor, blade, env, 0.0, j, Vx, Vy, pitch, mesh.xcc; newbounds=false)
@@ -694,21 +689,10 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     # #todo: Only works with initial response (not steady state or spinning solution. )
     # system, gxhistory[1], converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
 
-    # @show typeof(prescribed_conditions)
-    # @show typeof(distributed_loads)
-    # @show typeof(assembly)
-    # @show typeof(gravity0), typeof(Omega0)
-    # @show typeof(system)
-    # @show typeof(p)
-    # @show p
 
     system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
     
-    # @show typeof(gxstate), length(gxstate)
-    # println("Finished initializing GXBeam...")
-    # @show typeof(paug)
 
-    #Todo. What does gxstate look like? -> A vector of assembly states (but that's because it's reallocating the history vector. )
 
     gxhistory[1] = gxstate[1]
 

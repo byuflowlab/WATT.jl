@@ -341,18 +341,18 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
         m = 0.5*(c-b)
 
         # If taking a bisection step would move the guess of the root less than tol, then return b the best guess.
-        # if (abs(m)<=tol)
-        #     # println("bracket size below tolerance")
-        #     return b, (fb, iter)
-        # elseif (fb==0.0)
-        #     # println("Residual converged mid step.")
-        #     return b, (fb, iter)
-        # end
-
-        if (fb==0.0)
-            println("Residual converged mid step.")
+        if (abs(m)<=tol)
+            # println("bracket size below tolerance")
+            return b, (fb, iter)
+        elseif (fb==0.0)
+            # println("Residual converged mid step.")
             return b, (fb, iter)
         end
+
+        # if (fb==0.0)
+        #     println("Residual converged mid step.")
+        #     return b, (fb, iter)
+        # end
 
 
         # If still here, then check whether need to do bisection or can do interpolation
@@ -423,9 +423,9 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
         ### Evaluate at the new point
         fb = fun(b)
 
-        # Check my custom tolerance 
+        # Check my custom tolerance #Note: This is in their code now... I don't think that was there before... lol. Did I influence their code? 
         if abs(fb)<toler
-            println("Residual Converged below tolerance.")
+            # println("Residual Converged below tolerance.")
             return b, (fb, iter)
         end
             

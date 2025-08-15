@@ -159,6 +159,7 @@ function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, az
         # @show mesh.aerov[j][1].value, mesh.aerov[j][2].value, mesh.aerov[j][2].value
         # @show mesh.aerov[j]
         Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
+        #Todo: Angles aren't updated with angular deflection.... 
         
         #TODO: Write a solver that is initialized with the previous inflow angle.
         

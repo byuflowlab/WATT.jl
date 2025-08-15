@@ -343,18 +343,14 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
         end
 
         # find bracket
-        # @show xv
-        if isa(xv[1], ReverseDiff.TrackedReal)
-            @show airfoil.c.value
-            println([xv[i].value for i in eachindex(xv)])
-        end
         success, phiL, phiU = CCBlade.firstbracket(phi -> residual(phi, xv, pv), phimin, phimax, npts, backwardsearch)
 
         # once bracket is found, solve root finding problem and compute loads
         if success
             function solve(x, p) #todo: Is there a more efficient way to do this instead of a closure? 
-                phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
-                
+                # phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
+                phistar, _ = sub_brent(phi -> residual(phi, x, p), phiL, phiU, 5e-10; maxiter = 10000, xtoler=1e-6, epsilon=eps())
+
                 return phistar
             end
             
@@ -369,7 +365,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     # it will return empty outputs
     # alternatively, one could increase npts and try again
     
-    @warn "Invalid data (likely) for this section.  Zero loading assumed."
+    # @warn "Invalid data (likely) for this section.  Zero loading assumed."
     return CCBlade.Outputs()
 end
 
