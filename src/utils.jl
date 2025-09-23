@@ -334,25 +334,25 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
         end
 
         # Set the tolerance. Note: brent is very careful with these things, so don't deviate from this.
-        # tol = 2.0*epsilon*abs(b) + xtoler
-        tol = 2e-12
+        tol = 2.0*epsilon*abs(b) + xtoler
+        # tol = 2e-12
 
         # Determine what half the length of the bracket [b,c] is
         m = 0.5*(c-b)
 
         # If taking a bisection step would move the guess of the root less than tol, then return b the best guess.
-        if (abs(m)<=tol)
-            # println("bracket size below tolerance")
-            return b, (fb, iter)
-        elseif (fb==0.0)
-            # println("Residual converged mid step.")
+        # if (abs(m)<=tol)
+        #     # println("bracket size below tolerance")
+        #     return b, (fb, iter)
+        # elseif (fb==0.0)
+        #     # println("Residual converged mid step.")
+        #     return b, (fb, iter)
+        # end 
+
+        if (fb==0.0)
+            println("Residual converged mid step.")
             return b, (fb, iter)
         end
-
-        # if (fb==0.0)
-        #     println("Residual converged mid step.")
-        #     return b, (fb, iter)
-        # end
 
 
         # If still here, then check whether need to do bisection or can do interpolation

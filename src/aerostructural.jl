@@ -689,9 +689,17 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     # #todo: Only works with initial response (not steady state or spinning solution. )
     # system, gxhistory[1], converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
 
-
-    system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
-    
+    # @show typeof(system)
+    # @show typeof(assembly)
+    # @show typeof(prescribed_conditions)
+    # @show typeof(distributed_loads)
+    # @show typeof(Omega0)
+    # @show typeof(gravity0)
+    # @show structural_damping
+    # @show typeof(p)
+    # system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
+    system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
+    #Note: I don't think I need to pass in the distributed_loads, the gravity, or the angular velocity because it lives in pfunc. 
 
 
     gxhistory[1] = gxstate[1]
@@ -744,7 +752,7 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     # take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, phi0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
     take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver)
 
-
+    azimuth[1] = azimuth0
 
 
 

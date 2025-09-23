@@ -348,8 +348,8 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
         # once bracket is found, solve root finding problem and compute loads
         if success
             function solve(x, p) #todo: Is there a more efficient way to do this instead of a closure? 
-                # phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
-                phistar, _ = sub_brent(phi -> residual(phi, x, p), phiL, phiU, 5e-10; maxiter = 10000, xtoler=1e-6, epsilon=eps())
+                phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
+                # phistar, _ = sub_brent(phi -> residual(phi, x, p), phiL, phiU, 5e-10; maxiter = 10000, xtoler=1e-6, epsilon=eps())
 
                 return phistar
             end
