@@ -4,7 +4,7 @@ Test the meshing and mesh transfer functions.
 =#
 
 using Test
-using Rotors, GXBeam, OpenFASTsr, DynamicStallModels
+using WATT, GXBeam, OpenFASTsr, DynamicStallModels
 using LinearAlgebra, StaticArrays
 
 of = OpenFASTsr
@@ -23,57 +23,57 @@ cd(localpath)
         rvec = collect(0:10)
 
         r = .5
-        pair = Rotors.find_point_indices(rvec, r)
+        pair = WATT.find_point_indices(rvec, r)
         pair_gold = (1, 2)
         @test pair==pair_gold
 
         r = pi
-        pair = Rotors.find_point_indices(rvec, r)
+        pair = WATT.find_point_indices(rvec, r)
         pair_gold = (4, 5)
         @test pair==pair_gold
 
         #Boundary tests
         r = 0
-        pair = Rotors.find_point_indices(rvec, r)
+        pair = WATT.find_point_indices(rvec, r)
         pair_gold = (1, 2)
         @test pair==pair_gold
 
         r = 10
-        pair = Rotors.find_point_indices(rvec, r)
+        pair = WATT.find_point_indices(rvec, r)
         pair_gold = (10, 11)
         @test pair==pair_gold
 
         #Out of bounds tests
         r = -1
-        pair = Rotors.find_point_indices(rvec, r)
+        pair = WATT.find_point_indices(rvec, r)
         pair_gold = (1,2)
         @test pair==pair_gold
 
         r = 4*pi
-        pair = Rotors.find_point_indices(rvec, r)
+        pair = WATT.find_point_indices(rvec, r)
         pair_gold = (10,11)
         @test pair==pair_gold
 
         ### Test find_interpolation_percent
         #Test a random spot
         r = 4.75
-        pair = Rotors.find_point_indices(rvec, r)
-        percent = Rotors.find_interpolation_percent(rvec, pair, r)
+        pair = WATT.find_point_indices(rvec, r)
+        percent = WATT.find_interpolation_percent(rvec, pair, r)
         percent_gold = 0.75
         @test percent==percent_gold
 
         #Test out of bounds
         r = -0.45
-        pair = Rotors.find_point_indices(rvec, r)
-        percent = Rotors.find_interpolation_percent(rvec, pair, r)
+        pair = WATT.find_point_indices(rvec, r)
+        percent = WATT.find_interpolation_percent(rvec, pair, r)
         percent_gold = -0.45
         @test percent == percent_gold
 
         #Test something that doesn't have an interval of 1
         rvec = collect(0:10:100)
         r = 12
-        pair = Rotors.find_point_indices(rvec, r)
-        percent = Rotors.find_interpolation_percent(rvec, pair, r)
+        pair = WATT.find_point_indices(rvec, r)
+        percent = WATT.find_interpolation_percent(rvec, pair, r)
         percent_gold = 0.2
         @test percent == percent_gold
 
@@ -118,7 +118,7 @@ cd(localpath)
         blade = Blade(rvec, twistvec, airfoils)
         assembly = of.make_assembly(edfile, bdfile, bdblade)
 
-        ips = Rotors.create_interpolationpoints(assembly, blade)
+        ips = WATT.create_interpolationpoints(assembly, blade)
 
         rgx = [norm(assembly.points[i]) for i in eachindex(assembly.points)]
         
@@ -176,7 +176,7 @@ cd(localpath)
         blade = Blade(rvec, twistvec, airfoils)
         assembly = of.make_assembly(edfile, bdfile, bdblade)
 
-        ips = Rotors.create_interpolationpoints(assembly, blade)
+        ips = WATT.create_interpolationpoints(assembly, blade)
 
         distributed_loads = Dict{Int64, DistributedLoads{Float64}}()
 
@@ -213,14 +213,14 @@ cd(localpath)
 
         na = length(blade.airfoils)
 
-        delta = [Rotors.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
-        dtheta = [Rotors.interpolate_angle(ips[i], assembly, state) for i in 1:na]
-        V = [Rotors.interpolate_velocity(ips[i], assembly, state) for i in 1:na]
-        aerov = [norm(Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i)) for i in 1:na]
+        delta = [WATT.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
+        dtheta = [WATT.interpolate_angle(ips[i], assembly, state) for i in 1:na]
+        V = [WATT.interpolate_velocity(ips[i], assembly, state) for i in 1:na]
+        aerov = [norm(WATT.convert_velocities(blade, env, assembly, state, ips, tvec[end], i)) for i in 1:na]
 
 
-        theta_root = Rotors.WMPtoangle(state.points[1].theta)
-        theta_tip = Rotors.WMPtoangle(state.points[end].theta)
+        theta_root = WATT.WMPtoangle(state.points[1].theta)
+        theta_tip = WATT.WMPtoangle(state.points[end].theta)
 
         ## Check the endpoints where the nodes match up.
         #Root 
@@ -242,9 +242,9 @@ cd(localpath)
         idx = 2
         r = blade.r[idx]
 
-        rgx = Rotors.get_bladelength_vector(assembly)
-        pair = Rotors.find_point_indices(rgx, r)
-        percent = Rotors.find_interpolation_percent(rgx, pair, r)
+        rgx = WATT.get_bladelength_vector(assembly)
+        pair = WATT.find_point_indices(rgx, r)
+        percent = WATT.find_interpolation_percent(rgx, pair, r)
 
         V_gold = state.points[pair[1]].V*(1-percent) + percent*state.points[pair[2]].V
 
@@ -267,7 +267,7 @@ cd(localpath)
             steady=true) 
 
         state = history[end]
-        aerov = [Rotors.convert_velocities(blade, env, assembly, state, ips, tvec[end], i) for i in 1:na]
+        aerov = [WATT.convert_velocities(blade, env, assembly, state, ips, tvec[end], i) for i in 1:na]
 
 
         steadyflag = true

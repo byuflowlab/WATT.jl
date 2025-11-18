@@ -3,7 +3,7 @@ using Test
 localpath = @__DIR__
 cd(localpath)
 
-@testset "Rotors" begin
+@testset "WATT" begin
     include("test_utils.jl")
     include("test_types.jl")
     include("test_mesh.jl") 

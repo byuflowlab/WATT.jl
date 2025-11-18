@@ -4,7 +4,7 @@ Tests to test the four different BEM implementations: 1) single residual (inflow
 Adam Cardoza
 =#
 using Revise
-using Test, Rotors, DelimitedFiles, FLOWMath, CCBlade, OpenFASTsr, DynamicStallModels
+using Test, WATT, DelimitedFiles, FLOWMath, CCBlade, OpenFASTsr, DynamicStallModels
 # using Test, DelimitedFiles, FLOWMath, CCBlade
 
 of = OpenFASTsr
@@ -13,7 +13,7 @@ DS = DynamicStallModels
 localpath = @__DIR__
 cd(localpath)
 
-# include("/Users/adamcardoza/.julia/dev/Rotors/src/bem.jl")
+# include("/Users/adamcardoza/.julia/dev/WATT/src/bem.jl")
 
 errfun(x, xt) = 100*(x - xt)/xt
 
@@ -54,7 +54,7 @@ errfun(x, xt) = 100*(x - xt)/xt
         #ct:  -5.142382031116966E-003
         cx = Cl*cphi + Cd*sphi #x
         cy = Cl*sphi - Cd*cphi #x
-        a, ap, R = Rotors.inductionfactors(phi0, U, omega, c, r, B, cx, cy, F) 
+        a, ap, R = WATT.inductionfactors(phi0, U, omega, c, r, B, cx, cy, F) 
 
         # OpenFAST's first iteration values
         a_gold = 0.997398000367958  
@@ -81,7 +81,7 @@ errfun(x, xt) = 100*(x - xt)/xt
             cdr = cdfit(alphar)
             cxr = clr*cphi + cdr*sphi #x
             cyr = clr*sphi - cdr*cphi #x
-            _, _, Ri = Rotors.inductionfactors(phir, U, omega, c, r, B, cxr, cyr, F)
+            _, _, Ri = WATT.inductionfactors(phir, U, omega, c, r, B, cxr, cyr, F)
             return Ri
         end
 
@@ -96,8 +96,8 @@ errfun(x, xt) = 100*(x - xt)/xt
 
         phistar, info = brent(residual, eps(), pi/2 - eps(); maxiter=5000)
 
-        phi2, info2 = Rotors.sub_brent(residual, eps(), pi/2 - eps(), 0.0; maxiter=5000)
-        phi3, info3 = Rotors.sub_brent(resid, eps(), pi/2 - eps(), 0.0; maxiter=5000)
+        phi2, info2 = WATT.sub_brent(residual, eps(), pi/2 - eps(), 0.0; maxiter=5000)
+        phi3, info3 = WATT.sub_brent(resid, eps(), pi/2 - eps(), 0.0; maxiter=5000)
 
         phi4, info4 = brent(resid, eps(), pi/2 - eps(); maxiter=5000, atol=2e-15, rtol=1e-10) #Tightening these tolerances, or loosening them makes it difficult to tie down if it matches the OpenFAST solutions. 
 
@@ -190,7 +190,7 @@ errfun(x, xt) = 100*(x - xt)/xt
         B = 3
         hubht = 80.0
         turbine = true
-        rotor = Rotors.Rotor(B, hubht, turbine)
+        rotor = WATT.Rotor(B, hubht, turbine)
 
         vinf = addriver["HWndSpeed_mat"][1] #10.0
         # tsr = 7.55
@@ -210,7 +210,7 @@ errfun(x, xt) = 100*(x - xt)/xt
         for idx = 1:n
             Vy = omega*rvec[idx]
 
-            rotorout = Rotors.solve_BEM(rotor, blade, env, idx, Vx, Vy, pitch; npts=10)
+            rotorout = WATT.solve_BEM(rotor, blade, env, idx, Vx, Vy, pitch; npts=10)
 
             # af = AlphaAF("../data/polars/DU25_A17.dat", radians=false)
             polar = blade.airfoils[idx].polar
@@ -222,7 +222,7 @@ errfun(x, xt) = 100*(x - xt)/xt
 
             @test isa(rotorout, typeof(ccout))
 
-            flags = Rotors.compare_fieldnames(rotorout, ccout)
+            flags = WATT.compare_fieldnames(rotorout, ccout)
             @test any(i -> i, flags)
 
             if ccout.a>1

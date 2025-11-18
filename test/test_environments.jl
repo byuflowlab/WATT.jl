@@ -5,7 +5,7 @@ Test all of the environment constructors and functions
 =#
 
 using Test
-using Rotors, CCBlade, OpenFASTsr, DynamicStallModels, GXBeam, StaticArrays
+using WATT, CCBlade, OpenFASTsr, DynamicStallModels, GXBeam, StaticArrays
 
 DS = DynamicStallModels
 of = OpenFASTsr
@@ -75,11 +75,11 @@ cd(localpath)
 
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine)
+        rotor = WATT.Rotor(B, hubht, turbine)
         blade = Blade(rvec, twistvec, airfoils)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
-        @test isa(env, Rotors.Environment) #Test the typing. 
+        @test isa(env, WATT.Environment) #Test the typing. 
 
         idx = 10
         r = rvec[idx]
@@ -91,14 +91,14 @@ cd(localpath)
         # println("Nothing: ")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -114,7 +114,7 @@ cd(localpath)
         t = 4.5
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine)
+        rotor = WATT.Rotor(B, hubht, turbine)
         blade = Blade(rvec, twistvec, airfoils)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -127,13 +127,13 @@ cd(localpath)
         # println("Azimuthal")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -149,7 +149,7 @@ cd(localpath)
         precone = 25*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine)
+        rotor = WATT.Rotor(B, hubht, turbine)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -162,13 +162,13 @@ cd(localpath)
         # println("precone")
         # println("My code:")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -183,7 +183,7 @@ cd(localpath)
         precone = 25*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine)
+        rotor = WATT.Rotor(B, hubht, turbine)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -196,13 +196,13 @@ cd(localpath)
         # println("precone azimuth:")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -219,7 +219,7 @@ cd(localpath)
         tilt = 25*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -232,13 +232,13 @@ cd(localpath)
         # println("Tilted flow:")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -256,7 +256,7 @@ cd(localpath)
         # println("")
         # @show (azimuth)*180/pi
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -269,13 +269,13 @@ cd(localpath)
         # println("tilt with azimuth")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -294,7 +294,7 @@ cd(localpath)
         yaw = 25*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -307,13 +307,13 @@ cd(localpath)
         # println("yaw")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -330,7 +330,7 @@ cd(localpath)
         yaw = 25*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -343,13 +343,13 @@ cd(localpath)
         # println("yaw with azimuth")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -372,7 +372,7 @@ cd(localpath)
         yaw = 25*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -385,14 +385,14 @@ cd(localpath)
         # println("Tilt and yaw")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -411,7 +411,7 @@ cd(localpath)
         yaw = 25*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -424,14 +424,14 @@ cd(localpath)
         # println("Tilt, yaw, and azimuth")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
 
@@ -450,7 +450,7 @@ cd(localpath)
         yaw = 49*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -463,14 +463,14 @@ cd(localpath)
         # println("tilt, yaw, and precone")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
         # # println("")
@@ -489,7 +489,7 @@ cd(localpath)
         yaw = 49*pi/180
         azimuth = omega*t #assume constant rotation rate
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
@@ -502,14 +502,14 @@ cd(localpath)
         # println("tilt, yaw, precone, and azimuth")
         # println("My code: ")
         
-        Vx, Vy = Rotors.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+        Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
         # @show Vx, Vy
         # println("")
         # println("Dr. Ning's code: ")
 
-        # Vxo, Vyo = Rotors.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
+        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
 
         # @show Vxo, Vyo
         # # println("")
@@ -564,7 +564,7 @@ cd(localpath)
             airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
         end
 
-        rotor = Rotors.Rotor(B, hubht, turbine; tilt, yaw)
+        rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
         blade = Blade(rvec, twistvec, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
         
@@ -572,7 +572,7 @@ cd(localpath)
 
         assembly = of.make_assembly(edfile, bdfile, bdblade)
 
-        ips = Rotors.create_interpolationpoints(assembly, blade)
+        ips = WATT.create_interpolationpoints(assembly, blade)
 
         distributed_loads = Dict{Int64, DistributedLoads{Float64}}()
 
@@ -608,8 +608,8 @@ cd(localpath)
 
         na = length(blade.airfoils)
 
-        delta = [Rotors.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
-        aerov = [Rotors.convert_velocities(blade, env, assembly, state, ips, t, i) for i in 1:na]
+        delta = [WATT.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
+        aerov = [WATT.convert_velocities(blade, env, assembly, state, ips, t, i) for i in 1:na]
 
         # @show state.points[1].u
         # @show state.points[1].V
@@ -621,7 +621,7 @@ cd(localpath)
         Vyvec = zeros(na)
 
         for i = 1:na
-            Vxvec[i], Vyvec[i] = Rotors.get_aerostructural_velocities(rotor, blade, env, t, i, azimuth, delta[i], aerov[i])
+            Vxvec[i], Vyvec[i] = WATT.get_aerostructural_velocities(rotor, blade, env, t, i, azimuth, delta[i], aerov[i])
         end
 
         # @show blade.r

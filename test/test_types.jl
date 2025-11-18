@@ -4,7 +4,7 @@ Test the Blade constructors, functions and methods.
 =#
 
 using Test, Statistics
-using Rotors, FLOWMath, DynamicStallModels, OpenFASTsr
+using WATT, FLOWMath, DynamicStallModels, OpenFASTsr
 
 DS = DynamicStallModels
 of = OpenFASTsr
@@ -77,7 +77,7 @@ cd(localpath)
         rz = zero(rvec)
 
         for i in eachindex(rvec)
-            rx[i], ry[i], rz[i] = Rotors.transform_BC_G(blade.rx[i], blade.ry[i], blade.rz[i], azimuth, blade.precone, tilt, yaw)
+            rx[i], ry[i], rz[i] = WATT.transform_BC_G(blade.rx[i], blade.ry[i], blade.rz[i], azimuth, blade.precone, tilt, yaw)
         end
 
         @test mean(rx)>0

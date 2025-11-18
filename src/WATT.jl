@@ -1,4 +1,4 @@
-module Rotors
+module WATT
 
 using FLOWMath, LinearAlgebra, StaticArrays, CurveFit, NLsolve, UnPack
 using CCBlade, GXBeam, DynamicStallModels
