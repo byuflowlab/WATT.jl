@@ -173,7 +173,7 @@ function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, az
     end
     
     ### Update Dynamic Stall model inputs 
-    update_ds_inputs!(blade.airfoils, view(mesh.y_ds, :), W, phi, blade.twist, pitch, dt, rotor.turbine)
+    update_ds_inputs!(blade.airfoils, view(mesh.y_ds, :), W, phi, blade.twist, pitch, dt, rotor.turbine, blade)
     
     ### Integrate Dynamic Stall model
     update_ds_states!(solver, blade.airfoils, xds_old, xds, mesh.xds_idxs, mesh.y_ds, mesh.p_ds, t, dt)

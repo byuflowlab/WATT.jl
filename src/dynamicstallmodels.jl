@@ -75,7 +75,7 @@ function update_ds_states!(solver::Solver, airfoils::AbstractVector{<:DS.Airfoil
 
 end
 
-function update_ds_inputs!(airfoils::AbstractVector{<:Airfoil}, y_ds, W, phivec, twistvec, pitch, dt, turbine)
+function update_ds_inputs!(airfoils::AbstractVector{<:Airfoil}, y_ds, W, phivec, twistvec, pitch, dt, turbine, blade::Blade)
     for j in eachindex(airfoils)
         idx = 4*(j-1)
         Udot = (W[j] - y_ds[idx+1])/dt #Calculate the inflow acceleration. 
@@ -86,11 +86,19 @@ function update_ds_inputs!(airfoils::AbstractVector{<:Airfoil}, y_ds, W, phivec,
         end
         alphadot = (alpha - y_ds[idx+3])/dt
 
+        # c = blade.c[j]
+        # xcp = blade.xcp[j]
+        # @show alpha
+        # alpha = alpha + c*alphadot*(1 - 2*xcp) / 2 / W[j] #Theodorsen correction #Causes some hefty errors. 
+        # @show alpha
+        # println("") 
+
         y_ds[idx + 1] = W[j] #Update the inflow velocity
         y_ds[idx + 2] = Udot #Update the inflow acceleration
         y_ds[idx + 3] = alpha #Update the aoa
         y_ds[idx + 4] = alphadot #Update the angular velocity
     end
+    # println("updated ds inputs")
 end
 
 function extract_ds_loads!(airfoils::AbstractVector{<:Airfoil}, states, state_idxs, phi, y_ds, p_ds, Cx, Cy, Cm)

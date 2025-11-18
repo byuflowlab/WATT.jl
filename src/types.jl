@@ -70,38 +70,38 @@ The blade struct... what else is there to say.
 - twist::AbstractVector{<:TF} - the twist distribution (radians). 
 - airfoils::AbstractVector{<:DynamicStallModels.Airfoil} - The vector of the airfoil structs (an airfoil for each node). 
 """
-struct Blade{TF, TVF, TVF2, TVDS}  
-    rhub::TF
-    rtip::TF
-    rx::TVF #Lead-lag direction (freestream) curve value
-    ry::TVF #Flapwise direction (Sweep value)
-    rz::TVF #Radial direction
-    r::TVF #Todo: Decide if I want this in here, or if I'll just use the norm of the vectorized version. 
-    rR::TVF
-    c::TVF2 #Chord length
-    thetax::TVF #Sweep angle
-    thetay::TVF #Curve angle
-    twist::TVF2
-    precone::TF
-    xcp::TVF 
-    airfoils::TVDS
-end
-# struct Blade{TF, TF2}  
+# struct Blade{TF, TVF, TVF2, TVDS}  
 #     rhub::TF
 #     rtip::TF
-#     rx::AbstractVector{<:TF} #Lead-lag direction (freestream) curve value
-#     ry::AbstractVector{<:TF} #Flapwise direction (Sweep value)
-#     rz::AbstractVector{<:TF} #Radial direction
-#     r::AbstractVector{<:TF} #Todo: Decide if I want this in here, or if I'll just use the norm of the vectorized version. 
-#     rR::AbstractVector{<:TF}
-#     c::AbstractVector{<:TF2} #Chord length
-#     thetax::AbstractVector{<:TF} #Sweep angle
-#     thetay::AbstractVector{<:TF} #Curve angle
-#     twist::AbstractVector{<:TF2}
+#     rx::TVF #Lead-lag direction (freestream) curve value
+#     ry::TVF #Flapwise direction (Sweep value)
+#     rz::TVF #Radial direction
+#     r::TVF #Todo: Decide if I want this in here, or if I'll just use the norm of the vectorized version. 
+#     rR::TVF
+#     c::TVF2 #Chord length
+#     thetax::TVF #Sweep angle
+#     thetay::TVF #Curve angle
+#     twist::TVF2
 #     precone::TF
-#     xcp::AbstractVector{<:TF} 
-#     airfoils::AbstractVector{<:DS.Airfoil}
+#     xcp::TVF 
+#     airfoils::TVDS
 # end
+struct Blade{TF, TF2}  
+    rhub::TF
+    rtip::TF
+    rx::AbstractVector{<:TF} #Lead-lag direction (freestream) curve value
+    ry::AbstractVector{<:TF} #Flapwise direction (Sweep value)
+    rz::AbstractVector{<:TF} #Radial direction
+    r::AbstractVector{<:TF} #Todo: Decide if I want this in here, or if I'll just use the norm of the vectorized version. 
+    rR::AbstractVector{<:TF}
+    c::AbstractVector{<:TF2} #Chord length
+    thetax::AbstractVector{<:TF} #Sweep angle
+    thetay::AbstractVector{<:TF} #Curve angle
+    twist::AbstractVector{<:TF2}
+    precone::TF
+    xcp::AbstractVector{<:TF} 
+    airfoils::AbstractVector{<:DS.Airfoil}
+end
 
 """
     Blade(rvec, twist, airfoils; rhub=rvec[1], rtip=rvec[end], precone=0.0, sweep=0.0, curve=0.0, rx=zero(rvec), ry=zero(rvec)) -> blade

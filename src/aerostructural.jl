@@ -697,9 +697,9 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     # @show typeof(gravity0)
     # @show structural_damping
     # @show typeof(p)
-    # system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
-    system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
-    #Note: I don't think I need to pass in the distributed_loads, the gravity, or the angular velocity because it lives in pfunc. 
+    system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
+    # system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
+    #Note: I don't think I need to pass in the distributed_loads, the gravity, or the angular velocity because it lives in pfunc. -> No, it needs to be passed in, because pfunc might be empty. (pfunc replaces the things that are passed in, so if they have duals, then they'll get overwritten. )
 
 
     gxhistory[1] = gxstate[1]

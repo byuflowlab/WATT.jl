@@ -482,7 +482,8 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.l
         # @show typeof(r1), typeof(r2) #Correct types
 
         # linear(xnew, x0, x1, y0, y1)
-        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> fit(s, blade.r, fy), fz_follower = (s) -> fit(s, blade.r, fz), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
+        # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> fit(s, blade.r, fy), fz_follower = (s) -> fit(s, blade.r, fz), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
+        distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> fit(s, blade.r, fy), fz = (s) -> fit(s, blade.r, fz), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
         # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
         #todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
     end
