@@ -77,7 +77,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
 
     t0 = first(tvec)
 
-    inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+    inittype = find_inittype(blade.c[1], blade.twist[1])
 
 
 
@@ -100,7 +100,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
     xcc = Vector{inittype}(undef, 11)
 
     # Initialize DS solution
-    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
+    xds, xds_idxs, y_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
 
     # Store everything in the aerostates 
     # aerostates = AeroStates(azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
@@ -149,7 +149,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
     aerov = Vector{SVector{3, inittype}}(undef, na)
 
     
-    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, p_ds,
+    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, y_ds,
                 assembly, system, prescribed_conditions, distributed_loads,
                 point_masses, linear_velocity, angular_velocity,
                 xpfunc, pfunc, two_dimensional, structural_damping, linear)
@@ -213,7 +213,7 @@ function initial_condition!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates
     dsmodel_initial_condition!(xds, phi, W, mesh, blade, rotor.turbine, t0, pitch) #
 
     
-    extract_ds_loads!(blade.airfoils, xds, mesh.xds_idxs, phi, mesh.p_ds, cx, cy, cm)
+    extract_ds_loads!(blade.airfoils, xds, mesh.xds_idxs, phi, mesh.y_ds, cx, cy, cm)
 
 
     dimensionalize!(fx, fy, mx, cx, cy, cm, blade, env, W) 
@@ -527,14 +527,14 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
 
     t0 = first(tvec)
 
-    inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+    inittype = find_inittype(blade.c[1], blade.twist[1])
 
 
 
     ### ----- Prepare data storage for aerodynamic models ----- ###
 
-    # azimuth = Array{inittype}(undef, nt)
-    azimuth = Array{Float64}(undef, nt) #Note: I don't know of a situation that the azimuth would be a dual number.
+    azimuth = Array{inittype}(undef, nt)
+    # azimuth = Array{Float64}(undef, nt) #Note: I don't know of a situation that the azimuth would be a dual number.
     phi = Array{inittype}(undef,(nt, na))
     alpha = Array{inittype}(undef,(nt, na))
     W = Array{inittype}(undef,(nt, na))
@@ -551,7 +551,7 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     xcc = Vector{inittype}(undef, 11)
 
     # Initialize DS solution
-    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
+    xds, xds_idxs, y_ds, p_ds = initialize_ds_model(blade, nt, inittype)  
 
     # Store everything in the aerostates 
     # aerostates = AeroStates(azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
@@ -597,7 +597,7 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     aerov = Vector{SVector{3, inittype}}(undef, na)
 
     
-    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, p_ds,
+    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, y_ds, p_ds,
                 assembly, system, prescribed_conditions, distributed_loads,
                 point_masses, linear_velocity, angular_velocity,
                 xpfunc, pfunc, two_dimensional, structural_damping, linear)
@@ -617,9 +617,7 @@ The pre-allocated version of run_sim().
 """
 function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aerostates, gxhistory; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime = (aerostates, gxhistory, i) ->nothing, gxflag=nothing, prepp=nothing, p=nothing, azimuth0=0.0)
 
-    #Todo: I feel like this function could be simplified by having a function to initialize the sim, then .... wait... this looks like the step_system approach. This looks like exactly what I already need. Lol... did I already do this work? 
 
-    # println("unpacking...")
     ### unpack the data structures. 
     @unpack assembly, system, prescribed_conditions, distributed_loads, point_masses, linear_velocity, xpfunc, pfunc, structural_damping, two_dimensional, linear = mesh
 
@@ -650,10 +648,12 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
 
     initial_condition_checks(gxflag)
 
+
     # println("Initializing...")
     ### Initialize BEM solution 
     for j = 1:na
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth0)
+
 
         ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
         # ccout = solve_BEM!(rotor, blade, env, 0.0, j, Vx, Vy, pitch, mesh.xcc; newbounds=false)
@@ -664,10 +664,10 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     end
 
     #Note: I don't use take_aero_step because these functions are different. 
-    dsmodel_initial_condition!(xds0, phi0, W0, mesh, blade, rotor.turbine, t0, pitch) #
+    dsmodel_initial_condition!(xds0, phi0, W0, mesh, blade, rotor.turbine, t0, pitch)
 
     
-    extract_ds_loads!(blade.airfoils, xds0, mesh.xds_idxs, phi0, mesh.p_ds, cx0, cy0, cm0)
+    extract_ds_loads!(blade.airfoils, xds0, mesh.xds_idxs, phi0, mesh.y_ds, mesh.p_ds, cx0, cy0, cm0)
 
 
     dimensionalize!(fx0, fy0, mx0, cx0, cy0, cm0, blade::Blade, env::Environment, W0) 
@@ -689,21 +689,18 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     # #todo: Only works with initial response (not steady state or spinning solution. )
     # system, gxhistory[1], converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
 
+    # @show typeof(system)
+    # @show typeof(assembly)
     # @show typeof(prescribed_conditions)
     # @show typeof(distributed_loads)
-    # @show typeof(assembly)
-    # @show typeof(gravity0), typeof(Omega0)
-    # @show typeof(system)
+    # @show typeof(Omega0)
+    # @show typeof(gravity0)
+    # @show structural_damping
     # @show typeof(p)
-    # @show p
-
     system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
-    
-    # @show typeof(gxstate), length(gxstate)
-    # println("Finished initializing GXBeam...")
-    # @show typeof(paug)
+    # system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
+    #Note: I don't think I need to pass in the distributed_loads, the gravity, or the angular velocity because it lives in pfunc. -> No, it needs to be passed in, because pfunc might be empty. (pfunc replaces the things that are passed in, so if they have duals, then they'll get overwritten. )
 
-    #Todo. What does gxstate look like? -> A vector of assembly states (but that's because it's reallocating the history vector. )
 
     gxhistory[1] = gxstate[1]
 
@@ -722,46 +719,46 @@ function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aero
     ### Take the first step then set that as the first value. -> This is what OpenFAST does. 
     # azimuth = env.RS(t)*dt + azimuth0
     
-    if isa(xds0[1], ReverseDiff.TrackedReal)
-        # ns = DS.numberofstates_total(airfoils)
-        # xds_old = Array{inittype, 1}(undef, ns) 
-        # xds_old = deepcopy(xds)
-        inittype = eltype(xds0)
-        ns = DS.numberofstates_total(blade.airfoils)
-        xds_old = Array{inittype, 1}(undef, ns)
+    # if isa(xds0[1], ReverseDiff.TrackedReal) #todo. Move this into a function. 
+   
+    #     inittype = eltype(xds0)
+    #     ns = DS.numberofstates_total(blade.airfoils)
+    #     xds_old = Array{inittype, 1}(undef, ns)
 
-        #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
-        for i in eachindex(xds0) 
-            xds_old[i] = xds0[i]
-        end
+    #     #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
+    #     for i in eachindex(xds0) 
+    #         xds_old[i] = xds0[i]
+    #     end
         
-    elseif isa(xds[1], ForwardDiff.Dual)
-        # xds_old = deepcopy(xds) #Derivatives are getting nuked
-        inittype = eltype(xds0)
-        ns = DS.numberofstates_total(blade.airfoils)
-        xds_old = Array{inittype, 1}(undef, ns)
+    # elseif isa(xds0[1], ForwardDiff.Dual)
+    #     # xds_old = deepcopy(xds) #Derivatives are getting nuked
+    #     inittype = eltype(xds0)
+    #     ns = DS.numberofstates_total(blade.airfoils)
+    #     xds_old = Array{inittype, 1}(undef, ns)
 
-        #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
-        for i in eachindex(xds0) 
-            xds_old[i] = xds0[i]
-        end
+    #     #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
+    #     for i in eachindex(xds0) 
+    #         xds_old[i] = xds0[i]
+    #     end
 
-        # @show xds[1].partials
-        # @show xds_old[1].partials
-    else
-        xds_old = deepcopy(xds0)
-    end
+    #     # @show xds[1].partials
+    #     # @show xds_old[1].partials
+    # else
+    #     xds_old = deepcopy(xds0)
+    # end
+    xds_old = dualcopy(xds0) #todo: I feel like there is a better way to do this. 
 
     dt = tvec[2] - tvec[1] #Note: this passing in phi0 and replacing phi0 might break things... 
     # take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, phi0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
     take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver)
 
-
+    azimuth[1] = azimuth0
 
 
 
     # println("Beginning time loop...")
     for i in 2:nt
+        # println("i = $i")
 
         ### Unpack
         phi_i = view(phi, i, :)

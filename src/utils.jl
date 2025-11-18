@@ -7,6 +7,22 @@ function nearestto(xvec, x)
     return minval, minidx
 end
 
+function dualcopy(x)
+    if isa(x[1], ReverseDiff.TrackedReal) || isa(x[1], ForwardDiff.Dual)
+        TF = typeof(x[1])
+        ns = length(x)
+        xnew = Vector{TF}(undef, ns)
+        for i = 1:ns
+            xnew[i] = x[i]
+        end
+
+        return xnew
+    else
+        # If not, then just return the original vector.
+        return deepcopy(x)
+    end
+end
+
 function getfieldnames(obj)
     return fieldnames(typeof(obj))
 end
@@ -318,8 +334,8 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
         end
 
         # Set the tolerance. Note: brent is very careful with these things, so don't deviate from this.
-        # tol = 2.0*epsilon*abs(b) + xtoler
-        tol = 2e-12
+        tol = 2.0*epsilon*abs(b) + xtoler
+        # tol = 2e-12
 
         # Determine what half the length of the bracket [b,c] is
         m = 0.5*(c-b)
@@ -331,7 +347,7 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
         # elseif (fb==0.0)
         #     # println("Residual converged mid step.")
         #     return b, (fb, iter)
-        # end
+        # end 
 
         if (fb==0.0)
             println("Residual converged mid step.")
@@ -407,9 +423,9 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
         ### Evaluate at the new point
         fb = fun(b)
 
-        # Check my custom tolerance 
+        # Check my custom tolerance #Note: This is in their code now... I don't think that was there before... lol. Did I influence their code? 
         if abs(fb)<toler
-            println("Residual Converged below tolerance.")
+            # println("Residual Converged below tolerance.")
             return b, (fb, iter)
         end
             

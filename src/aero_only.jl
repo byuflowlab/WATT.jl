@@ -14,9 +14,9 @@ function dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade::Blade, env::Environment,
     for j in eachindex(blade.r)
         q_local = 0.5*env.rho*W[j]^2 #Local dynamic pressure
         
-        Fx[j] = Cx[j]*q_local*blade.airfoils.c[j] 
-        Fy[j] = Cy[j]*q_local*blade.airfoils.c[j] 
-        Mx[j] = Cm[j]*q_local*blade.airfoils.c[j]^2 #The coefficient of moment is positive about the negative Z aero axis, so we need the negative of this to move it to the structural X axis. 
+        Fx[j] = Cx[j]*q_local*blade.c[j] 
+        Fy[j] = Cy[j]*q_local*blade.c[j] 
+        Mx[j] = Cm[j]*q_local*blade.c[j]^2 #The coefficient of moment is positive about the negative Z aero axis, so we need the negative of this to move it to the structural X axis. 
     end
 end
 
@@ -90,7 +90,7 @@ function initialize(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
     xcc = Vector{inittype}(undef, 11)
 
     # Initialize DS solution
-    xds, xds_idxs, p_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
+    xds, xds_idxs, y_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
 
     # Store everything in the aerostates 
     aerostates = (;azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
@@ -111,7 +111,7 @@ function initialize(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
     end
 
     
-    mesh = (; delta, def_theta, aerov, xcc, xds_idxs, p_ds)
+    mesh = (; delta, def_theta, aerov, xcc, xds_idxs, y_ds)
 
     return aerostates, mesh
 end
@@ -159,10 +159,12 @@ function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, az
         # @show mesh.aerov[j][1].value, mesh.aerov[j][2].value, mesh.aerov[j][2].value
         # @show mesh.aerov[j]
         Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
+        #Todo: Angles aren't updated with angular deflection.... 
         
         #TODO: Write a solver that is initialized with the previous inflow angle.
         
-        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) 
+        # ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) 
+        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch - mesh.def_theta[j][1], mesh.xcc) 
         # ccout = solve_BEM!(rotor, blade, env, phi_old[j], j, Vx, Vy, pitch, mesh.xcc) #Todo: Need to create some sort of fail safe for not converging. 
 
         phi[j] = ccout.phi
@@ -171,13 +173,13 @@ function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, az
     end
     
     ### Update Dynamic Stall model inputs 
-    update_ds_inputs!(blade.airfoils, view(mesh.p_ds, :), W, phi, blade.twist, pitch, dt, rotor.turbine)
+    update_ds_inputs!(blade.airfoils, view(mesh.y_ds, :), W, phi, blade.twist, pitch, dt, rotor.turbine, blade)
     
     ### Integrate Dynamic Stall model
-    update_ds_states!(solver, blade.airfoils, xds_old, xds, mesh.xds_idxs, mesh.p_ds, t, dt)
+    update_ds_states!(solver, blade.airfoils, xds_old, xds, mesh.xds_idxs, mesh.y_ds, mesh.p_ds, t, dt)
 
     ### Extract loads 
-    extract_ds_loads!(blade.airfoils, xds, mesh.xds_idxs, phi, mesh.p_ds, cx, cy, cm)
+    extract_ds_loads!(blade.airfoils, xds, mesh.xds_idxs, phi, mesh.y_ds, mesh.p_ds, cx, cy, cm)
  
     
     dimensionalize!(fx, fy, mx, cx, cy, cm, blade::Blade, env::Environment, W)
@@ -241,7 +243,7 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
 
     @unpack azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds = aerostates
 
-    @unpack p_ds, xds_idxs = mesh
+    @unpack y_ds, xds_idxs = mesh
 
 
 
@@ -279,7 +281,7 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
     Cx0 = view(Cx, 1, :)
     Cy0 = view(Cy, 1, :)
     Cm0 = view(Cm, 1, :)
-    extract_ds_loads!(airfoils, xds0, xds_idxs, phi0, p_ds, Cx0, Cy0, Cm0)
+    extract_ds_loads!(airfoils, xds0, xds_idxs, phi0, y_ds, Cx0, Cy0, Cm0)
 
     Fx0 = view(Fx, 1, :)
     Fy0 = view(Fy, 1, :)

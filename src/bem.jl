@@ -12,11 +12,11 @@ function afeval(af::DS.Airfoil, alpha, Re, Mach)
     return af.cl(alpha), af.cd(alpha)
 end
 
-function update_BEM_variables!(xv, blade, airfoil, env, r, twist, Vx, Vy, pitch)
+function update_BEM_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch)
     # [r, airfoil.c, twist, blade.rhub, blade.rtip, Vx, Vy, env.rho, pitch, env.mu, env.a]
     # @show typeof(twist) #Shows as a tracked real when it needs to.
     xv[1] = r
-    xv[2] = airfoil.c
+    xv[2] = chord
     xv[3] = twist
     xv[4] = blade.rhub
     xv[5] = blade.rtip
@@ -57,6 +57,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
     airfoil = blade.airfoils[idx]
     # rR = blade.rR[idx]
     r = blade.r[idx]
+    chord = blade.c[idx]
     
 
     # check if we are at hub/tip
@@ -68,7 +69,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
     theta = twist + pitch
 
     # package up variables and parameters for residual 
-    update_BEM_variables!(xv, blade, airfoil, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
+    update_BEM_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
     pv = (airfoil, rotor.B, rotor.turbine, rotor.re, rotor.mach, rotor.rotation, rotor.tip)
 
     if newbounds
@@ -238,6 +239,9 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     airfoil = blade.airfoils[idx]
     # rR = blade.rR[idx]
     r = blade.r[idx]
+    chord = blade.c[idx]
+
+    #todo: Add the cylinder bypass (based on the airfoil type). 
     
 
     # check if we are at hub/tip
@@ -319,7 +323,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     residual(phi, x, p) = CCBlade.residual_and_outputs(phi, x, p)[1]
 
     # package up variables and parameters for residual 
-    update_BEM_variables!(xv, blade, airfoil, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
+    update_BEM_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
     pv = (airfoil, rotor.B, rotor.turbine, rotor.re, rotor.mach, rotor.rotation, rotor.tip)
 
     success = false
@@ -339,18 +343,14 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
         end
 
         # find bracket
-        # @show xv
-        if isa(xv[1], ReverseDiff.TrackedReal)
-            @show airfoil.c.value
-            println([xv[i].value for i in eachindex(xv)])
-        end
         success, phiL, phiU = CCBlade.firstbracket(phi -> residual(phi, xv, pv), phimin, phimax, npts, backwardsearch)
 
         # once bracket is found, solve root finding problem and compute loads
         if success
             function solve(x, p) #todo: Is there a more efficient way to do this instead of a closure? 
                 phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
-                
+                # phistar, _ = sub_brent(phi -> residual(phi, x, p), phiL, phiU, 5e-10; maxiter = 10000, xtoler=1e-6, epsilon=eps())
+
                 return phistar
             end
             
@@ -365,7 +365,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     # it will return empty outputs
     # alternatively, one could increase npts and try again
     
-    @warn "Invalid data (likely) for this section.  Zero loading assumed."
+    # @warn "Invalid data (likely) for this section.  Zero loading assumed."
     return CCBlade.Outputs()
 end
 

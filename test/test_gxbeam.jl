@@ -3,7 +3,7 @@
 =#
 
 using Test
-using Rotors, GXBeam, OpenFASTsr, DynamicStallModels
+using WATT, GXBeam, OpenFASTsr, DynamicStallModels
 using LinearAlgebra, StaticArrays, Statistics
 
 
@@ -18,7 +18,7 @@ cd(localpath)
 
         ### Test converting Wiener-Milenkovic parameters to angles
         wmp = SVector(0.0, 0.0, 0.0)
-        theta = Rotors.WMPtoangle(wmp)
+        theta = WATT.WMPtoangle(wmp)
         @test !any(i -> i!=0, theta)
 
         #Todo: Come up with more tests for this. 

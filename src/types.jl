@@ -70,6 +70,22 @@ The blade struct... what else is there to say.
 - twist::AbstractVector{<:TF} - the twist distribution (radians). 
 - airfoils::AbstractVector{<:DynamicStallModels.Airfoil} - The vector of the airfoil structs (an airfoil for each node). 
 """
+# struct Blade{TF, TVF, TVF2, TVDS}  
+#     rhub::TF
+#     rtip::TF
+#     rx::TVF #Lead-lag direction (freestream) curve value
+#     ry::TVF #Flapwise direction (Sweep value)
+#     rz::TVF #Radial direction
+#     r::TVF #Todo: Decide if I want this in here, or if I'll just use the norm of the vectorized version. 
+#     rR::TVF
+#     c::TVF2 #Chord length
+#     thetax::TVF #Sweep angle
+#     thetay::TVF #Curve angle
+#     twist::TVF2
+#     precone::TF
+#     xcp::TVF 
+#     airfoils::TVDS
+# end
 struct Blade{TF, TF2}  
     rhub::TF
     rtip::TF
@@ -78,10 +94,12 @@ struct Blade{TF, TF2}
     rz::AbstractVector{<:TF} #Radial direction
     r::AbstractVector{<:TF} #Todo: Decide if I want this in here, or if I'll just use the norm of the vectorized version. 
     rR::AbstractVector{<:TF}
+    c::AbstractVector{<:TF2} #Chord length
     thetax::AbstractVector{<:TF} #Sweep angle
     thetay::AbstractVector{<:TF} #Curve angle
     twist::AbstractVector{<:TF2}
     precone::TF
+    xcp::AbstractVector{<:TF} 
     airfoils::AbstractVector{<:DS.Airfoil}
 end
 
@@ -102,7 +120,7 @@ A convinience constructor for the blade struct.
 - `rx::Float`: The curve distances, or the distances in the X direction of the aerodynamic nodes.
 - `ry::Float`: The sweep distances, or the distances in the Y direction of the aerodynamic nodes.
 """
-function Blade(span, twist, airfoils::AbstractVector{<:DS.Airfoil}; rhub=span[1], rtip=span[end], precone=0.0, sweep=0.0, curve=0.0, rx=zero(span), ry=zero(span))
+function Blade(span, chord, twist, xcp, airfoils::AbstractVector{<:DS.Airfoil}; rhub=span[1], rtip=span[end], precone=0.0, sweep=0.0, curve=0.0, rx=zero(span), ry=zero(span))
     n = length(airfoils)
 
     if length(span)!=length(twist)!=n
@@ -148,7 +166,7 @@ function Blade(span, twist, airfoils::AbstractVector{<:DS.Airfoil}; rhub=span[1]
     #     rx[i], ry[i], rz[i] = rotate_vector(rx[i], ry[i], rz[i], 0, precone, 0)
     # end
 
-    return Blade(rhub, rtip, rx, ry, span, rvec, rR, sweep, curve,  twist, precone, airfoils)
+    return Blade(rhub, rtip, rx, ry, span, rvec, rR, chord, sweep, curve,  twist, precone, xcp, airfoils)
 end
 
 

@@ -47,6 +47,69 @@ function environment(rho::Number, mu::Number, a::Number, U::Number, Omega::Numbe
     return SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
 end
 
+function environment(filename::String, rho::Number, mu::Number, a::Number, Omega::Number, shearexp::Number; fit=Akima)  #TODO: Originally using types for multiple dispatch. Need to change back. 
+
+    turb = readdlm(filename, skipstart=4)
+    n, m = size(turb)
+    tvec = range(turb[1, 1], turb[n, 1], length=n) #Because the file doesn't get the time vector correctly. 
+    Ufit = fit(tvec, turb[:, 2])
+    Vfit = fit(tvec, turb[:, 5])
+    Wfit = fit(tvec, turb[:, 6])
+
+    ufun(t) = SVector(Ufit(t), Vfit(t), Wfit(t))
+    omegafun(t) = SVector(0.0, 0.0, 0.0)
+    udotfun(t) = SVector(0.0, 0.0, 0.0)
+    omegadotfun(t) = SVector(0.0, 0.0, 0.0)
+    Vinf(t) = Ufit(t)
+    RS(t) = Omega
+    Vinfdot(t) = 0.0
+    RSdot(t) = 0.0
+    return SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
+end
+
+function environment(filename::String, time::Number, rho::Number, mu::Number, a::Number, Omega::Number, shearexp::Number; fit=Akima)  #TODO: Originally using types for multiple dispatch. Need to change back. 
+
+    turb = readdlm(filename, skipstart=4)
+    n, m = size(turb)
+    if turb[n, 1] >= time
+        nn = findfirst(x -> x>= time, turb[:, 1])
+        tvec = range(turb[1, 1], turb[nn, 1], length=nn) #Because the file doesn't get the time vector correctly. 
+        Ufit = fit(tvec, turb[1:nn, 2])
+        Vfit = fit(tvec, turb[1:nn, 5])
+        Wfit = fit(tvec, turb[1:nn, 6])
+    else
+        # println("Long case")
+        tmax = turb[n, 1]
+        nrepeat = ceil(Int, time/tmax)
+
+        nn = nrepeat*n
+        tvec = range(turb[1, 1], turb[n, 1]*nrepeat, length=nn) #Because the file doesn't get the time vector correctly. 
+        # Ufit = fit(tvec, repeat(turb[:, 2], nrepeat))
+        # Vfit = fit(tvec, repeat(turb[:, 5], nrepeat))
+        # Wfit = fit(tvec, repeat(turb[:, 6], nrepeat))
+
+        Uvec = vcat([isodd(i) ? turb[:, 2] : reverse(turb[:, 2]) for i in 1:nrepeat]...)
+        Vvec = vcat([isodd(i) ? turb[:, 5] : reverse(turb[:, 5]) for i in 1:nrepeat]...)
+        Wvec = vcat([isodd(i) ? turb[:, 6] : reverse(turb[:, 6]) for i in 1:nrepeat]...)
+        # @show Uvec[n:n+10]
+        Ufit = fit(tvec, Uvec)
+        Vfit = fit(tvec, Vvec)
+        Wfit = fit(tvec, Wvec)
+    end
+
+    
+
+    ufun(t) = SVector(Ufit(t), Vfit(t), Wfit(t))
+    omegafun(t) = SVector(0.0, 0.0, 0.0)
+    udotfun(t) = SVector(0.0, 0.0, 0.0)
+    omegadotfun(t) = SVector(0.0, 0.0, 0.0)
+    Vinf(t) = Ufit(t)
+    RS(t) = Omega
+    Vinfdot(t) = 0.0
+    RSdot(t) = 0.0
+    return SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
+end
+
 
 
 """
@@ -65,6 +128,12 @@ function evaluate_flowfield_velocity(env::SimpleEnvironment, hubht, x, y, z, t)
 
     return env.U(t).*factor
 end
+
+
+
+
+
+
 
 """
     get_aero_velocities(rotor, blade, env, t, idx, azimuth)
