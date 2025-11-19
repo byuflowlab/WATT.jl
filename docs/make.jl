@@ -1,12 +1,13 @@
-using Documenter, Rotors
+using Documenter, WATT
 
-makedocs(sitename="Rotors.jl", pages = [
+makedocs(sitename="WATT.jl", pages = [
     "Getting Started" => "gettingstarted.md",
-    "Examples" => ["riso_example.md"],
+    # "Examples" => ["steady.md"], #Todo: Is there a different way to tackle this. 
     "Developers" => "developers.md",
     "API Reference" => "apireference.md"
 ])
 
 deploydocs(
-    repo = "github.com/byuflowlab/Rotors.jl.git",
+    repo = "github.com/byuflowlab/WATT.jl.git",
+    devbranch = "master",
 )

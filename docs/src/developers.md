@@ -1,13 +1,8 @@
 # For Developers
-
+Here we describe how the code is organized (for easier debugging and additions to the code) and how the models are coupled together. 
 
 ## Code Outline
 
-Here I'll describe the how the code is put together for easier debugging and additions to the code.
-
-
-
-Here I'll describe how the models are coupled together. 
 
 
 ## Current Coupling (Loosely Coupled)
