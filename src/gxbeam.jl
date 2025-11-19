@@ -494,7 +494,7 @@ end
 function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Environment, assembly::GXBeam.Assembly; verbose::Bool=false, speakiter=100, structural_damping::Bool=true, linear::Bool=false, g=9.81)
     # println("Why isn't it printing inside the function.")
     if verbose
-        println("Rotors.jl initializing solution...")
+        println("WATT.jl initializing solution...")
     end
 
 
@@ -595,7 +595,7 @@ end
 function steady_simulate_gxbeam(rvec, azimuth, Fx, Fy, Mx, env::Environment, assembly::GXBeam.Assembly; verbose::Bool=false, speakiter=100, structural_damping::Bool=true, linear::Bool=false, g=9.81)
     # println("Why isn't it printing inside the function.")
     if verbose
-        println("Rotors.jl initializing solution...")
+        println("WATT.jl initializing solution...")
     end
 
 

@@ -61,7 +61,7 @@ Prepare data structures for the simulation.
 function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool=false, p=nothing, pfunc = (p,t) -> (;), xpfunc=nothing, structural_damping::Bool=true, linear::Bool=false)
 
     if verbose
-        println("Rotors.jl initializing solution...")
+        println("WATT.jl initializing solution...")
     end
 
     # if warnings
@@ -420,7 +420,7 @@ function take_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates, t, tpr
 end
 
 
-function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
+function simulate(rotor::Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
 
     nt = length(tvec)
 
@@ -437,7 +437,7 @@ function simulate(rotor::Rotors.Rotor, blade::Blade, env::Environment, assembly:
 end
 
 
-function simulate!(rotor::Rotors.Rotor, env::Environment, tvec, aerostates, gxstates, gxhistory, blade, mesh; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime=(aerostates, gxstates, gxhistory, i)->nothing, gxflag=nothing, prepp=nothing, p=nothing) 
+function simulate!(rotor::Rotor, env::Environment, tvec, aerostates, gxstates, gxhistory, blade, mesh; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime=(aerostates, gxstates, gxhistory, i)->nothing, gxflag=nothing, prepp=nothing, p=nothing) 
     #TODO: Move g to the environment struct. And be evaluated with time (maybe)
 
     nt = length(tvec)
@@ -504,7 +504,7 @@ Initialize the data structures for a simulation. Specifically for the run_sim se
 """
 function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool=false, p=nothing, pfunc = (p,t) -> (;), xpfunc=nothing, structural_damping::Bool=true, linear::Bool=false)
     if verbose
-        println("Rotors.jl initializing simulation...")
+        println("WATT.jl initializing simulation...")
     end
 
     #Created testing file
@@ -615,7 +615,7 @@ The pre-allocated version of run_sim().
 
 
 """
-function run_sim!(rotor::Rotors.Rotor, blade, mesh, env::Environment, tvec, aerostates, gxhistory; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime = (aerostates, gxhistory, i) ->nothing, gxflag=nothing, prepp=nothing, p=nothing, azimuth0=0.0)
+function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates, gxhistory; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime = (aerostates, gxhistory, i) ->nothing, gxflag=nothing, prepp=nothing, p=nothing, azimuth0=0.0)
 
 
     ### unpack the data structures. 

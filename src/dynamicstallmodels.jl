@@ -69,7 +69,7 @@ function update_ds_states!(solver::Solver, airfoils::AbstractVector{<:DS.Airfoil
     #     airfoils(states_old, states_new, xds_idxs, y_ds, dt)
 
     # else #Functional and Iteratives
-    #     @error("Rotors isn't set up to handle functionals or iteratives yet. yet.")
+    #     @error("WATT isn't set up to handle functionals or iteratives yet. yet.")
     #     #Solve the State rate equations (Pass in t)
     # end
 

@@ -50,7 +50,7 @@ function initialize(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
     #Todo: This still needs to be completed. And it'll need a initial condition function. But for now, it looks like the simulate function initializes, finds the initial condition, and then simulates. 
 
     if verbose
-        println("Rotors.jl initializing solution...")
+        println("WATT.jl initializing solution...")
     end
 
     
@@ -158,7 +158,7 @@ function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, az
         ### Update base inflow velocities
         # @show mesh.aerov[j][1].value, mesh.aerov[j][2].value, mesh.aerov[j][2].value
         # @show mesh.aerov[j]
-        Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, t, j, azimuth, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
+        Vx, Vy = get_aerostructural_velocities(rotor, blade, env, t, j, azimuth, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
         #Todo: Angles aren't updated with angular deflection.... 
         
         #TODO: Write a solver that is initialized with the previous inflow angle.
@@ -204,13 +204,13 @@ Simulate the rotor's response for a given rotor and environmental condition.
 
 ### Notes
 """
-function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Environment, tvec;
+function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environment, tvec;
      pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter=100,
      azimuth0=0.0)
 
 
     if verbose
-        println("Rotors.jl finding initial solution...")
+        println("WATT.jl finding initial solution...")
     end
 
     # if isnothing(inittype)
@@ -219,7 +219,7 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
 
     #TODO: This will break without dsmodel exposed. 
     # if isa(dsmodel.detype, DS.Functional)
-    #     error("Rotors isn't set up to simulate with functional forms of the dsmodel yet, choose the iterative model.")
+    #     error("WATT isn't set up to simulate with functional forms of the dsmodel yet, choose the iterative model.")
     # elseif isa(dsmodel.detype, DS.Indicial)
     #     if isa(dsmodel, DS.BeddoesLeishman)&&isa(dsmodelinit, Hansen)
     #         if verbose
@@ -291,7 +291,7 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
 
 
     if verbose
-        println("Rotors.jl starting simulation...")
+        println("WATT.jl starting simulation...")
     end
     ### Iterate through time 
     for i = 2:nt
@@ -332,7 +332,7 @@ function simulate!(aerostates, mesh, rotor::Rotors.Rotor, blade::Blade, env::Env
     end #End iterating through time. 
 
     if verbose
-        println("Rotors.jl simulation complete.")
+        println("WATT.jl simulation complete.")
     end
 end
 

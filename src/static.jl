@@ -14,7 +14,7 @@ Initialize a steady state solution.
 function initialize(blade::Blade, assembly::GXBeam.Assembly; verbose::Bool=false, p=nothing, pfunc = (p,t) -> (;), xpfunc=nothing, structural_damping::Bool=true, linear::Bool=false)
 
     if verbose
-        println("Rotors.jl initializing solution...")
+        println("WATT.jl initializing solution...")
     end
 
     # if warnings
@@ -139,7 +139,7 @@ function fixedpoint!(aerostates, gxstates, azimuth0, rotor::Rotor, env::Environm
         ###BEMT solution 
         for j = 1:na
             ### Update base inflow velocities
-            Vx, Vy = Rotors.get_aerostructural_velocities(rotor, blade, env, 0.0, j, azimuth0, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
+            Vx, Vy = get_aerostructural_velocities(rotor, blade, env, 0.0, j, azimuth0, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
 
             # @infiltrate
 
