@@ -86,6 +86,8 @@ function mat_derivative(data, tvec)
     return du
 end
 
+# TODO: delete after commit — prepareextra/saveextra/readextra (legacy file I/O, never called)
+#=
 function prepareextra(tspan, filename, numitems)
     mat = [tspan[1] repeat(["Initial"], numitems)...]
     writedlm(filename, mat, ',')
@@ -132,7 +134,10 @@ function readextra(filename)
     end
     return file[keepidxs, :]
 end
+=# # end TODO delete
 
+# TODO: delete after commit — plotdshistory() (legacy debug visualization, never called)
+#=
 function plotdshistory(dshistory, tvec, index; legloc=:topright, titletext=nothing)
     nt = length(tvec)
     states = [dshistory[it][index] for it = 1:nt]
@@ -147,6 +152,7 @@ function plotdshistory(dshistory, tvec, index; legloc=:topright, titletext=nothi
     plot!(tvec, x[:,4], lab="State 4")
     return plt
 end
+=# # end TODO delete
 
 
 function linear_interp(xnew, x0, x1, y0, y1)
@@ -271,6 +277,8 @@ end
 
 
 
+# TODO: delete after commit — sub_brent() (superseded by FLOWMath Brent, never called)
+#=
 """
     sub_brent()
 
@@ -432,6 +440,7 @@ function sub_brent(fun, a, b, toler; maxiter::Int = 100, xtoler=1e-6, epsilon=ep
     end #End convergence iterations
     return b, (fb, maxiter)
 end
+=# # end TODO delete
 
 function rotate_x(alpha_x)
     return [

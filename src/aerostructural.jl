@@ -3,7 +3,8 @@
 
 =#
 
-export initialize, initial_condition, take_step!, simulate, simulate!
+# TODO: delete after commit — Gen 1 exports (replaced by initialize_sim / run_sim!)
+#= export initialize, initial_condition, take_step!, simulate, simulate! =#
 
 
 
@@ -51,10 +52,12 @@ function find_inittype(vars...)
 end
 
 
+# TODO: delete after commit — Gen 1 initialize() (replaced by initialize_sim())
+#=
 """
     initialize()
 
-Prepare data structures for the simulation. 
+Prepare data structures for the simulation.
 
 
 """
@@ -156,6 +159,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool
 
     return aerostates, gxstates, gxhistory, mesh
 end
+=# # end TODO delete
 
 
 
@@ -173,10 +177,12 @@ function initial_condition_checks(gxflag)
 end
 
 
+# TODO: delete after commit — Gen 1 initial_condition!() (replaced by inline logic in run_sim!())
+#=
 """
     initial_condition!()
 
-Calculate the initial condition of the rotor. 
+Calculate the initial condition of the rotor.
 """
 function initial_condition!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates, azimuth0, rotor::Rotor, env::Environment, blade, mesh, tvec, pitch; g=9.81, gxflag=nothing, verbose::Bool=false, solver::Solver=RK4(), prepp=nothing, p=nothing)
     #TODO: Maybe include the coupled aerostructural solution as an option? 
@@ -297,11 +303,14 @@ function initial_condition!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates
 
     return gxhistory
 end
+=# # end TODO delete
 
+# TODO: delete after commit — Gen 1 take_step!() (replaced by inline logic in run_sim!())
+#=
 """
     take_step!()
 
-Take a step based on the previous states. 
+Take a step based on the previous states.
 """
 function take_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates, t, tprev, azimuth0, xds_old, gxstates_old, blade, mesh, rotor::Rotor, env::Environment, tvec, i, pitch; verbose::Bool=false, speakiter::Int=100, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime = (aerostates, gxstates, gxhistory, i)->nothing, solver::Solver=RK4(), prepp=nothing, p=nothing)
 
@@ -418,15 +427,18 @@ function take_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, gxstates, t, tpr
 
     return azimuth, gxhistory_new
 end
+=# # end TODO delete
 
-
+# TODO: delete after commit — Gen 1 simulate() (broken: calls non-existent non-bang versions)
+# TODO: delete after commit — Gen 1 simulate!() (replaced by run_sim!())
+#=
 function simulate(rotor::Rotor, blade::Blade, env::Environment, assembly::GXBeam.Assembly, tvec; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, structural_damping::Bool=true, linear::Bool=false, g=9.81, plotbool::Bool=false, plotiter::Int=speakiter)
 
     nt = length(tvec)
 
     aerostates, gxstates, mesh = initialize(blade, assembly, tvec; verbose)
 
-    
+
     system = initial_condition(rotor, blade, assembly, env, aerostates, gxstates, mesh, tvec, azimuth0, pitch; verbose)
 
     for i = 2:nt
@@ -437,12 +449,12 @@ function simulate(rotor::Rotor, blade::Blade, env::Environment, assembly::GXBeam
 end
 
 
-function simulate!(rotor::Rotor, env::Environment, tvec, aerostates, gxstates, gxhistory, blade, mesh; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime=(aerostates, gxstates, gxhistory, i)->nothing, gxflag=nothing, prepp=nothing, p=nothing) 
+function simulate!(rotor::Rotor, env::Environment, tvec, aerostates, gxstates, gxhistory, blade, mesh; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, warnings::Bool=true, azimuth0=0.0, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime=(aerostates, gxstates, gxhistory, i)->nothing, gxflag=nothing, prepp=nothing, p=nothing)
     #TODO: Move g to the environment struct. And be evaluated with time (maybe)
 
     nt = length(tvec)
 
-    #Todo: I need extract the states from aerostates. 
+    #Todo: I need extract the states from aerostates.
 
     @unpack azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds = aerostates
 
@@ -493,8 +505,9 @@ function simulate!(rotor::Rotor, env::Environment, tvec, aerostates, gxstates, g
 
     return aerostates, gxstates, gxhistory
 end
+=# # end TODO delete
 
-#TODO: Make a memory efficient take_step!() function that only saves certain time indices. 
+#TODO: Make a memory efficient take_step!() function that only saves certain time indices.
 
 
 """
@@ -812,7 +825,7 @@ end
 """
 run_sim()
 
-Simulate the physical response of a rotor blade. 
+Simulate the physical response of a rotor blade. Preallocate the data structures using initialize_sim() and then run the time stepping loop using run_sim!().
 """
 function run_sim()
 end

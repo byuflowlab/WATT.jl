@@ -321,12 +321,14 @@ function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
 
 end
 
+# TODO: delete after commit — gxbeam_initial_conditions() non-bang (never called; Gen 1 only)
+#=
 function gxbeam_initial_conditions(env::Environment, assembly, prescribed_conditions, distributed_loads, t0, azimuth0, g, structural_damping, linear, flag, pfunc, p)
 
     Omega0 = SVector(0.0, 0.0, -env.RS(t0))
     gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0)
 
-    # @show typeof(Omega0) #None of these are duals. 
+    # @show typeof(Omega0) #None of these are duals.
     # @show typeof(gravity0)
     # @show eltype(prescribed_conditions)
     # @show eltype(assembly)
@@ -335,22 +337,25 @@ function gxbeam_initial_conditions(env::Environment, assembly, prescribed_condit
     if flag==:steady
         @warn("Steady initialization not yet prepared, starting from no load no deflection. ")
 
-        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false) 
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions, distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
 
     elseif flag==:spinning
         system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, angular_velocity = Omega0, gravity=gravity0, steady_state=true, structural_damping, linear, pfunc, p, show_trace=false)
 
-    else #No load, no deflection initialization. 
+    else #No load, no deflection initialization.
         # @infiltrate
         # error("break here. ")
-        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false) 
+        system, history0, converged = GXBeam.time_domain_analysis(assembly, [t0]; prescribed_conditions = prescribed_conditions, distributed_loads = distributed_loads, angular_velocity = Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
     end
 
 
     gxstate = history0[end]
     return gxstate, system
 end
+=# # end TODO delete
 
+# TODO: delete after commit — gxbeam_initial_conditions!() bang (only used in Gen 1 initial_condition!())
+#=
 function gxbeam_initial_conditions!(env::Environment, system, assembly, prescribed_conditions, distributed_loads, t0, azimuth0, g, structural_damping, linear, flag, pfunc, p)
 
     Omega0 = SVector(0.0, 0.0, -env.RS(t0))
@@ -384,6 +389,7 @@ function gxbeam_initial_conditions!(env::Environment, system, assembly, prescrib
     # gxstate = history0[end]
     return x0, dx0, gxstate, system
 end
+=# # end TODO delete
 
 
 # function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.Linear)
@@ -495,6 +501,8 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.l
 end
 
 
+# TODO: delete after commit — simulate_gxbeam() (never called; subsumed by run_sim!())
+#=
 function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Environment, assembly::GXBeam.Assembly; verbose::Bool=false, speakiter=100, structural_damping::Bool=true, linear::Bool=false, g=9.81)
     # println("Why isn't it printing inside the function.")
     if verbose
@@ -591,11 +599,14 @@ function simulate_gxbeam(rvec, rhub, rtip, tvec, azimuth, Fx, Fy, Mx, env::Envir
         end
     end
 
-    gxhistory[end] = gxhistory[end-1] #Hack: 
+    gxhistory[end] = gxhistory[end-1] #Hack:
 
     return gxhistory
 end
+=# # end TODO delete
 
+# TODO: delete after commit — steady_simulate_gxbeam() (never called; subsumed by static.jl)
+#=
 function steady_simulate_gxbeam(rvec, azimuth, Fx, Fy, Mx, env::Environment, assembly::GXBeam.Assembly; verbose::Bool=false, speakiter=100, structural_damping::Bool=true, linear::Bool=false, g=9.81)
     # println("Why isn't it printing inside the function.")
     if verbose
@@ -640,6 +651,7 @@ function steady_simulate_gxbeam(rvec, azimuth, Fx, Fy, Mx, env::Environment, ass
 
     return state
 end
+=# # end TODO delete
 
 
 function get_blade_weight(assembly::GXBeam.Assembly)
