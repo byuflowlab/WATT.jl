@@ -649,14 +649,11 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
     initial_condition_checks(gxflag)
 
 
-    # println("Initializing...")
     ### Initialize BEM solution 
     for j = 1:na
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth0)
 
-
         ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
-        # ccout = solve_BEM!(rotor, blade, env, 0.0, j, Vx, Vy, pitch, mesh.xcc; newbounds=false)
 
         phi0[j] = ccout.phi
         alpha0[j] = ccout.alpha
@@ -676,30 +673,19 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
     update_forces!(distributed_loads, fx0, fy0, mx0, blade, assembly)
 
 
-    ### GXBeam initial solution 
+    ### GXBeam initial solution
     if isnothing(prepp)
         p = nothing
     else
         prepp(p, fx0, fy0, mx0)
     end
 
+
+
     Omega0 = SVector(0.0, 0.0, -env.RS(t0))
     gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0)
 
-    # #todo: Only works with initial response (not steady state or spinning solution. )
-    # system, gxhistory[1], converged = GXBeam.initial_condition_analysis!(system, assembly, t0; prescribed_conditions, distributed_loads, angular_velocity=Omega0, gravity=gravity0, steady_state=false, structural_damping, linear, pfunc, p, show_trace=false)
-
-    # @show typeof(system)
-    # @show typeof(assembly)
-    # @show typeof(prescribed_conditions)
-    # @show typeof(distributed_loads)
-    # @show typeof(Omega0)
-    # @show typeof(gravity0)
-    # @show structural_damping
-    # @show typeof(p)
     system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, distributed_loads, gravity=gravity0, angular_velocity=Omega0, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
-    # system, gxstate, constants, paug, xgx, converged = GXBeam.initialize_system!(system, assembly, tvec; prescribed_conditions, structural_damping, reset_state=true, pfunc, p) #todo: This has extra allocations that I don't need.
-    #Note: I don't think I need to pass in the distributed_loads, the gravity, or the angular velocity because it lives in pfunc. -> No, it needs to be passed in, because pfunc might be empty. (pfunc replaces the things that are passed in, so if they have duals, then they'll get overwritten. )
 
 
     gxhistory[1] = gxstate[1]
@@ -717,48 +703,15 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
 
     
     ### Take the first step then set that as the first value. -> This is what OpenFAST does. 
-    # azimuth = env.RS(t)*dt + azimuth0
-    
-    # if isa(xds0[1], ReverseDiff.TrackedReal) #todo. Move this into a function. 
-   
-    #     inittype = eltype(xds0)
-    #     ns = DS.numberofstates_total(blade.airfoils)
-    #     xds_old = Array{inittype, 1}(undef, ns)
-
-    #     #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
-    #     for i in eachindex(xds0) 
-    #         xds_old[i] = xds0[i]
-    #     end
-        
-    # elseif isa(xds0[1], ForwardDiff.Dual)
-    #     # xds_old = deepcopy(xds) #Derivatives are getting nuked
-    #     inittype = eltype(xds0)
-    #     ns = DS.numberofstates_total(blade.airfoils)
-    #     xds_old = Array{inittype, 1}(undef, ns)
-
-    #     #Todo. How do I copy the derivative? (Because I want to preserve the pointers to xds.)
-    #     for i in eachindex(xds0) 
-    #         xds_old[i] = xds0[i]
-    #     end
-
-    #     # @show xds[1].partials
-    #     # @show xds_old[1].partials
-    # else
-    #     xds_old = deepcopy(xds0)
-    # end
     xds_old = dualcopy(xds0) #todo: I feel like there is a better way to do this. 
 
     dt = tvec[2] - tvec[1] #Note: this passing in phi0 and replacing phi0 might break things... 
-    # take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, phi0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
     take_aero_step!(phi0, alpha0, W0, xds0, cx0, cy0, cm0, fx0, fy0, mx0, xds_old, azimuth0, t0, dt, pitch, mesh, rotor, blade, env; solver)
 
     azimuth[1] = azimuth0
 
 
-
-    # println("Beginning time loop...")
     for i in 2:nt
-        # println("i = $i")
 
         ### Unpack
         phi_i = view(phi, i, :)
@@ -792,23 +745,14 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
         end
 
         #Note: Coupling from structural velocities doesn't appear to kick in until the third time step. 
-        # take_aero_step!(phi_i, alpha_i, W_i, xds_i, cx_i, cy_i, cm_i, fx_i, fy_i, mx_i, phi_im1, xds_im1, azimuth[i], t, dt, pitch, mesh, rotor, blade, env; solver, pfunc, prepp, p)
         take_aero_step!(phi_i, alpha_i, W_i, xds_i, cx_i, cy_i, cm_i, fx_i, fy_i, mx_i, xds_im1, azimuth[i], t, dt, pitch, mesh, rotor, blade, env; solver)
 
-        # @show fx_i[end]
-        # println("")
 
 
         ### Update GXBeam loads 
-        # @show distributed_loads
         update_forces!(distributed_loads, fx_i, fy_i, mx_i, blade, assembly) 
-        # println("") #Note: Changing, but going super negative? 
-        # @show distributed_loads
 
         Omega = SVector(0.0, 0.0, -env.RS(t)) 
-        # gravity = SVector(-g*cos(aerostates.azimuth[i-1]), -g*sin(aerostates.azimuth[i-1]), 0.0) #TODO: I need to include tilt, and precone here. 
-
-        # @show typeof(aerostates.azimuth)
 
         if isa(azimuth[i], ForwardDiff.Dual)||isa(azimuth[i], ReverseDiff.TrackedReal) #todo: Does azimuth need to be a state?
             a0 = azimuth[i].value
@@ -818,35 +762,25 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
             a1 = azimuth[i-1]
         end
 
-        # if isnothing(p)
-        #     a0 = azimuth
-        #     a1 = azimuth0
-        # else
-        #     a0 = azimuth.value
-        #     a1 = azimuth0.value
-        # end
-
         #TODO: Figure out if I need to use this, or if I can just calculate it at a single point. 
         gravity = (tee) -> SVector(-g*cos((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), -g*sin((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), 0.0) ##Todo t = tvec[i].... So this be way wrong. Oh... this is an inline function so the solver can linearly interpolate the gravity vector across time. But... I think the time domain analysis only analyzes at the given time steps... which means that this function doesn't get called really... I dunno. -> TODO: This would only make a difference if the solver used intermediate steps (using DifferentialEquations to solve GXBeam.) -> I should get rid of this. 
-
-        # @show typeof(gravity2)
 
         #Note: Taylor applies the gravitational load by C'*mass*C*gvec
 
         ### Solve GXBeam for time step 
         #todo: This function is taking a lot of time. -> I might be able to save time by branching his code and writing another function, but most of the time is spent in nlsolve. I think all of the time spent is just time solving, not really inside of Taylor's code, but of course, if I make his code faster, then I make the solve faster. 
-        # @show eltype(system)
 
         if isnothing(prepp)  
             p = nothing
-            # println("Got here")
         else
             prepp(p, fx_i, fy_i, mx_i)
-        end #Todo: derivatives passing needs to be included. 
+        end 
+
+        
 
     
+        system, gxhistory[i], constants, paug, xgx, convergedi = GXBeam.step_system!(system, paug, xgx, constants, gxhistory[i-1], assembly, tvec, i; prescribed_conditions, distributed_loads, structural_damping, gravity, angular_velocity=Omega, pfunc=pfunc, p=p) 
 
-        system, gxhistory[i], constants, paug, xgx, convergedi = GXBeam.step_system!(system, paug, xgx, constants, gxhistory[i-1], assembly, tvec, i; prescribed_conditions, distributed_loads, structural_damping, gravity, angular_velocity=Omega)
 
         if !convergedi
             @warn("GXBeam failed to converge on the $i th time step.")
