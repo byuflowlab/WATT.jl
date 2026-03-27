@@ -2,31 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project Overview
+- Find a project overview in README.md
+- This project is written in Julia: Style, efficiency, proficiency see .claude/context/JULIA_GUIDE.md; rules see .claude/rules/julia
+- Use julia's testing environment: `julia --project -e 'using Pkg; pkg.test()`
+- Use docs.jl to compile documentation: `julia --project=docs/ docs/make.jl`
 
-WATT (Wind Aeroelastic Turbine Toolkit) is a Julia package for nonlinear unsteady aeroelastic modeling of wind turbine blades, designed with AD (automatic differentiation) compatibility as a first-class concern. It couples three physics solvers:
-
-- **CCBlade.jl** — Blade Element Momentum Theory (BEMT) aerodynamics
-- **DynamicStallModels.jl** — Unsteady aerodynamic (dynamic stall) corrections
-- **GXBeam.jl** — Geometrically Exact Beam Theory (GEBT) structural dynamics
-
-AD is supported via ForwardDiff, ReverseDiff, and ImplicitAD throughout the codebase.
-
-## Commands
-
-```julia
-# Run all tests
-julia --project -e 'using Pkg; Pkg.test()'
-
-# Run tests from REPL
-using Pkg; Pkg.test("WATT")
-
-# Run a specific test file from the test/ directory
-julia --project -e 'include("test/test_bem.jl")'
-
-# Build documentation
-julia --project=docs/ docs/make.jl
-```
 
 It is normal for warnings to appear during tests — they exercise boundary conditions intentionally.
 
@@ -43,17 +23,16 @@ src/
 ├── solvers.jl            # Custom ODE solvers: RK4, BDF1
 ├── mesh.jl               # Aero/structural node interpolation utilities
 ├── utils.jl              # Rotation transforms, AD-compatible helpers (dualcopy, etc.)
-├── aerostructural.jl     # Main transient coupled solver (initialize, simulate, take_step!)
+├── aerostructural.jl     # Main transient coupled solver (initialize_sim, run_sim!)
 ├── aero_only.jl          # Aerodynamics-only transient analysis
-├── static.jl             # Steady-state fixed-point aerostructural solver
-└── beddoesleishman*.jl   # Legacy dynamic stall implementations (3 variants)
+└── static.jl             # Steady-state fixed-point aerostructural solver
 ```
 
 ### Coupling Strategy
 
 The package uses three simulation modes:
 
-1. **`aerostructural.jl`** — Full two-way coupled transient simulation. Entry points: `initialize()`, `initial_condition()`, `take_step!()`, `simulate()`/`simulate!()`.
+1. **`aerostructural.jl`** — Full two-way coupled transient simulation. Entry points: `initialize_sim()` and `run_sim!()`. These are the only active Gen 2 API functions; a prior Gen 1 API (`initialize`, `initial_condition!`, `take_step!`, `simulate`, `simulate!`) has been removed.
 2. **`aero_only.jl`** — Aerodynamics-only transient analysis (no structural deformation).
 3. **`static.jl`** — Steady-state fixed-point iteration between CCBlade and GXBeam.
 
