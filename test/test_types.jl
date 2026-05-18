@@ -4,7 +4,7 @@ Test the Blade constructors, functions and methods.
 =#
 
 using Test, Statistics
-using WATT, FLOWMath, DynamicStallModels, OpenFASTTools
+using WATT, FLOWMath, DynamicStallModels, OpenFASTTools, StructArrays
 
 DS = DynamicStallModels
 of = OpenFASTTools
@@ -39,7 +39,9 @@ cd(localpath)
     chordvec = adblade["BlChord"]
     twistvec = adblade["BlTwist"]
     rhub = edfile["HubRad"]
+    # rtip = 63.0
     rvec = adblade["BlSpn"] .+ rhub
+    rtip = rvec[end]
     hubht = 80.0
     n = length(rvec)
 
@@ -51,15 +53,16 @@ cd(localpath)
     @test any(i->isapprox(i,dr), drvec)
 
     
-    airfoils = Vector{DS.Airfoil}(undef, n)
+    airfoils = StructArray{DS.Airfoil}(undef, n)
+    xcp = Vector{Float64}(undef, n)
     for i = 1:n
-        airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
+        airfoils[i], xcp[i] = of.make_dsairfoil(afs[i])
     end
 
     @testset "Constructors" begin
 
         ### Test blade with no curvature
-        blade = Blade(rvec, twistvec, airfoils)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; rhub=rhub, rtip=rtip)
         @test isapprox(mean(blade.rx), 0.0)
         @test isapprox(mean(blade.ry), 0.0)
         @test mean(blade.rz)>0.0
@@ -72,7 +75,7 @@ cd(localpath)
         tilt = 0.0
         yaw = 0.0
         precone=2*pi/180
-        blade = Blade(rvec, twistvec, airfoils; precone)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; rhub=rhub, rtip=rtip, precone)
         rx = zero(rvec)
         ry = zero(rvec)
         rz = zero(rvec)

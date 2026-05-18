@@ -176,7 +176,33 @@ function run_sim(rotor, blade, assembly, env, tvec; kwargs...)
 end
 ```
 
-**3.6 — Docstring audit** (parallel with 3.5)
+**3.6 — Refactor `SimpleEnvironment` to drop closure fields**
+The current `SimpleEnvironment{TF, F<:Function, G<:Function, ...}` stores eight anonymous closures (`ufun`, `omegafun`, `Vinf`, `RS`, …). Two problems with this:
+1. **JLD2 cannot roundtrip closures** — their gensym'd type names don't survive a fresh session. Test fixtures (e.g. [test/simple_NREL5MW.jl](test/simple_NREL5MW.jl)) have to rebuild the env locally rather than load it.
+2. **Type-parameter explosion** — eight `<:Function` parameters means every distinct env spawns fresh method specializations, hurting TTFX and invalidating downstream methods.
+
+Refactor each closure into a named callable struct, then parameterize on the concrete struct type:
+```julia
+struct Constant{T}; val::T; end
+(c::Constant)(t) = c.val
+
+struct TurbulentInflow{A}
+    Ufit::A; Vfit::A; Wfit::A   # A is e.g. FLOWMath.Akima
+end
+(t::TurbulentInflow)(s) = SVector(t.Ufit(s), t.Vfit(s), t.Wfit(s))
+
+struct SimpleEnvironment{TF, F, G, ...}
+    rho::TF; mu::TF; a::TF; shearexp::TF
+    ufun::F          # callable struct, not anonymous closure
+    omegafun::G
+    # ...
+end
+```
+Performance is unchanged (still a direct dispatch through a concrete field type — same cost as the closure version). Bonus: JLD2 can serialize the whole env now, which lets us save/load reference simulations end-to-end instead of patching env on load.
+
+Migration: the three `environment(...)` constructors in [src/environments.jl](src/environments.jl) get updated to wrap their interpolants/constants in the new callable structs instead of returning closures. No call-site changes needed — `env.ufun(t)` still works.
+
+**3.7 — Docstring audit** (parallel with 3.5)
 Priority order: `run_sim!` → `initialize_sim` → `simulate!` → `initialize_aero` → `fixedpoint!` → `initialize_static` → `take_aero_step!` → `Blade`, `Rotor` → `SimpleEnvironment`
 
 Format (GXBeam-style):

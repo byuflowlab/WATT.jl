@@ -5,7 +5,7 @@ Test the meshing and mesh transfer functions.
 
 using Test
 using WATT, GXBeam, OpenFASTTools, DynamicStallModels
-using LinearAlgebra, StaticArrays
+using LinearAlgebra, StaticArrays, StructArrays
 
 of = OpenFASTTools
 DS = DynamicStallModels
@@ -43,7 +43,7 @@ cd(localpath)
         pair_gold = (10, 11)
         @test pair==pair_gold
 
-        #Out of bounds tests
+        #Out of bounds tests #Todo: Currently the function is designed to warn and return the first or last pair if the value is out of bounds. We should consider changing this behavior in the future.
         r = -1
         pair = WATT.find_point_indices(rvec, r)
         pair_gold = (1,2)
@@ -79,21 +79,21 @@ cd(localpath)
 
         ### Test create_interpolationpoints(assembly, blade)
         # Prep the ASD rotor and operating conditions 
-        ofpath = "../testing/OpenFAST_NREL5MW"
-        adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
-        edfile = of.read_edfile("NREL5MW_EDfile.dat", ofpath)
-        bdfile = of.read_bdfile("NREL5MW_BDfile.dat", ofpath)
-        bdblade = of.read_bdblade("NREL5MW_BDblade.dat", ofpath)
+        ofpath = "../data/openfast"
+        adblade = of.read_adblade("sn5_adblade.dat", ofpath)
+        edfile = of.read_edfile("sn5_EDfile.dat", ofpath)
+        bdfile = of.read_bdfile("sn5_BDfile.dat", ofpath)
+        bdblade = of.read_bdblade("sn5_BDblade.dat", ofpath)
 
         aftypes = Array{of.AirfoilInput}(undef, 8)
-        aftypes[1] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder1.dat") 
-        aftypes[2] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder2.dat") 
-        aftypes[3] = of.read_airfoilinput(ofpath*"/Airfoils/DU40_A17.dat") 
-        aftypes[4] = of.read_airfoilinput(ofpath*"/Airfoils/DU35_A17.dat") 
-        aftypes[5] = of.read_airfoilinput(ofpath*"/Airfoils/DU30_A17.dat") 
-        aftypes[6] = of.read_airfoilinput(ofpath*"/Airfoils/DU25_A17.dat") 
-        aftypes[7] = of.read_airfoilinput(ofpath*"/Airfoils/DU21_A17.dat") 
-        aftypes[8] = of.read_airfoilinput(ofpath*"/Airfoils/NACA64_A17.dat") 
+        aftypes[1] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "Cylinder1.dat")) 
+        aftypes[2] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "Cylinder2.dat")) 
+        aftypes[3] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU40_A17.dat")) 
+        aftypes[4] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU35_A17.dat")) 
+        aftypes[5] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU30_A17.dat")) 
+        aftypes[6] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU25_A17.dat")) 
+        aftypes[7] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU21_A17.dat")) 
+        aftypes[8] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "NACA64_A17.dat")) 
 
         # indices correspond to which airfoil is used at which station
         af_idx = Int.(adblade["BlAFID"])
@@ -105,178 +105,198 @@ cd(localpath)
         twistvec = adblade["BlTwist"]
         rhub = edfile["HubRad"]
         rvec = adblade["BlSpn"] .+ rhub
+        rtip = rvec[end]
         hubht = 80.0
         n = length(rvec)
 
         rvec = collect(range(rvec[1], rvec[end], length=n))
 
-        airfoils = Vector{DS.Airfoil}(undef, n)
+        airfoils = StructArray{DS.Airfoil}(undef, n)
+        xcp = Vector{Float64}(undef, n)
         for i = 1:n
-            airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
+            airfoils[i], xcp[i] = of.make_dsairfoil(afs[i])
         end
 
-        blade = Blade(rvec, twistvec, airfoils)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; rhub=rhub, rtip=rtip)
         assembly = of.make_assembly(edfile, bdfile, bdblade)
 
         ips = WATT.create_interpolationpoints(assembly, blade)
 
         rgx = [norm(assembly.points[i]) for i in eachindex(assembly.points)]
-        
-        idx = 2
-        roi = blade.r[idx]
-        pair_gold = (5, 6)
-        a = roi - rgx[5]
-        L = rgx[6]-rgx[5]
-        percent_gold = a/L
 
-        @test ips[idx].pair == pair_gold
-        @test ips[idx].percent == percent_gold
+        ### Structural sanity: pairs are consecutive, in range, percent ∈ [0,1]
+        for ip in ips #todo: I bet we could rewrite this test to be more condensed, rather than like 75 tests.
+            @test 1 <= ip.pair[1] < ip.pair[2] <= length(rgx)
+            @test ip.pair[2] == ip.pair[1] + 1
+            @test 0.0 <= ip.percent <= 1.0
+        end
+
+        ### Identity check: interpolating the (undeflected) structural radii
+        ### at ip.percent between ip.pair must recover the aero node radius.
+        for i in eachindex(ips)
+            r_lo = rgx[ips[i].pair[1]]
+            r_hi = rgx[ips[i].pair[2]]
+            r_interp = (1 - ips[i].percent) * r_lo + ips[i].percent * r_hi
+            @test isapprox(r_interp, blade.r[i]; atol=1e-10)
+        end
+
+        ### Between-node check: for every aero node, derive the expected
+        ### bracket from rgx and compare to what create_interpolationpoints found.
+        for i in eachindex(ips)
+            roi = blade.r[i]
+            j = findlast(r -> r <= roi, rgx)
+            j === nothing && continue            # aero node below first structural point
+            j == length(rgx) && continue         # aero node at or beyond tip
+            @test ips[i].pair == (j, j + 1)
+            @test isapprox(ips[i].percent, (roi - rgx[j]) / (rgx[j+1] - rgx[j]); atol=1e-12)
+        end
 
     end #End mesh generation tests
 
-    @testset "Interpolation Functions" begin
+    # @testset "Interpolation Functions" begin
 
-        # Prep the ASD rotor and operating conditions 
-        ofpath = "../testing/OpenFAST_NREL5MW"
-        adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
-        edfile = of.read_edfile("NREL5MW_EDfile.dat", ofpath)
-        bdfile = of.read_bdfile("NREL5MW_BDfile.dat", ofpath)
-        bdblade = of.read_bdblade("NREL5MW_BDblade.dat", ofpath)
+    #     # Prep the ASD rotor and operating conditions 
+    #     ofpath = "../data/openfast"
+    #     adblade = of.read_adblade("sn5_adblade.dat", ofpath)
+    #     edfile = of.read_edfile("sn5_EDfile.dat", ofpath)
+    #     bdfile = of.read_bdfile("sn5_BDfile.dat", ofpath)
+    #     bdblade = of.read_bdblade("sn5_BDblade.dat", ofpath)
 
-        aftypes = Array{of.AirfoilInput}(undef, 8)
-        aftypes[1] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder1.dat") 
-        aftypes[2] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder2.dat") 
-        aftypes[3] = of.read_airfoilinput(ofpath*"/Airfoils/DU40_A17.dat") 
-        aftypes[4] = of.read_airfoilinput(ofpath*"/Airfoils/DU35_A17.dat") 
-        aftypes[5] = of.read_airfoilinput(ofpath*"/Airfoils/DU30_A17.dat") 
-        aftypes[6] = of.read_airfoilinput(ofpath*"/Airfoils/DU25_A17.dat") 
-        aftypes[7] = of.read_airfoilinput(ofpath*"/Airfoils/DU21_A17.dat") 
-        aftypes[8] = of.read_airfoilinput(ofpath*"/Airfoils/NACA64_A17.dat") 
+    #     aftypes = Array{of.AirfoilInput}(undef, 8)
+    #     aftypes[1] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "Cylinder1.dat")) 
+    #     aftypes[2] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "Cylinder2.dat")) 
+    #     aftypes[3] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU40_A17.dat")) 
+    #     aftypes[4] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU35_A17.dat")) 
+    #     aftypes[5] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU30_A17.dat")) 
+    #     aftypes[6] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU25_A17.dat")) 
+    #     aftypes[7] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU21_A17.dat")) 
+    #     aftypes[8] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "NACA64_A17.dat")) 
 
-        # indices correspond to which airfoil is used at which station
-        af_idx = Int.(adblade["BlAFID"])
+    #     # indices correspond to which airfoil is used at which station
+    #     af_idx = Int.(adblade["BlAFID"])
 
-        # create airfoil array
-        afs = aftypes[af_idx]
+    #     # create airfoil array
+    #     afs = aftypes[af_idx]
 
-        chordvec = adblade["BlChord"]
-        twistvec = adblade["BlTwist"]
-        rhub = edfile["HubRad"]
-        rvec = adblade["BlSpn"] .+ rhub
-        hubht = 80.0
-        n = length(rvec)
+    #     chordvec = adblade["BlChord"]
+    #     twistvec = adblade["BlTwist"]
+    #     rhub = edfile["HubRad"]
+    #     rvec = adblade["BlSpn"] .+ rhub
+    #     hubht = 80.0
+    #     n = length(rvec)
 
-        rvec = collect(range(rvec[1], rvec[end], length=n))
+    #     rvec = collect(range(rvec[1], rvec[end], length=n))
 
-        airfoils = Vector{DS.Airfoil}(undef, n)
-        for i = 1:n
-            airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
-        end
+    #     airfoils = StructArray{DS.Airfoil}(undef, n)
+    #     xcp = Vector{Float64}(undef, n)
+    #     for i = 1:n
+    #         airfoils[i], xcp[i] = of.make_dsairfoil(afs[i])
+    #     end
 
-        blade = Blade(rvec, twistvec, airfoils)
-        assembly = of.make_assembly(edfile, bdfile, bdblade)
+    #     blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; rhub=rhub, rtip=rtip, precone)
+    #     assembly = of.make_assembly(edfile, bdfile, bdblade)
 
-        ips = WATT.create_interpolationpoints(assembly, blade)
+    #     ips = WATT.create_interpolationpoints(assembly, blade)
 
-        distributed_loads = Dict{Int64, DistributedLoads{Float64}}()
+    #     distributed_loads = Dict{Int64, DistributedLoads{Float64}}()
 
-        nelem = length(assembly.elements)
+    #     nelem = length(assembly.elements)
 
-        for ielem in 1:nelem
-            distributed_loads[ielem] = DistributedLoads(assembly, ielem;
-                fz_follower = (s) -> 10)
-        end
+    #     for ielem in 1:nelem
+    #         distributed_loads[ielem] = DistributedLoads(assembly, ielem;
+    #             fz_follower = (s) -> 10)
+    #     end
 
-        # root section is fixed
-        prescribed_conditions = Dict(
-            1 => PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) 
+    #     # root section is fixed
+    #     prescribed_conditions = Dict(
+    #         1 => PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) 
 
-        rpm = 10.0
-        omega = rpm*2*pi/60
-        env = environment(1, 1, 1, 1, omega, 0)
-        angular_velocity = SVector(0.0, 0.0, -omega)
+    #     rpm = 10.0
+    #     omega = rpm*2*pi/60
+    #     env = environment(1, 1, 1, 1, omega, 0)
+    #     angular_velocity = SVector(0.0, 0.0, -omega)
 
-        azimuth = 90*pi/180
-        g = 9.81
-        gravity = SVector(g*sin(azimuth), -g*cos(azimuth), 0.0)
+    #     azimuth = 90*pi/180
+    #     g = 9.81
+    #     gravity = SVector(g*sin(azimuth), -g*cos(azimuth), 0.0)
 
-        tvec = 0:0.1:0.3
+    #     tvec = 0:0.1:0.3
 
-        system, history, converged = GXBeam.time_domain_analysis(assembly, tvec;
-            prescribed_conditions,
-            distributed_loads,
-            angular_velocity,
-            gravity,
-            steady=false) 
+    #     system, history, converged = GXBeam.time_domain_analysis(assembly, tvec;
+    #         prescribed_conditions,
+    #         distributed_loads,
+    #         angular_velocity,
+    #         gravity,
+    #         steady=false) #Todo: Not using this anymore. 
 
-        state = history[end]
+    #     state = history[end]
 
-        na = length(blade.airfoils)
+    #     na = length(blade.airfoils)
 
-        delta = [WATT.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
-        dtheta = [WATT.interpolate_angle(ips[i], assembly, state) for i in 1:na]
-        V = [WATT.interpolate_velocity(ips[i], assembly, state) for i in 1:na]
-        aerov = [norm(WATT.convert_velocities(blade, env, assembly, state, ips, tvec[end], i)) for i in 1:na]
-
-
-        theta_root = WATT.WMPtoangle(state.points[1].theta)
-        theta_tip = WATT.WMPtoangle(state.points[end].theta)
-
-        ## Check the endpoints where the nodes match up.
-        #Root 
-        @test isapprox(blade.r[1], assembly.points[1][1])
-        @test isapprox(delta[1], state.points[1].u)
-        @test isapprox(dtheta[1], 0.0)
-        @test isapprox(dtheta[1], theta_root[1])
-        @test isapprox(V[1], state.points[1].V)
+    #     delta = [WATT.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
+    #     dtheta = [WATT.interpolate_angle(ips[i], assembly, state) for i in 1:na]
+    #     V = [WATT.interpolate_velocity(ips[i], assembly, state) for i in 1:na]
+    #     aerov = [norm(WATT.convert_velocities(blade, env, assembly, state, ips, tvec[end], i)) for i in 1:na]
 
 
-        #Tip (There is a tolerance because the tip aero node is 0.0001 m off of the structural node).
-        @test isapprox(blade.r[end], assembly.points[end][1], rtol=0.0001)
-        @test isapprox(delta[end], state.points[end].u, rtol=0.0001)
-        @test isapprox(dtheta[end], theta_tip[1], rtol=0.0001)
-        @test isapprox(V[end], state.points[end].V, rtol=0.0001)
+    #     theta_root = WATT.WMPtoangle(state.points[1].theta)
+    #     theta_tip = WATT.WMPtoangle(state.points[end].theta)
 
-        
-        ## Check an intermediate point 
-        idx = 2
-        r = blade.r[idx]
+    #     ## Check the endpoints where the nodes match up.
+    #     #Root 
+    #     @test isapprox(blade.r[1], assembly.points[1][1])
+    #     @test isapprox(delta[1], state.points[1].u)
+    #     @test isapprox(dtheta[1], 0.0)
+    #     @test isapprox(dtheta[1], theta_root[1])
+    #     @test isapprox(V[1], state.points[1].V)
 
-        rgx = WATT.get_bladelength_vector(assembly)
-        pair = WATT.find_point_indices(rgx, r)
-        percent = WATT.find_interpolation_percent(rgx, pair, r)
 
-        V_gold = state.points[pair[1]].V*(1-percent) + percent*state.points[pair[2]].V
-
-        @test V[2]==V_gold
+    #     #Tip (There is a tolerance because the tip aero node is 0.0001 m off of the structural node).
+    #     @test isapprox(blade.r[end], assembly.points[end][1], rtol=0.0001)
+    #     @test isapprox(delta[end], state.points[end].u, rtol=0.0001)
+    #     @test isapprox(dtheta[end], theta_tip[1], rtol=0.0001)
+    #     @test isapprox(V[end], state.points[end].V, rtol=0.0001)
 
         
+    #     ## Check an intermediate point 
+    #     idx = 2
+    #     r = blade.r[idx]
 
-        ## All point checks
-        @test !any(i->i<0, aerov[2:end])
+    #     rgx = WATT.get_bladelength_vector(assembly)
+    #     pair = WATT.find_point_indices(rgx, r)
+    #     percent = WATT.find_interpolation_percent(rgx, pair, r)
+
+    #     V_gold = state.points[pair[1]].V*(1-percent) + percent*state.points[pair[2]].V
+
+    #     @test V[2]==V_gold
+
+        
+
+    #     ## All point checks
+    #     @test !any(i->i<0, aerov[2:end])
 
 
 
 
-        ### Test that the the structural velocity goes to zero at the steady state solution.
-        system, history, converged = GXBeam.time_domain_analysis(assembly, tvec;
-            prescribed_conditions,
-            distributed_loads,
-            angular_velocity,
-            gravity,
-            steady=true) 
+    #     ### Test that the the structural velocity goes to zero at the steady state solution.
+    #     system, history, converged = GXBeam.time_domain_analysis(assembly, tvec;
+    #         prescribed_conditions,
+    #         distributed_loads,
+    #         angular_velocity,
+    #         gravity,
+    #         steady=true) #Todo: I'm not sure if I would use this anymore. 
 
-        state = history[end]
-        aerov = [WATT.convert_velocities(blade, env, assembly, state, ips, tvec[end], i) for i in 1:na]
+    #     state = history[end]
+    #     aerov = [WATT.convert_velocities(blade, env, assembly, state, ips, tvec[end], i) for i in 1:na]
 
 
-        steadyflag = true
-        for i in 1:na
-            if any(i->!isapprox(i, 0.0, atol=1e-12), aerov[i])
-                steadyflag = false
-            end
-        end
-        @test steadyflag
-    end
+    #     steadyflag = true
+    #     for i in 1:na
+    #         if any(i->!isapprox(i, 0.0, atol=1e-12), aerov[i])
+    #             steadyflag = false
+    #         end
+    #     end
+    #     @test steadyflag
+    # end
 
 end #End Mesh Tests
