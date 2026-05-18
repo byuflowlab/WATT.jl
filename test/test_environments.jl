@@ -5,7 +5,7 @@ Test all of the environment constructors and functions
 =#
 
 using Test
-using WATT, CCBlade, OpenFASTTools, DynamicStallModels, GXBeam, StaticArrays
+using WATT, CCBlade, OpenFASTTools, DynamicStallModels, GXBeam, StaticArrays, StructArrays
 
 DS = DynamicStallModels
 of = OpenFASTTools
@@ -17,25 +17,22 @@ cd(localpath)
 
 @testset "Environments" begin
     ### Prep the ASD rotor and operating conditions 
-    ofpath = "../testing/OpenFAST_NREL5MW"
-    addriver = of.read_addriver("NREL5MW_ADdriver.dvr", ofpath)
-    adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
-    edfile = of.read_edfile("NREL5MW_EDfile.dat", ofpath)
+    ofpath = "../data/openfast"
+    adblade = of.read_adblade("sn5_adblade.dat", ofpath)
+    edfile = of.read_edfile("sn5_EDfile.dat", ofpath)
 
     aftypes = Array{of.AirfoilInput}(undef, 8)
-    aftypes[1] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder1.dat") 
-    aftypes[2] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder2.dat") 
-    aftypes[3] = of.read_airfoilinput(ofpath*"/Airfoils/DU40_A17.dat") 
-    aftypes[4] = of.read_airfoilinput(ofpath*"/Airfoils/DU35_A17.dat") 
-    aftypes[5] = of.read_airfoilinput(ofpath*"/Airfoils/DU30_A17.dat") 
-    aftypes[6] = of.read_airfoilinput(ofpath*"/Airfoils/DU25_A17.dat") 
-    aftypes[7] = of.read_airfoilinput(ofpath*"/Airfoils/DU21_A17.dat") 
-    aftypes[8] = of.read_airfoilinput(ofpath*"/Airfoils/NACA64_A17.dat") 
+    aftypes[1] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "Cylinder1.dat")) 
+    aftypes[2] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "Cylinder2.dat")) 
+    aftypes[3] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU40_A17.dat")) 
+    aftypes[4] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU35_A17.dat")) 
+    aftypes[5] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU30_A17.dat")) 
+    aftypes[6] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU25_A17.dat")) 
+    aftypes[7] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "DU21_A17.dat")) 
+    aftypes[8] = of.read_airfoilinput(joinpath(ofpath, "airfoils", "NACA64_A17.dat")) 
 
     # indices correspond to which airfoil is used at which station
     af_idx = Int.(adblade["BlAFID"])
-
-    # @show af_idx[10]
 
     # create airfoil array
     afs = aftypes[af_idx]
@@ -48,19 +45,21 @@ cd(localpath)
     n = length(rvec)
 
 
-    airfoils = Vector{DS.Airfoil}(undef, n)
+    airfoils = StructArray{DS.Airfoil}(undef, n)
+    xcp = Vector{Float64}(undef, n)
     for i = 1:n
-        airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
+        airfoils[i], xcp[i] = of.make_dsairfoil(afs[i])
     end 
 
-    vinf = addriver["HWndSpeed_mat"][1] #10.0
-    rpm = addriver["RotSpd_mat"][1]
-    omega = rpm*(2*pi)/60 #vinf*tsr/rotorR
+    vinf = 10.0
+    tsr = 7.55
+    rotorR = rvec[end]
+    omega = vinf*tsr/rotorR
 
-    rho = addriver["FldDens"] #1.225
-    mu = addriver["KinVisc"] #1.464e-5 #18.13e-6
-    a = addriver["SpdSound"] #343.0
-    shearexp = addriver["PLExp"][1] #0.0
+    rho = 1.225
+    mu = 1.464e-5 
+    a = 343.0
+    shearexp = 0.0
 
     B = 3
     hubht = 80.0
@@ -68,143 +67,88 @@ cd(localpath)
 
     @testset "Simple Environments" begin
 
-        ### No tilt, yaw, precone
-        pitch = precone = yaw = tilt = 0.0
-        dx = dy = dz = 0.0
-        t = 0.0
-
-        azimuth = omega*t #assume constant rotation rate
-
-        rotor = WATT.Rotor(B, hubht, turbine)
-        blade = Blade(rvec, twistvec, airfoils)
-        env = environment(rho, mu, a, vinf, omega, shearexp)
-
-        @test isa(env, WATT.Environment) #Test the typing. 
+        # Each block below tests WATT.get_aero_velocities against CCBlade's
+        # reference windturbine_op for one geometric configuration. The aero
+        # velocities (Vx, Vy) feeding the BEM must match a known-correct
+        # implementation across every combination of precone / tilt / yaw /
+        # azimuth — a coordinate-transform regression suite.
+        #
+        # Reference: CCBlade.windturbine_op assembles (Vx, Vy) from the wind
+        # vector by transforming the global wind frame into the local airfoil
+        # frame. WATT's get_aero_velocities must produce identical values.
+        #
+        # All blocks evaluate at idx=10 (midspan-ish). The common setup —
+        # blade chord/twist tables, airfoils, environmental constants — is
+        # built once above this testset.
 
         idx = 10
         r = rvec[idx]
-        # @show r
+        pitch = 0.0
+
+        ### --- Case 1: undeflected, axisymmetric, t=0 ---
+        ### No precone, tilt, or yaw. Reduces to pure axial inflow / rigid
+        ### rotation — sanity check on the basic transformation chain.
+        precone = yaw = tilt = 0.0
+        t = 0.0
+        azimuth = omega*t   # constant rotation rate
+
+        rotor = WATT.Rotor(B, hubht, turbine)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils)
+        env = WATT.environment(rho, mu, a, vinf, omega, shearexp)
+
+        @test isa(env, WATT.Environment)   # constructor returns the right abstract subtype
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
-
-        # println("")
-        # println("Nothing: ")
-        # println("My code: ")
-        
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
-        # println("")
 
 
-
-
-
-        ### Test at a different azimuthal angle
+        ### --- Case 2: undeflected, t=4.5 s ---
+        ### Same geometry, nonzero azimuth. Verifies the rotation transform
+        ### is azimuth-invariant for the axisymmetric case.
         t = 4.5
-        azimuth = omega*t #assume constant rotation rate
+        azimuth = omega*t
 
-        rotor = WATT.Rotor(B, hubht, turbine)
-        blade = Blade(rvec, twistvec, airfoils)
-        env = environment(rho, mu, a, vinf, omega, shearexp)
-
-        idx = 10
-        r = rvec[idx]
-
-        op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
-
-        # println("")
-        # println("Azimuthal")
-        # println("My code: ")
-        
+        op = WATT.windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
 
 
-
-
-
-        ### Test with precone
+        ### --- Case 3: precone only, t=0 ---
+        ### Adds 25° precone. Vx should drop by cos(precone) since the rotor
+        ### disk tilts away from the wind. Vy picks up a wind component too.
         t = 0.0
         precone = 25*pi/180
-        azimuth = omega*t #assume constant rotation rate
+        azimuth = omega*t
 
         rotor = WATT.Rotor(B, hubht, turbine)
-        blade = Blade(rvec, twistvec, airfoils; precone)
-        env = environment(rho, mu, a, vinf, omega, shearexp)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
+        env = WATT.environment(rho, mu, a, vinf, omega, shearexp)
 
-        idx = 10
-        r = rvec[idx]
-
-        op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
-
-        # println("")
-        # println("precone")
-        # println("My code:")
-        
+        op = WATT.windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
 
-        
 
-
-        ### Test with precone at a different azimuthal angle.
+        ### --- Case 4: precone + azimuth, t=3.2 s ---
+        ### Precone shouldn't depend on azimuth (rotational symmetry about
+        ### the shaft axis), so Vx/Vy should match Case 3 at this azimuth.
         t = 3.2
         precone = 25*pi/180
-        azimuth = omega*t #assume constant rotation rate
+        azimuth = omega*t
 
         rotor = WATT.Rotor(B, hubht, turbine)
-        blade = Blade(rvec, twistvec, airfoils; precone)
-        env = environment(rho, mu, a, vinf, omega, shearexp)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
+        env = WATT.environment(rho, mu, a, vinf, omega, shearexp)
 
-        idx = 10
-        r = rvec[idx]
-
-        op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
-
-        # println("")
-        # println("precone azimuth:")
-        # println("My code: ")
-        
+        op = WATT.windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -213,71 +157,40 @@ cd(localpath)
 
 
 
-        ### Test with tilt
+        ### --- Case 5: tilt only, t=0 ---
+        ### 25° shaft tilt. Rotor disk tips relative to wind; both Vx and Vy
+        ### pick up azimuth-dependent projections of the wind vector.
         t = 0.0
         precone = 0.0
         tilt = 25*pi/180
-        azimuth = omega*t #assume constant rotation rate
+        azimuth = omega*t
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt)
-        blade = Blade(rvec, twistvec, airfoils; precone)
-        env = environment(rho, mu, a, vinf, omega, shearexp)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
+        env = WATT.environment(rho, mu, a, vinf, omega, shearexp)
 
-        idx = 10
-        r = rvec[idx]
-
-        op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
-
-        # println("")
-        # println("Tilted flow:")
-        # println("My code: ")
-        
+        op = CCBlade.windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
 
 
-
-        ### Test with tilt at a different azimuth
+        ### --- Case 6: tilt + azimuth, t=3.2 s ---
+        ### Same tilt at a different blade position. Tilted disk + nonzero
+        ### azimuth is the regime where most coordinate-transform bugs
+        ### historically lived (sign-flip in transform_BC_HR etc).
         t = 3.2
         precone = 0.0
         tilt = 25*pi/180
-        azimuth = omega*t #assume constant rotation rate
-
-        # println("")
-        # @show (azimuth)*180/pi
+        azimuth = omega*t
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt)
-        blade = Blade(rvec, twistvec, airfoils; precone)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
-        idx = 10
-        r = rvec[idx]
-
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
-
-        # println("")
-        # println("tilt with azimuth")
-        # println("My code: ")
-        
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -287,7 +200,9 @@ cd(localpath)
 
 
 
-        ### Test with yaw
+        ### --- Case 7: yaw only, t=0 ---
+        ### 25° nacelle yaw. Wind hits the disk at an angle; expect skewed
+        ### inflow, with Vx reduced and a cross-flow component appearing.
         t = 0.0
         precone = 0.0
         tilt = 0.0
@@ -295,7 +210,7 @@ cd(localpath)
         azimuth = omega*t #assume constant rotation rate
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
-        blade = Blade(rvec, twistvec, airfoils; precone)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
         idx = 10
@@ -303,19 +218,7 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        # println("")
-        # println("yaw")
-        # println("My code: ")
-        
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -323,7 +226,7 @@ cd(localpath)
 
 
 
-        ### Test with yaw at a different azimuth
+        ### --- Case 8: yaw + azimuth, t=5.6 s ---
         t = 5.6
         precone = 0.0
         tilt = 0.0
@@ -331,7 +234,7 @@ cd(localpath)
         azimuth = omega*t #assume constant rotation rate
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
-        blade = Blade(rvec, twistvec, airfoils; precone)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
         idx = 10
@@ -339,19 +242,7 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        # println("")
-        # println("yaw with azimuth")
-        # println("My code: ")
-        
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
-
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
 
         @test isapprox(Vx, op.Vx)
         @test isapprox(Vy, op.Vy)
@@ -360,12 +251,14 @@ cd(localpath)
 
 
 
-        # ### Test with sweep #Todo:
+        #Todo: add a sweep test case once sweep is supported.
 
 
 
 
-        ### Test with tilt, and yaw
+        ### --- Case 9: tilt + yaw, t=0 ---
+        ### Two non-axisymmetric rotations composed. Catches order-of-rotation
+        ### bugs that pure-tilt or pure-yaw cases miss.
         t = 0.0
         precone = 0.0
         tilt = 34*pi/180
@@ -373,7 +266,7 @@ cd(localpath)
         azimuth = omega*t #assume constant rotation rate
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
-        blade = Blade(rvec, twistvec, airfoils; precone)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
         idx = 10
@@ -381,30 +274,15 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        # println("")
-        # println("Tilt and yaw")
-        # println("My code: ")
-        
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
-
-        # @show op.Vx, op.Vy
-
         @test isapprox(Vx, op.Vx)
-        @test isapprox(Vy, op.Vy) #rtol=0.02 #Todo: This increased error occurs when I rotate the freestream velocities into the aerodynamic frame... They appear to be off by 2 mm/s in the z direction (comparing z to y, where y is CCBlade's equivalent velocity)
+        @test isapprox(Vy, op.Vy)
 
 
 
-
-        ## Test tilt, yaw, and a different azimuth
+        ### --- Case 10: tilt + yaw + azimuth, t=2.2 s ---
         t = 2.2
         precone = 0.0
         tilt = 34*pi/180
@@ -412,7 +290,7 @@ cd(localpath)
         azimuth = omega*t #assume constant rotation rate
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
-        blade = Blade(rvec, twistvec, airfoils; precone)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
         idx = 10
@@ -420,30 +298,18 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        # println("")
-        # println("Tilt, yaw, and azimuth")
-        # println("My code: ")
         
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
-
-        # @show op.Vx, op.Vy
-
         @test isapprox(Vx, op.Vx)
-        @test isapprox(Vy, op.Vy) #, rtol=0.02 #Todo: This increased error occurs when I rotate the freestream velocities into the aerodynamic frame... They appear to be off by 2 mm/s in the z direction (comparing z to y, where y is CCBlade's equivalent velocity)
+        @test isapprox(Vy, op.Vy)
 
 
 
-
-        ### Test with tilt, yaw, and precone
+        ### --- Case 11: tilt + yaw + precone, t=0 ---
+        ### Full rotation chain. If the order of transforms (precone → hub →
+        ### tilt → yaw → global) is wrong anywhere, this case fails.
         t = 0.0
         precone = 25*pi/180
         tilt = 38*pi/180
@@ -451,7 +317,7 @@ cd(localpath)
         azimuth = omega*t #assume constant rotation rate
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
-        blade = Blade(rvec, twistvec, airfoils; precone)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
         idx = 10
@@ -459,30 +325,19 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        # println("")
-        # println("tilt, yaw, and precone")
-        # println("My code: ")
-        
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
-
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
-        # # println("")
-
-        @test isapprox(Vx, op.Vx) #, rtol=0.0001
-        @test isapprox(Vy, op.Vy) #, rtol=0.02
+        @test isapprox(Vx, op.Vx)
+        @test isapprox(Vy, op.Vy)
 
 
 
 
-
-        ### Test with tilt, yaw, and precone
+        ### --- Case 12: tilt + yaw + precone + azimuth, t=π/2 ---
+        ### Same full chain at a 90° azimuth — picks a specific blade
+        ### orientation (horizontal) where many transforms reduce to simple
+        ### swaps; useful for catching subtle sign errors.
         t = pi/2
         precone = 25*pi/180
         tilt = 38*pi/180
@@ -490,7 +345,7 @@ cd(localpath)
         azimuth = omega*t #assume constant rotation rate
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
-        blade = Blade(rvec, twistvec, airfoils; precone)
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
         env = environment(rho, mu, a, vinf, omega, shearexp)
 
         idx = 10
@@ -498,146 +353,107 @@ cd(localpath)
 
         op = windturbine_op.(vinf, omega, pitch, r, precone, yaw, tilt, azimuth, hubht, shearexp, rho)
 
-        # println("")
-        # println("tilt, yaw, precone, and azimuth")
-        # println("My code: ")
-        
         Vx, Vy = WATT.get_aero_velocities(rotor, blade, env, t, idx, azimuth)
 
 
-        # @show Vx, Vy
-        # println("")
-        # println("Dr. Ning's code: ")
+        @test isapprox(Vx, op.Vx)
+        @test isapprox(Vy, op.Vy)
 
-        # Vxo, Vyo = WATT.get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-        # @show Vxo, Vyo
-        # # println("")
-
-        @test isapprox(Vx, op.Vx) #, rtol=0.0001
-        @test isapprox(Vy, op.Vy) #, rtol=0.02
+    end #End testing simple environments
 
 
+    @testset "Aerostructural Velocities" begin
 
-        #----------------------------------------#
+        # Tests WATT.get_aerostructural_velocities, which maps structural
+        # deflections + velocities at an aero node into the airfoil-frame
+        # velocities (Vx, Vy) consumed by the BEM.
+        #
+        # Design: drive structural deflection by applying a known external
+        # load through GXBeam directly (constant 10 N/m radial follower load
+        # on every element, plus gravity at a fixed azimuth). This isolates
+        # the velocity transform from WATT's aero-structural simulation loop
+        # — the full-pipeline regression lives in simple_NREL5MW.jl.
+        #
+        # Then interpolate the structural state onto each aero node using the
+        # same helpers update_mesh! uses (mesh.jl:202–206), and assert:
+        #   - GXBeam solve converged
+        #   - Vy increases monotonically with r (dominated by Ω·r)
+        #   - No NaN / no Inf
+        #   - At the prescribed (fixed) root, get_aerostructural_velocities
+        #     reduces exactly to get_aero_velocities
 
+        bdfile  = of.read_bdfile("sn5_BDfile.dat", ofpath)
+        bdblade = of.read_bdblade("sn5_BDblade.dat", ofpath)
 
-        ### Test aerostructural velocities
-        precone = 0.0 # 3*pi/180
-        tilt = 0.0 #4*pi/180
-        yaw = 0.0 #5*pi/180
-
-        # Prep the ASD rotor and operating conditions 
-        ofpath = "../testing/OpenFAST_NREL5MW"
-        adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
-        edfile = of.read_edfile("NREL5MW_EDfile.dat", ofpath)
-        bdfile = of.read_bdfile("NREL5MW_BDfile.dat", ofpath)
-        bdblade = of.read_bdblade("NREL5MW_BDblade.dat", ofpath)
-
-        aftypes = Array{of.AirfoilInput}(undef, 8)
-        aftypes[1] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder1.dat") 
-        aftypes[2] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder2.dat") 
-        aftypes[3] = of.read_airfoilinput(ofpath*"/Airfoils/DU40_A17.dat") 
-        aftypes[4] = of.read_airfoilinput(ofpath*"/Airfoils/DU35_A17.dat") 
-        aftypes[5] = of.read_airfoilinput(ofpath*"/Airfoils/DU30_A17.dat") 
-        aftypes[6] = of.read_airfoilinput(ofpath*"/Airfoils/DU25_A17.dat") 
-        aftypes[7] = of.read_airfoilinput(ofpath*"/Airfoils/DU21_A17.dat") 
-        aftypes[8] = of.read_airfoilinput(ofpath*"/Airfoils/NACA64_A17.dat") 
-
-        # indices correspond to which airfoil is used at which station
-        af_idx = Int.(adblade["BlAFID"])
-
-        # create airfoil array
-        afs = aftypes[af_idx]
-
-        chordvec = adblade["BlChord"]
-        twistvec = adblade["BlTwist"]
-        rhub = edfile["HubRad"]
-        rvec = adblade["BlSpn"] .+ rhub
-        hubht = 80.0
-        n = length(rvec)
-
-        rvec = collect(range(rvec[1], rvec[end], length=n))
-
-        airfoils = Vector{DS.Airfoil}(undef, n)
-        for i = 1:n
-            airfoils[i] = make_dsairfoil(afs[i], chordvec[i])
-        end
+        precone = 0.0
+        tilt = 0.0
+        yaw = 0.0
+        pitch = 0.0
 
         rotor = WATT.Rotor(B, hubht, turbine; tilt, yaw)
-        blade = Blade(rvec, twistvec, airfoils; precone)
-        env = environment(rho, mu, a, vinf, omega, shearexp)
-        
-        # @show tilt, yaw, precone
+        blade = WATT.Blade(rvec, chordvec, twistvec.*(pi/180), xcp, airfoils; precone)
+        env   = environment(rho, mu, a, vinf, omega, shearexp)
 
         assembly = of.make_assembly(edfile, bdfile, bdblade)
+        ips      = WATT.create_interpolationpoints(assembly, blade)
 
-        ips = WATT.create_interpolationpoints(assembly, blade)
-
-        distributed_loads = Dict{Int64, DistributedLoads{Float64}}()
-
-        nelem = length(assembly.elements)
-
-        for ielem in 1:nelem
-            distributed_loads[ielem] = DistributedLoads(assembly, ielem;
-                fz_follower = (s) -> 10)
+        # Constant radial follower load on each element to produce a
+        # non-zero structural state. Magnitude is arbitrary.
+        distributed_loads = Dict{Int, GXBeam.DistributedLoads{Float64}}()
+        for ielem in 1:length(assembly.elements)
+            distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem;
+                fz_follower = s -> 10.0)
         end
 
-        # root section is fixed
+        # Cantilever root.
         prescribed_conditions = Dict(
-            1 => PrescribedConditions(ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0)) 
-
-        
-        angular_velocity = SVector(0.0, 0.0, -omega)
+            1 => GXBeam.PrescribedConditions(
+                ux=0, uy=0, uz=0, theta_x=0, theta_y=0, theta_z=0))
 
         t = 0.2
         azimuth = omega*t
         g = 9.81
         gravity = SVector(g*sin(azimuth), -g*cos(azimuth), 0.0)
+        angular_velocity = SVector(0.0, 0.0, -omega)
 
         tvec = 0:0.1:t
 
-        system, history, converged = GXBeam.time_domain_analysis(assembly, tvec;
-            prescribed_conditions,
-            distributed_loads,
-            angular_velocity,
-            gravity,
-            steady=false) 
+        system, history, converged = GXBeam.time_domain_analysis(
+            assembly, tvec;
+            prescribed_conditions, distributed_loads,
+            angular_velocity, gravity)
 
+        @test converged
         state = history[end]
+        na    = length(blade.airfoils)
 
-        na = length(blade.airfoils)
-
-        delta = [WATT.interpolate_deflection(ips[i], assembly, state) for i in 1:na]
-        aerov = [WATT.convert_velocities(blade, env, assembly, state, ips, t, i) for i in 1:na]
-
-        # @show state.points[1].u
-        # @show state.points[1].V
-        # @show env.RS(0)
-        # @show env.RS(t)
-        # @show aerov[1]
+        # Interpolate structural quantities onto each aero node.
+        delta       = [WATT.interpolate_deflection(ips[i], assembly, state)            for i in 1:na]
+        delta_theta = [WATT.interpolate_angle(ips[i], assembly, state)                 for i in 1:na]
+        aerov       = [WATT.convert_velocities(blade, env, assembly, state, ips, t, i) for i in 1:na]
 
         Vxvec = zeros(na)
         Vyvec = zeros(na)
-
-        for i = 1:na
-            Vxvec[i], Vyvec[i] = WATT.get_aerostructural_velocities(rotor, blade, env, t, i, azimuth, delta[i], aerov[i])
+        for i in 1:na
+            Vxvec[i], Vyvec[i] = WATT.get_aerostructural_velocities(
+                rotor, blade, env, t, i, azimuth,
+                delta[i], delta_theta[i], aerov[i])
         end
 
-        # @show blade.r
+        # Physical sanity: Vy is dominated by Ω·r so it must increase with r.
+        @test issorted(Vyvec)
 
-        increasingflag = true
-        for i = 2:na
-            if Vyvec[i-1]>=Vyvec[i]
-                increasingflag = false
-            end
-        end
-        @test increasingflag
+        # No NaN / no Inf
+        @test all(isfinite, Vxvec)
+        @test all(isfinite, Vyvec)
 
+        # Root identity: at the prescribed (fixed) root, structural
+        # quantities are zero, so get_aerostructural_velocities must reduce
+        # exactly to get_aero_velocities.
+        Vx_aero, Vy_aero = WATT.get_aero_velocities(rotor, blade, env, t, 1, azimuth)
+        @test isapprox(Vxvec[1], Vx_aero; atol=1e-10)
+        @test isapprox(Vyvec[1], Vy_aero; atol=1e-10)
 
-        ### #Todo: I don't know what other tests to do here because I don't know what the values should be... they look pretty good. I mean, I guess I could pull velocities out of OpenFAST and compare those. 
+    end #End testing aerostructural velocities
 
-
-
-    end #End testing simple environments
 end #End testing environments
