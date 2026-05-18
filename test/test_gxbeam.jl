@@ -3,11 +3,11 @@
 =#
 
 using Test
-using WATT, GXBeam, OpenFASTsr, DynamicStallModels
+using WATT, GXBeam, OpenFASTTools, DynamicStallModels
 using LinearAlgebra, StaticArrays, Statistics
 
 
-of = OpenFASTsr
+of = OpenFASTTools
 DS = DynamicStallModels
 
 localpath = @__DIR__

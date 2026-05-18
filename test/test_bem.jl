@@ -3,11 +3,10 @@ Tests to test the four different BEM implementations: 1) single residual (inflow
 
 Adam Cardoza
 =#
-using Revise
-using Test, WATT, DelimitedFiles, FLOWMath, CCBlade, OpenFASTsr, DynamicStallModels
+using Test, WATT, DelimitedFiles, FLOWMath, CCBlade, OpenFASTTools, DynamicStallModels
 # using Test, DelimitedFiles, FLOWMath, CCBlade
 
-of = OpenFASTsr
+of = OpenFASTTools
 DS = DynamicStallModels
 
 localpath = @__DIR__

@@ -4,10 +4,10 @@ Test the Blade constructors, functions and methods.
 =#
 
 using Test, Statistics
-using WATT, FLOWMath, DynamicStallModels, OpenFASTsr
+using WATT, FLOWMath, DynamicStallModels, OpenFASTTools
 
 DS = DynamicStallModels
-of = OpenFASTsr
+of = OpenFASTTools
 
 localpath = @__DIR__
 cd(localpath)
@@ -15,19 +15,20 @@ cd(localpath)
 
 @testset "Blades" begin
     ### Prep the ASD rotor and operating conditions 
-    ofpath = "../testing/OpenFAST_NREL5MW"
-    adblade = of.read_adblade("NREL5MW_adblade.dat", ofpath)
-    edfile = of.read_edfile("NREL5MW_EDfile.dat", ofpath)
+    ofpath = "../data/openfast"
+    airfoil_path = "../data/openfast/airfoils"
+    adblade = of.read_adblade("sn5_adblade.dat", ofpath)
+    edfile = of.read_edfile("sn5_EDfile.dat", ofpath)
 
     aftypes = Array{of.AirfoilInput}(undef, 8)
-    aftypes[1] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder1.dat") 
-    aftypes[2] = of.read_airfoilinput(ofpath*"/Airfoils/Cylinder2.dat") 
-    aftypes[3] = of.read_airfoilinput(ofpath*"/Airfoils/DU40_A17.dat") 
-    aftypes[4] = of.read_airfoilinput(ofpath*"/Airfoils/DU35_A17.dat") 
-    aftypes[5] = of.read_airfoilinput(ofpath*"/Airfoils/DU30_A17.dat") 
-    aftypes[6] = of.read_airfoilinput(ofpath*"/Airfoils/DU25_A17.dat") 
-    aftypes[7] = of.read_airfoilinput(ofpath*"/Airfoils/DU21_A17.dat") 
-    aftypes[8] = of.read_airfoilinput(ofpath*"/Airfoils/NACA64_A17.dat") 
+    aftypes[1] = of.read_airfoilinput(joinpath(airfoil_path, "Cylinder1.dat")) 
+    aftypes[2] = of.read_airfoilinput(joinpath(airfoil_path, "Cylinder2.dat")) 
+    aftypes[3] = of.read_airfoilinput(joinpath(airfoil_path, "DU40_A17.dat")) 
+    aftypes[4] = of.read_airfoilinput(joinpath(airfoil_path, "DU35_A17.dat")) 
+    aftypes[5] = of.read_airfoilinput(joinpath(airfoil_path, "DU30_A17.dat")) 
+    aftypes[6] = of.read_airfoilinput(joinpath(airfoil_path, "DU25_A17.dat")) 
+    aftypes[7] = of.read_airfoilinput(joinpath(airfoil_path, "DU21_A17.dat")) 
+    aftypes[8] = of.read_airfoilinput(joinpath(airfoil_path, "NACA64_A17.dat")) 
 
     # indices correspond to which airfoil is used at which station
     af_idx = Int.(adblade["BlAFID"])

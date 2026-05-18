@@ -1,0 +1,12 @@
+[deps]
+CCBlade = "e1828068-15df-11e9-03e4-ef195ea46fa4"
+DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+DynamicStallModels = "1fe18b12-a608-438b-96ea-7dfa0357455b"
+FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
+GXBeam = "974624c9-1acb-4ad6-a627-8ac40fc27a3e"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OpenFASTTools = "45c743d6-1a1e-4fb4-aa78-18ed941dcf18"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+WATT = "3f0b5dcd-76e8-4d37-b00e-98055191506f"

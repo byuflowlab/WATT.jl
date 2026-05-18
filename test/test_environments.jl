@@ -5,10 +5,10 @@ Test all of the environment constructors and functions
 =#
 
 using Test
-using WATT, CCBlade, OpenFASTsr, DynamicStallModels, GXBeam, StaticArrays
+using WATT, CCBlade, OpenFASTTools, DynamicStallModels, GXBeam, StaticArrays
 
 DS = DynamicStallModels
-of = OpenFASTsr
+of = OpenFASTTools
 
 localpath = @__DIR__
 cd(localpath)
