@@ -202,22 +202,6 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
     return Vx, Vy
 end
 
-function get_aerostructural_velocities(env::Environment, aerov, t, r, azimuth, precone, tilt, yaw, hubht)
-    #Todo: What is this doing? Is it needed? 
-    ### Extract the aero velocities due to the environment, precone, tilt, taw, and shear. 
-    vxenv, vyenv = get_aero_velocities(env, t, r, azimuth, precone, tilt, yaw, hubht)
-
-    ### Get the relative structural velocities
-    vxrel = aerov[3] 
-    vyrel = aerov[2] + env.RS(t)*r  #The rotational velocities are included in the GXBeam output velocity. So to get the relative velocities, I need to subtract out the rotational component. But the rotational component is negative in the structural frame, so subtract a negative is add the rotational velocity back in. 
-    
-
-    ### Return the total x and y velocities (x and y in the aerodynamic frame)
-    # If the structure is moving in the negative y direction, then the airfoil should see a faster velocity. 
-    return vxenv+vxrel, vyenv-vyrel
-end
-
-
 """
     get_aerostructural_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz, vsx, vsy, vsz) -> Vx, Vy
 

@@ -58,3 +58,18 @@ Several items were flagged but not acted on:
 - API observations worth a future session: `WATT.run_sim!` uses `GXBeam.DynamicSystem` + `initialize_system!` + `step_system!`, **not** `GXBeam.time_domain_analysis`. Several tests still use `time_domain_analysis` for setup (it's convenient and produces the same `AssemblyState` type). User OK'd leaving as-is for now; could revisit for path-consistency later.
 - `SimpleEnvironment` closure-based design is the underlying reason JLD2 reference data can't roundtrip env directly. The fix (callable structs) is now scheduled in Phase 3.
 - New plan files: `~/.claude/plans/we-are-in-phase-rustling-eich.md` (this Phase 1 sub-plan; iteratively revised across the session).
+
+---
+
+## Session — 2026-05-18 (Phase 1 finish)
+
+- Closed out the remaining Phase 1 cleanup. Plan at `~/.claude/plans/alright-let-s-make-a-calm-nest.md`. Full test suite (incl. the 100 s `simple_NREL5MW` regression) passes — no physics drift.
+- Active bugs deleted in `src/bem.jl`: `@show typeof(phistar)` after the IAD.implicit call, `println("Vx and Vy is zero.")` short-circuit, and the entire `show_dual_vec` debug helper.
+- `src/static.jl:30`: `find_inittype(blade.airfoils[1].c, …)` → `find_inittype(blade.c[1], …)`. `Airfoil` never had a `.c` field; this path was latent-dead until now.
+- `src/environments.jl`: deleted the unused 9-arg `get_aerostructural_velocities(env, aerov, t, r, azimuth, precone, tilt, yaw, hubht)` overload. Verified zero callers; the rotor/blade-first overload at the bottom of the file is the only live one.
+- `src/solvers.jl`: removed `DBDF1!`, `DBDF2!`, `fixedpointbem`, `secant` (~165 lines). `RK4` and `BDF1` retained — `BDF1` is why `NLsolve` stays a dep.
+- `src/types.jl`: removed commented-out alternate `Blade` struct, the `AeroStates` struct, and `get_aerostate`. A commented `Mesh` struct further down was left in place (out of scope for the approved plan; flag for next pass).
+- **Plots → RecipesBase**: dropped `Plots` from `Project.toml`, added `RecipesBase`. `using Plots` in `src/WATT.jl` replaced with `using RecipesBase`. `plotpoints` and `plotassembly` rewritten as `@recipe` blocks on new wrapper types `BladePoints` and `AssemblyPlot` (in `src/gxbeam.jl`), both exported from `WATT`. Wrapper-types pattern was chosen explicitly to avoid type piracy on `GXBeam.Assembly`. User call pattern: `using Plots; plot(AssemblyPlot(assembly))`.
+- Recipe smoke test was deferred — neither recipe is exercised by the regression suite. Add to Phase 2 backlog if Plots compatibility matters.
+- `solve_BEM!` phi0-variants (bem.jl ~lines 47–206) intentionally kept per user decision; rename to `solve_BEM_warm!` deferred.
+- The user ran `Pkg.rm("Plots"); Pkg.add("RecipesBase")` themselves (foreground task in their REPL); I background-ran it once but stopped it on their request — Pkg ops should run in their REPL, not via subprocess.

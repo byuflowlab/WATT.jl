@@ -369,7 +369,7 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
 
 
         if runtimeflag & (mod(i-1, runtimeiter)==0) 
-            runtime(aerostates, gxhistory_new, i) 
+            runtime(aerostates, gxhistory[i], i) 
         end
     end
 end

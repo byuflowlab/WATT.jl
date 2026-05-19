@@ -237,88 +237,144 @@ function pane_assembly(assembly; ne=nothing, verbose::Bool=false, fit=Linear)
     return sevec_new #Todo: Shouldn't this return a new assembly? Where is this used? 
 end
 
-function plotpoints(points; xdim = true, ydim = true, zdim=true)
-    n = length(points)
-    x = [points[i][1] for i in 1:n]
-    y = [points[i][2] for i in 1:n]
-    z = [points[i][3] for i in 1:n]
+"""
+    BladePoints(points; xdim=true, ydim=true, zdim=true)
 
-    if iszero(x)
-        xdim = false
-        xplt = y
-        yplt = z
-        xlab = "Y distance"
-        ylab = "Z distance"
-    elseif iszero(y)
-        ydim = false
-        xplt = x
-        yplt = z
-        xlab = "X distance"
-        ylab = "Z distance"
-    elseif iszero(z)
-        zdim = false
-        xplt = x
-        yplt = y
-        xlab = "X distance"
-        ylab = "Y distance"
-    end
+Plot-recipe wrapper around a vector of 3-component points. Use as
+`plot(BladePoints(points))` after `using Plots`. Drops any axis whose
+coordinates are all zero, producing a 2D plot when the points are planar.
+"""
+struct BladePoints{T}
+    points::T
+    xdim::Bool
+    ydim::Bool
+    zdim::Bool
+end
+BladePoints(points; xdim=true, ydim=true, zdim=true) = BladePoints(points, xdim, ydim, zdim)
 
-    if xdim&&ydim&&zdim #Check if the plot is 3 dimensional
-        plt = scatter(x, y, z, xaxis="X distance", yaxis="Y distance", zaxis="Z distance", legend=false, aspectratio=:equal)
+@recipe function f(bp::BladePoints)
+    n = length(bp.points)
+    x = [bp.points[i][1] for i in 1:n]
+    y = [bp.points[i][2] for i in 1:n]
+    z = [bp.points[i][3] for i in 1:n]
+
+    xdim, ydim, zdim = bp.xdim, bp.ydim, bp.zdim
+    if iszero(x); xdim = false; end
+    if iszero(y); ydim = false; end
+    if iszero(z); zdim = false; end
+
+    seriestype := :scatter
+    legend --> false
+    aspect_ratio --> :equal
+
+    if xdim && ydim && zdim
+        xguide --> "X distance"
+        yguide --> "Y distance"
+        zguide --> "Z distance"
+        return x, y, z
+    elseif !xdim
+        xguide --> "Y distance"
+        yguide --> "Z distance"
+        return y, z
+    elseif !ydim
+        xguide --> "X distance"
+        yguide --> "Z distance"
+        return x, z
     else
-        plt = scatter(xplt, yplt, xaxis=xlab, yaxis=ylab, legend=false, aspectratio=:equal)
+        xguide --> "X distance"
+        yguide --> "Y distance"
+        return x, y
     end
-    return plt
 end
 
-function plotassembly(assembly; xdim = true, ydim = true, zdim=true)
-    points = cat(assembly.points...,dims=2)'
+"""
+    AssemblyPlot(assembly; xdim=true, ydim=true, zdim=true)
 
-    ### Get element points
-    elements = zeros(length(assembly.elements), 3)
-    for i = 1:length(assembly.elements)
-        elements[i,:] = assembly.elements[i].x
-    end
-    
-    if iszero(points[:,1]) #X direction is zero
-        xdim = false
-        xplt = points[:,2]
-        yplt = points[:,3]
-        xlab = "Y distance"
-        ylab = "Z distance"
-        xmplt = elements[:,2]
-        ymplt = elements[:,3]
-    elseif iszero(points[:,2]) #Y direction is zero
-        ydim = false
-        xplt = points[:,1]
-        yplt = points[:,3]
-        xlab = "X distance"
-        ylab = "Z distance"
-        xmplt = elements[:,1]
-        ymplt = elements[:,3]
-    elseif iszero(points[:,3]) #Z direction is zero
-        zdim = false
-        xplt = points[:,1]
-        yplt = points[:,2]
-        xlab = "X distance"
-        ylab = "Y distance"
-        xmplt = elements[:,1]
-        ymplt = elements[:,2]
+Plot-recipe wrapper around a `GXBeam.Assembly`. Use as
+`plot(AssemblyPlot(assembly))` after `using Plots`. Draws the assembly
+points connected by a black line with the element midpoints overlaid;
+collapses to 2D if one coordinate is all zero.
+"""
+struct AssemblyPlot{A}
+    assembly::A
+    xdim::Bool
+    ydim::Bool
+    zdim::Bool
+end
+AssemblyPlot(assembly; xdim=true, ydim=true, zdim=true) = AssemblyPlot(assembly, xdim, ydim, zdim)
+
+@recipe function f(ap::AssemblyPlot)
+    points = cat(ap.assembly.points...; dims=2)'
+    nel = length(ap.assembly.elements)
+    elements = zeros(nel, 3)
+    for i in 1:nel
+        elements[i, :] = ap.assembly.elements[i].x
     end
 
+    xdim, ydim, zdim = ap.xdim, ap.ydim, ap.zdim
+    if iszero(points[:, 1]); xdim = false; end
+    if iszero(points[:, 2]); ydim = false; end
+    if iszero(points[:, 3]); zdim = false; end
 
+    legend --> false
+    aspect_ratio --> :equal
 
-    if xdim&&ydim&&zdim #Check if the plot is 3 dimensional
-        plt = plot(points[:,1], points[:,2], points[:,3], linewidth=4, linecolor=:black, xaxis="X distance", yaxis="Y distance", zaxis="Z distance", legend=false, aspectratio=:equal)
-        scatter!(points[:,1], points[:,2], points[:,3])
-        scatter!(elements[:,1], elements[:,2], elments[:,3], markershape=:cross)
+    if xdim && ydim && zdim
+        xguide --> "X distance"
+        yguide --> "Y distance"
+        zguide --> "Z distance"
+
+        @series begin
+            seriestype := :path
+            linewidth --> 4
+            linecolor --> :black
+            points[:, 1], points[:, 2], points[:, 3]
+        end
+        @series begin
+            seriestype := :scatter
+            points[:, 1], points[:, 2], points[:, 3]
+        end
+        @series begin
+            seriestype := :scatter
+            markershape --> :cross
+            elements[:, 1], elements[:, 2], elements[:, 3]
+        end
     else
-        plt = plot(xplt, yplt, linewidth=4, linecolor=:black, xaxis=xlab, yaxis=ylab, legend=false, aspectratio=:equal)
-        scatter!(xplt, yplt, markersize=6)
-        scatter!(xmplt, ymplt, markershape=:diamond, markersize=4)
-    end
-    return plt
+        if !xdim
+            xplt, yplt = points[:, 2], points[:, 3]
+            xmplt, ymplt = elements[:, 2], elements[:, 3]
+            xguide --> "Y distance"
+            yguide --> "Z distance"
+        elseif !ydim
+            xplt, yplt = points[:, 1], points[:, 3]
+            xmplt, ymplt = elements[:, 1], elements[:, 3]
+            xguide --> "X distance"
+            yguide --> "Z distance"
+        else
+            xplt, yplt = points[:, 1], points[:, 2]
+            xmplt, ymplt = elements[:, 1], elements[:, 2]
+            xguide --> "X distance"
+            yguide --> "Y distance"
+        end
 
+        @series begin
+            seriestype := :path
+            linewidth --> 4
+            linecolor --> :black
+            xplt, yplt
+        end
+        @series begin
+            seriestype := :scatter
+            markersize --> 6
+            xplt, yplt
+        end
+        @series begin
+            seriestype := :scatter
+            markershape --> :diamond
+            markersize --> 4
+            xmplt, ymplt
+        end
+    end
 end
 
 

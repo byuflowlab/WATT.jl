@@ -191,7 +191,6 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
             end
 
             phistar = IAD.implicit(solve, residual, xv, pv)
-            @show typeof(phistar)
             _, outputs = CCBlade.residual_and_outputs(phistar, xv, pv) #TODO: Instead of creating a new function... I could just check if x0 is inbetween a and b outside of the loop. If it is, then I can check if it is a zero. If not, then replace one of the bounds into Brent's method. -> Is this even a problem? 
             return outputs
         end    
@@ -203,12 +202,6 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
     
     @warn "Invalid data (likely) for this section.  Zero loading assumed."
     return CCBlade.Outputs()
-end
-
-function show_dual_vec(x::AbstractArray{<:ForwardDiff.Dual})
-    for i in eachindex(x)
-        println(x[i].value)
-    end
 end
 
 """
@@ -271,7 +264,6 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     q4 = [-pi+epsilon, -pi/2]
 
     if Vx_is_zero && Vy_is_zero
-        println("Vx and Vy is zero.")
         return CCBlade.Outputs()
 
     elseif Vx_is_zero

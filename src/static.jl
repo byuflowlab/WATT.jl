@@ -27,7 +27,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly; verbose::Bool=false
     ### Initialization information
     na = length(blade.rR)
 
-    inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+    inittype = find_inittype(blade.c[1], blade.twist[1])
 
 
 
