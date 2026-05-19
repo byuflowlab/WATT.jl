@@ -85,9 +85,23 @@ No new tests — just verify existing test suite still passes after each deletio
 ---
 
 ## Phase 2: Test Infrastructure
-**Status:** Not started
+**Status:** Complete (2026-05-19)
 **Session estimate:** 1–2 sessions
 **Depends on:** Phase 1
+
+### Bugs surfaced (deferred to later phases)
+- `src/aero_only.jl::initialize` calls the outdated 3-positional / kwarg form
+  of `initialize_ds_model` and builds a mesh NamedTuple missing `p_ds`.
+  Crashes with `MethodError`. Recorded as `@test_broken` in
+  [test/test_aero_only.jl](test/test_aero_only.jl); fix during **Phase 3**
+  (SimMesh refactor will rebuild the mesh contract anyway).
+- AD through `run_sim!` and `fixedpoint!` errors at GXBeam's
+  `step_system!` / `steady_state_analysis!`: those write dual values into a
+  Float64 `DynamicSystem`/`StaticSystem`. BEM-level ForwardDiff and
+  ReverseDiff *do* pass to ~1e-10 vs central differences (via ImplicitAD).
+  End-to-end AD is **Phase 6+** work (ImplicitAD wrapping of GXBeam at the
+  coupled-state level). Recorded as `@test_broken` in
+  [test/test_ad.jl](test/test_ad.jl).
 
 ### Goal
 Build comprehensive test suite: unit, integration (all three solver modes), and AD compatibility.

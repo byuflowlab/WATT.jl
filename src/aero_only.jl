@@ -68,7 +68,7 @@ function initialize(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
     t0 = first(tvec)
 
     if isnothing(inittype)
-        inittype = find_inittype(blade.airfoils[1].c, blade.twist[1])
+        inittype = find_inittype(blade.c[1], blade.twist[1])
     end #TODO: I should probably check if the passed in type is a valid type. 
 
 
