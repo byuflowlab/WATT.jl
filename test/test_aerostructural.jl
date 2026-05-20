@@ -43,10 +43,12 @@ include("fixtures/nrel5mw.jl")
         @test length(gxhistory) == nt
 
         # Mesh must carry every field run_sim! / take_aero_step! references.
+        @test mesh isa WATT.SimMesh
+        @test aerostates isa WATT.AeroStates{Float64}
         for k in (:interpolationpoints, :delta, :def_theta, :aerov, :xcc,
                   :xds_idxs, :y_ds, :p_ds, :assembly, :system,
                   :prescribed_conditions, :distributed_loads)
-            @test haskey(mesh, k)
+            @test k in propertynames(mesh)
         end
     end
 
@@ -82,6 +84,18 @@ include("fixtures/nrel5mw.jl")
         for f in (:azimuth, :phi, :alpha, :W, :Cx, :Cy, :Cm, :Fx, :Fy, :Mx, :xds)
             @test getfield(a1, f) == getfield(a2, f)
         end
+    end
+
+    @testset "run_sim (non-mutating) matches initialize_sim + run_sim!" begin
+        a1, g1, m1 = WATT.initialize_sim(blade, assembly, tvec; verbose=false)
+        WATT.run_sim!(rotor, blade, m1, env_rated, tvec, a1, g1; pitch, verbose=false)
+
+        a2, g2, _ = WATT.run_sim(rotor, blade, assembly, env_rated, tvec; pitch, verbose=false)
+
+        for f in (:azimuth, :phi, :alpha, :W, :Cx, :Cy, :Cm, :Fx, :Fy, :Mx, :xds)
+            @test getfield(a1, f) == getfield(a2, f)
+        end
+        @test length(g1) == length(g2)
     end
 
 end #End aerostructural simulation

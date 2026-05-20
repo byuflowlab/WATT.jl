@@ -64,9 +64,31 @@ end
 
 
 """
-initialize_sim()
+    initialize_sim(blade, assembly, tvec; structural_damping=true, linear=false, kwargs...) -> aerostates, gxhistory, mesh
 
-Initialize the data structures for a simulation. Specifically for the run_sim set of functions. 
+Pre-allocate every buffer the coupled aero-structural transient solver needs.
+The returned tuple is the canonical input to [`run_sim!`](@ref).
+
+**Arguments**
+- `blade::Blade`
+- `assembly::GXBeam.Assembly`
+- `tvec::AbstractVector`: Time vector; `length(tvec)` sets the history depth.
+
+**Keyword Arguments**
+- `structural_damping::Bool = true`: Passed through to GXBeam.
+- `linear::Bool = false`: Use linear structural response.
+- `pfunc`, `p`, `xpfunc`: GXBeam parameter callbacks (advanced).
+- `verbose::Bool = false`: Print progress.
+
+**Returns**
+- `aerostates::AeroStates`: Time-indexed aero state history.
+- `gxhistory::Vector{GXBeam.AssemblyState}`: Per-step structural state.
+- `mesh::SimMesh`: Coupling buffers reused at every time step.
+
+**Notes**
+The element type of the allocated buffers is inferred from `blade.c[1]` and
+`blade.twist[1]` via [`find_inittype`](@ref), so passing `ForwardDiff.Dual`
+chord/twist propagates duals through every buffer.
 """
 function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::Bool=false, p=nothing, pfunc = (p,t) -> (;), xpfunc=nothing, structural_damping::Bool=true, linear::Bool=false)
     if verbose
@@ -99,29 +121,19 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
 
     ### ----- Prepare data storage for aerodynamic models ----- ###
 
-    azimuth = Array{inittype}(undef, nt)
-    # azimuth = Array{Float64}(undef, nt) #Note: I don't know of a situation that the azimuth would be a dual number.
-    phi = Array{inittype}(undef,(nt, na))
-    alpha = Array{inittype}(undef,(nt, na))
-    W = Array{inittype}(undef,(nt, na))
+    # Initialize DS state vector first so we know its width (ns).
+    xds, xds_idxs, y_ds, p_ds = initialize_ds_model(blade, nt, inittype)
+    ns = size(xds, 2)
 
-    Cx = Array{inittype}(undef,(nt, na))
-    Cy = Array{inittype}(undef,(nt, na))
-    Cm = Array{inittype}(undef,(nt, na))
+    aerostates = AeroStates{inittype}(undef, nt, na, ns)
+    # The DS state history lives in `aerostates.xds`; share the buffer that
+    # `initialize_ds_model` already populated so call sites that pass `xds`
+    # around continue to work.
+    copyto!(aerostates.xds, xds)
+    xds = aerostates.xds
 
-    Fx = Array{inittype}(undef,(nt, na))
-    Fy = Array{inittype}(undef,(nt, na))
-    Mx = Array{inittype}(undef,(nt, na))
-
-    # A vector that CCBlade uses for solving. 
+    # CCBlade scratch vector
     xcc = Vector{inittype}(undef, 11)
-
-    # Initialize DS solution
-    xds, xds_idxs, y_ds, p_ds = initialize_ds_model(blade, nt, inittype)  
-
-    # Store everything in the aerostates 
-    # aerostates = AeroStates(azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
-    aerostates = (;azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
 
     
 
@@ -163,7 +175,8 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     aerov = Vector{SVector{3, inittype}}(undef, na)
 
     
-    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, y_ds, p_ds,
+    mesh = SimMesh(interpolationpoints, delta, def_theta, aerov, xcc,
+                xds_idxs, y_ds, p_ds,
                 assembly, system, prescribed_conditions, distributed_loads,
                 point_masses, linear_velocity, angular_velocity,
                 xpfunc, pfunc, two_dimensional, structural_damping, linear)
@@ -175,11 +188,32 @@ end
 
 
 """
-run_sim!()
+    run_sim!(rotor, blade, mesh, env, tvec, aerostates, gxhistory; pitch=0.0, solver=RK4(), kwargs...)
 
-The pre-allocated version of run_sim(). 
+Pre-allocated transient aero-structural simulation. Mutates `aerostates`,
+`gxhistory`, and the mutable fields of `mesh` in place. The first step is
+treated as an initial condition (BEM + DS init + GXBeam `initialize_system!`),
+the remaining `length(tvec)-1` steps advance with `take_aero_step!` and
+`GXBeam.step_system!`.
 
+**Arguments**
+- `rotor::Rotor`, `blade::Blade`, `mesh::SimMesh`, `env::Environment`
+- `tvec::AbstractVector`: Time vector.
+- `aerostates::AeroStates`, `gxhistory`: From [`initialize_sim`](@ref).
 
+**Keyword Arguments**
+- `pitch::Real = 0.0`: Blade pitch (rad).
+- `solver::Solver = RK4()`: DS state integrator.
+- `g::Real = 9.81`: Gravity magnitude.
+- `azimuth0::Real = 0.0`: Initial azimuth.
+- `verbose::Bool = false`, `speakiter::Int = 100`: Progress printing.
+- `runtimeflag::Bool = false`, `runtimeiter::Int`, `runtime`: Custom per-step callback.
+- `prepp::Function = nothing`: A function to update the loads within the parameter vector. 
+- `p`:
+- `gxflag`: 
+
+**Notes**
+AD through this function relies on the parameter prep function and p. See examples for how to use this for AD.
 """
 function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates, gxhistory; pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter::Int=100, g=9.81, runtimeflag::Bool=false, runtimeiter::Int=speakiter, runtime = (aerostates, gxhistory, i) ->nothing, gxflag=nothing, prepp=nothing, p=nothing, azimuth0=0.0)
 
@@ -376,10 +410,29 @@ end
 
 
 """
-run_sim()
+    run_sim(rotor, blade, assembly, env, tvec; kwargs...) -> aerostates, gxhistory, mesh
 
-Simulate the physical response of a rotor blade. Preallocate the data structures using initialize_sim() and then run the time stepping loop using run_sim!().
+Allocating wrapper for [`run_sim!`](@ref). Equivalent to calling
+[`initialize_sim`](@ref) and then `run_sim!`, returning the populated
+[`AeroStates`](@ref), GXBeam history, and [`SimMesh`](@ref).
+
+**Arguments**
+- `rotor::Rotor`
+- `blade::Blade`
+- `assembly::GXBeam.Assembly`
+- `env::Environment`
+- `tvec::AbstractVector`: Time vector.
+
+**Keyword Arguments**
+Forwarded to `run_sim!`. See its docstring for the full list.
+
+**Notes**
+For repeated solves (e.g. in an optimization outer loop), prefer the
+in-place pair `initialize_sim` + `run_sim!` to reuse the buffers.
 """
-function run_sim()
+function run_sim(rotor::Rotor, blade::Blade, assembly::GXBeam.Assembly, env::Environment, tvec; kwargs...)
+    aerostates, gxhistory, mesh = initialize_sim(blade, assembly, tvec)
+    run_sim!(rotor, blade, mesh, env, tvec, aerostates, gxhistory; kwargs...)
+    return aerostates, gxhistory, mesh
 end
 

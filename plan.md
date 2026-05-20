@@ -32,7 +32,7 @@ WATT.jl is a research-grade Julia package for nonlinear unsteady aeroelastic sim
 ---
 
 ## Phase 1: Foundation — Code Cleanup
-**Status:** Not started
+**Status:** Completed (2026-05-18)
 **Session estimate:** 1 session
 
 ### Goal

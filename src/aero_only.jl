@@ -5,10 +5,6 @@ Recreating what they do in AeroDyn, which is solves the BEM, feeds the inflow an
 Adam Cardoza 8/6/22
 =# 
 
-export simulate
-
-#Question: I don't know if using this many structs will make my package take forever to compile... So it might be better to create a nest of if statements... but we'll see.
-
 function dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade::Blade, env::Environment, W)
     
     for j in eachindex(blade.r)
@@ -34,19 +30,27 @@ end
 
 
 """
-    initialize()
+    initialize_aero(blade, tvec; inittype=nothing, verbose=false) -> aerostates, mesh
 
-Prepare data structures for an aerodynamic only simulation. 
+Pre-allocate buffers for an aerodynamics-only transient simulation (no
+structural feedback). The returned pair is the canonical input to
+[`simulate!`](@ref).
 
 **Arguments**
-- blade::Blade - The blade object that contains the airfoils, twist, and chord.
-- tvec::Vector{TF} - The time vector that the simulation will be run over.
+- `blade::Blade`
+- `tvec::AbstractVector`: Time vector.
 
-**Outputs**
-- aerostates::AeroStates - The aerodynamic states that are calculated during the simulation.
-- mesh::Mesh - The mesh that is used to store the structural deflections and velocities.
+**Keyword Arguments**
+- `inittype`: Override the inferred element type (default: from `blade.c[1]`,
+  `blade.twist[1]`).
+- `verbose::Bool = false`
+
+**Returns**
+- `aerostates::AeroStates`: Time-indexed aero state history.
+- `mesh::AeroMesh`: BEM/DS scratch buffers. `delta`/`def_theta`/`aerov` are
+  allocated for shape compatibility with the coupled solver but stay zero.
 """
-function initialize(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
+function initialize_aero(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
     #Todo: This still needs to be completed. And it'll need a initial condition function. But for now, it looks like the simulate function initializes, finds the initial condition, and then simulates. 
 
     if verbose
@@ -73,67 +77,49 @@ function initialize(blade::Blade, tvec; verbose::Bool=false, inittype=nothing)
 
 
     ### ----- Prepare data storage for aerodynamic models ----- ###
-    azimuth = Array{inittype}(undef, nt)
-    phi = Array{inittype}(undef,(nt, na))
-    alpha = Array{inittype}(undef,(nt, na))
-    W = Array{inittype}(undef,(nt, na))
 
-    Cx = Array{inittype}(undef,(nt, na))
-    Cy = Array{inittype}(undef,(nt, na))
-    Cm = Array{inittype}(undef,(nt, na))
+    # Initialize DS state vector first so we know its width (ns).
+    xds, xds_idxs, y_ds, p_ds = initialize_ds_model(blade, nt, inittype)
+    ns = size(xds, 2)
 
-    Fx = Array{inittype}(undef,(nt, na))
-    Fy = Array{inittype}(undef,(nt, na))
-    Mx = Array{inittype}(undef,(nt, na))
+    aerostates = AeroStates{inittype}(undef, nt, na, ns)
+    copyto!(aerostates.xds, xds)
+    xds = aerostates.xds
 
-    # A vector that CCBlade uses for solving. 
     xcc = Vector{inittype}(undef, 11)
 
-    # Initialize DS solution
-    xds, xds_idxs, y_ds = initialize_ds_model(blade.airfoils, nt; inittype)  
-
-    # Store everything in the aerostates 
-    aerostates = (;azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds)
-
-
-    
-
-    #Placeholders for strucutral deflections
-    delta = Vector{SVector{3, inittype}}(undef, na) #todo. What is this used for? -> This is the deflection from the structural mesh projected onto the aero mesh. We keep it as zeros for aero-only simulations.
-    def_theta = Vector{SVector{3, inittype}}(undef, na) #todo. What is this used for
-    #The structural velocities interpolated to the aerodynamic nodes.
+    # Placeholders for structural quantities; stay zero in aero-only mode.
+    delta = Vector{SVector{3, inittype}}(undef, na)
+    def_theta = Vector{SVector{3, inittype}}(undef, na)
     aerov = Vector{SVector{3, inittype}}(undef, na)
-
     for i = 1:na
         delta[i] = SVector{3, inittype}(0.0, 0.0, 0.0)
         def_theta[i] = SVector{3, inittype}(0.0, 0.0, 0.0)
         aerov[i] = SVector{3, inittype}(0.0, 0.0, 0.0)
     end
 
-    
-    mesh = (; delta, def_theta, aerov, xcc, xds_idxs, y_ds)
+    mesh = AeroMesh(delta, def_theta, aerov, xcc, xds_idxs, y_ds, p_ds)
 
     return aerostates, mesh
 end
 
 """
-    take_aero_step!()
+    take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, azimuth, t, dt, pitch, mesh, rotor, blade, env; solver=RK4())
 
-Take an in-place step of the aerodynamic models. 
+Advance the aerodynamic state (BEM + DS) by one time step `dt`. Writes the
+new aero outputs into the supplied views — does not allocate.
 
 **Arguments**
-- phi::Vector{TF} - The inflow angle at every aerodynamic node. Calculating inplace. 
-- alpha::Vector{TF} - The angle of attack at every aerodynamic node. Calculating inplace.
-- W::Vector{TF} - The inflow velocity at every aerodynamic node. Calculating inplace. 
-- xds::Vector{TF} - The new dynamic stall states at every aerodynamic node. Calculating inplace. 
-- cx::Vector{TF} - The coefficient of force in the x direction at every aerodynamic node. Calculating inplace. 
-- cy
-- cm
-- fx
-- fy
-- mx
-- xds_old::Vector{TF} - The old dynamic stall states (referenced to calculate new states). 
+- `phi, alpha, W::AbstractVector`: BEM outputs at every node (written).
+- `xds::AbstractVector`: New DS states (written).
+- `cx, cy, cm`: Force/moment coefficients (written).
+- `fx, fy, mx`: Dimensional sectional loads (written).
+- `xds_old::AbstractVector`: DS states at the previous step.
+- `azimuth, t, dt, pitch::Real`
+- `mesh::AbstractSimMesh`, `rotor::Rotor`, `blade::Blade`, `env::Environment`
 
+**Keyword Arguments**
+- `solver::Solver = RK4()`: DS state integrator.
 """
 function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, azimuth, t, dt, pitch, mesh, rotor::Rotor, blade::Blade, env::Environment; solver::Solver=RK4())
     #TODO: I don't think that I need pfunc, nor prepp, nor p here. 
@@ -191,18 +177,21 @@ end
 
 
 """
-    simulate!(rvec, chordvec, twistvec, rhub, rtip, hubht, B, pitch, precone, tilt, yaw, blade::Blade, env::Environment, tvec; turbine::Bool=true, dsmodel::DS.DSModel=DS.riso(blade.airfoils), dsmodelinit::ModelInit=Hansen(), solver::Solver=RK4(), verbose::Bool=false, speakiter=100, azimuth0=0.0)
+    simulate!(aerostates, mesh, rotor, blade, env, tvec; pitch=0.0, solver=RK4(), kwargs...)
 
-Simulate the rotor's response for a given rotor and environmental condition. 
+Pre-allocated aerodynamics-only transient simulation. Mutates `aerostates`
+and the mutable fields of `mesh` in place.
 
-### Inputs
-- rvec::Array{TF, 1}
-- chordvec::Array{TF, 1}
+**Arguments**
+- `aerostates::AeroStates`, `mesh::AeroMesh`: From [`initialize_aero`](@ref).
+- `rotor::Rotor`, `blade::Blade`, `env::Environment`
+- `tvec::AbstractVector`: Time vector.
 
-### Outputs
-
-
-### Notes
+**Keyword Arguments**
+- `pitch::Real = 0.0`: Blade pitch (rad).
+- `solver::Solver = RK4()`: DS state integrator.
+- `azimuth0::Real = 0.0`: Initial azimuth.
+- `verbose::Bool = false`, `speakiter::Int = 100`: Progress printing.
 """
 function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environment, tvec;
      pitch=0.0, solver::Solver=RK4(), verbose::Bool=false, speakiter=100,
@@ -243,7 +232,7 @@ function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environmen
 
     @unpack azimuth, phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx, xds = aerostates
 
-    @unpack y_ds, xds_idxs = mesh
+    @unpack y_ds, p_ds, xds_idxs = mesh
 
 
 
@@ -281,7 +270,7 @@ function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environmen
     Cx0 = view(Cx, 1, :)
     Cy0 = view(Cy, 1, :)
     Cm0 = view(Cm, 1, :)
-    extract_ds_loads!(airfoils, xds0, xds_idxs, phi0, y_ds, Cx0, Cy0, Cm0)
+    extract_ds_loads!(airfoils, xds0, xds_idxs, phi0, y_ds, p_ds, Cx0, Cy0, Cm0)
 
     Fx0 = view(Fx, 1, :)
     Fy0 = view(Fy, 1, :)
@@ -336,8 +325,6 @@ function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environmen
     end
 end
 
-
-export rotorloads
 
 function rotorloads(loads, rhub, rtip, rvec, B)
 

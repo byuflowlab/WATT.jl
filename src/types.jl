@@ -1,8 +1,5 @@
 
 
-export Rotor, Blade
-
-
 
 """
     Rotor(B, hubht, tilt, yaw, turbine, mach, re, rotation, tip)
@@ -158,41 +155,103 @@ end
 
 
 
-# """
-#     Mesh(interpolationpoints, delta, def_theta, aerov, xcc, xds_idxs, p_ds, 
-#             system, prescribed_conditions, distributed_loads, paug, constants)
+"""
+    AeroStates{TF}
 
-# **Fields**
-# - interpolationpoints::Vector{InterpolationPoint}
-# - delta::Vector{StaticArray(Float64, Float64, Float64)} - The linear structural deflection interpolated to the aerodynamic nodes.
-# - def_theta::Vector{StaticArray(Float64, Float64, Float64)} - The angular structural deflection interpolated to the aerodynamic nodes.
-# - aerov::Vector{StaticArray(Float64, Float64, Float64)} - The structural linear velocities interpolated to the aerodynamic nodes. 
-# - xxc::Vector{Float64} - 
-# - xds_idxs
-# - p_ds
-# - system
-# - distributed_loads
-# - paug
-# - constants::NamedTuple 
-# """
-# struct Mesh{TIP, TSA, TAF, TAF2, TAI, TT, TS}
-#     interpolationpoints::TIP
-#     delta::TSA #The structural deflection at the aerodynamics nodes. 
-#     def_theta::TSA
-#     aerov::TSA
-#     xcc::TAF
-#     xds_idxs::TAI
-#     p_ds::TAF
-#     #GXBeam memory
-#     assembly::TASS
-#     system::TS
-#     pcond::TPC #prescribed_condtions
-#     dload::TDL #distributed_loads
-#     lv::TLV #linear_velocity
-#     av::TAV #angular_velocity
-#     xpfunc::TXP
-#     pfunc::TP
-#     td::Bool
-#     sd::Bool
-# end
+Aerodynamic state history of a transient simulation. All fields are mutated in
+place by the time-stepping loops; the struct itself is immutable because no
+field reference is reassigned.
 
+**Fields**
+- `azimuth::Vector{TF}`: Azimuthal position at each of the `nt` time steps.
+- `phi::Matrix{TF}`: Inflow angle `nt × na` (rad).
+- `alpha::Matrix{TF}`: Angle of attack `nt × na` (rad).
+- `W::Matrix{TF}`: Inflow velocity magnitude `nt × na` (m/s).
+- `Cx::Matrix{TF}`, `Cy::Matrix{TF}`, `Cm::Matrix{TF}`: Force/moment coefficients `nt × na`.
+- `Fx::Matrix{TF}`, `Fy::Matrix{TF}`, `Mx::Matrix{TF}`: Dimensional sectional loads `nt × na`.
+- `xds::Matrix{TF}`: Dynamic stall state history `nt × ns`.
+"""
+struct AeroStates{TF}
+    azimuth::Vector{TF}
+    phi::Matrix{TF}
+    alpha::Matrix{TF}
+    W::Matrix{TF}
+    Cx::Matrix{TF}
+    Cy::Matrix{TF}
+    Cm::Matrix{TF}
+    Fx::Matrix{TF}
+    Fy::Matrix{TF}
+    Mx::Matrix{TF}
+    xds::Matrix{TF}
+end
+
+Base.eltype(::AeroStates{TF}) where {TF} = TF
+Base.eltype(::Type{AeroStates{TF}}) where {TF} = TF
+
+"""
+    AeroStates{TF}(undef, nt, na, ns) -> aerostates
+
+Allocate an uninitialized `AeroStates{TF}` with the standard shapes for a
+transient simulation: `nt` time steps, `na` aerodynamic nodes, `ns` total DS
+states across the blade.
+"""
+function AeroStates{TF}(::UndefInitializer, nt::Integer, na::Integer, ns::Integer) where {TF}
+    AeroStates{TF}(
+        Vector{TF}(undef, nt),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, na),
+        Matrix{TF}(undef, nt, ns),
+    )
+end
+
+"""
+    StaticAeroStates{TF}
+
+Aerodynamic state at a single steady-state instant — no time dimension, no DS
+states. Used by the static fixed-point solver.
+
+**Fields**
+- `phi::Vector{TF}`, `alpha::Vector{TF}`, `W::Vector{TF}`: BEM solution per node.
+- `Cx::Vector{TF}`, `Cy::Vector{TF}`, `Cm::Vector{TF}`: Force/moment coefficients per node.
+- `Fx::Vector{TF}`, `Fy::Vector{TF}`, `Mx::Vector{TF}`: Dimensional sectional loads per node.
+"""
+struct StaticAeroStates{TF}
+    phi::Vector{TF}
+    alpha::Vector{TF}
+    W::Vector{TF}
+    Cx::Vector{TF}
+    Cy::Vector{TF}
+    Cm::Vector{TF}
+    Fx::Vector{TF}
+    Fy::Vector{TF}
+    Mx::Vector{TF}
+end
+
+Base.eltype(::StaticAeroStates{TF}) where {TF} = TF
+Base.eltype(::Type{StaticAeroStates{TF}}) where {TF} = TF
+
+"""
+    StaticAeroStates{TF}(undef, na) -> aerostates
+
+Allocate an uninitialized `StaticAeroStates{TF}` for `na` aerodynamic nodes.
+"""
+function StaticAeroStates{TF}(::UndefInitializer, na::Integer) where {TF}
+    StaticAeroStates{TF}(
+        Vector{TF}(undef, na),
+        Vector{TF}(undef, na),
+        Vector{TF}(undef, na),
+        Vector{TF}(undef, na),
+        Vector{TF}(undef, na),
+        Vector{TF}(undef, na),
+        Vector{TF}(undef, na),
+        Vector{TF}(undef, na),
+        Vector{TF}(undef, na),
+    )
+end

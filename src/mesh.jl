@@ -73,6 +73,112 @@ Note: Maybe down the line I can switch InterpolationPoint to a type, and make di
 
 =#
 
+
+"""
+    AbstractSimMesh
+
+Supertype for the simulation mesh structs that hold the per-step scratch
+buffers and coupling state between aero, structures, and dynamic stall.
+Concrete subtypes: [`SimMesh`](@ref) (full coupled transient), [`AeroMesh`](@ref)
+(aero-only transient), [`StaticMesh`](@ref) (steady-state fixed point).
+"""
+abstract type AbstractSimMesh end
+
+"""
+    AeroMesh{TF, TXDS, TYDS, TPDS}
+
+Scratch state for an aero-only transient simulation. No structural coupling
+fields — `delta`/`def_theta`/`aerov` exist solely so `take_aero_step!` can
+reuse the same code path as the coupled solver; they stay zero.
+
+**Fields**
+- `delta::Vector{SVector{3,TF}}`: Always zero in aero-only mode.
+- `def_theta::Vector{SVector{3,TF}}`: Always zero in aero-only mode.
+- `aerov::Vector{SVector{3,TF}}`: Always zero in aero-only mode.
+- `xcc::Vector{TF}`: CCBlade scratch vector.
+- `xds_idxs::TXDS`: DS state-vector slice indices, per airfoil.
+- `y_ds::TYDS`: DS environment inputs (W, Udot, alpha, alphadot per node).
+- `p_ds::TPDS`: DS parameters (chord, x_cp per node).
+"""
+struct AeroMesh{TF, TXDS, TYDS, TPDS} <: AbstractSimMesh
+    delta::Vector{SVector{3, TF}}
+    def_theta::Vector{SVector{3, TF}}
+    aerov::Vector{SVector{3, TF}}
+    xcc::Vector{TF}
+    xds_idxs::TXDS
+    y_ds::TYDS
+    p_ds::TPDS
+end
+
+"""
+    SimMesh{TF, TIP, TXDS, TYDS, TPDS, TA, TS, TPC, TDL, TPM, TXP, TPF}
+
+Scratch state for the full coupled aero-structural transient simulation.
+Carries the aero-side fields of [`AeroMesh`](@ref) plus the GXBeam coupling
+state.
+
+**Fields**
+- `interpolationpoints`, `delta`, `def_theta`, `aerov`, `xcc`, `xds_idxs`,
+  `y_ds`, `p_ds`: As in [`AeroMesh`](@ref).
+- `assembly::TA`: GXBeam assembly.
+- `system::TS`: GXBeam `DynamicSystem` reused across time steps.
+- `prescribed_conditions::TPC`: GXBeam boundary conditions.
+- `distributed_loads::TDL`: Updated each step from BEM/DS loads.
+- `point_masses::TPM`: GXBeam point masses (empty in standard use).
+- `linear_velocity`, `angular_velocity::SVector{3,Float64}`: Base body motion.
+- `xpfunc::TXP`, `pfunc::TPF`: GXBeam parameter callbacks.
+- `two_dimensional::Bool`, `structural_damping::Bool`, `linear::Bool`: GXBeam flags.
+"""
+struct SimMesh{TF, TIP, TXDS, TYDS, TPDS, TA, TS, TPC, TDL, TPM, TXP, TPF} <: AbstractSimMesh
+    interpolationpoints::TIP
+    delta::Vector{SVector{3, TF}}
+    def_theta::Vector{SVector{3, TF}}
+    aerov::Vector{SVector{3, TF}}
+    xcc::Vector{TF}
+    xds_idxs::TXDS
+    y_ds::TYDS
+    p_ds::TPDS
+    assembly::TA
+    system::TS
+    prescribed_conditions::TPC
+    distributed_loads::TDL
+    point_masses::TPM
+    linear_velocity::SVector{3, Float64}
+    angular_velocity::SVector{3, Float64}
+    xpfunc::TXP
+    pfunc::TPF
+    two_dimensional::Bool
+    structural_damping::Bool
+    linear::Bool
+end
+
+"""
+    StaticMesh{TF, TIP, TA, TS, TPC, TDL, TPM, TXP, TPF}
+
+Scratch state for the steady-state fixed-point aero-structural solver. Like
+[`SimMesh`](@ref) but with no dynamic-stall fields (the static solver has no
+DS history).
+"""
+struct StaticMesh{TF, TIP, TA, TS, TPC, TDL, TPM, TXP, TPF} <: AbstractSimMesh
+    interpolationpoints::TIP
+    delta::Vector{SVector{3, TF}}
+    def_theta::Vector{SVector{3, TF}}
+    aerov::Vector{SVector{3, TF}}
+    xcc::Vector{TF}
+    assembly::TA
+    system::TS
+    prescribed_conditions::TPC
+    distributed_loads::TDL
+    point_masses::TPM
+    linear_velocity::SVector{3, Float64}
+    angular_velocity::SVector{3, Float64}
+    xpfunc::TXP
+    pfunc::TPF
+    two_dimensional::Bool
+    structural_damping::Bool
+    linear::Bool
+end
+
 """
     create_interpolationpoints(assembly, rvec)
 

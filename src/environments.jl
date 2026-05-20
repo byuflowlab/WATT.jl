@@ -1,127 +1,195 @@
-export environment
-
 abstract type Environment end
 
-struct SimpleEnvironment{TF, F<:Function, G<:Function, H<:Function, J<:Function, K<:Function, L<:Function, M<:Function, N<:Function} <: Environment
-    rho::TF #Fluid Density (kg/m^3)
-    mu::TF #Fluid dynamic viscosity
-    a::TF #Fluid Speed of Sound (m/s)
-    shearexp::TF #Shear exponent
-    U::F #Freestream Velocity (m/s) (Ux, Uy, Uz) #TODO: Maybe switch to F1, F2, .... That should be a little cleaner. 
-    Omega::G #Freestream Swirling Velocity (rads/s) (Omega_x, Omega_y, Omega_z)
-    Udot::H #Derivative of the freestream velocity w.r.t. time
-    Omegadot::J # Derivative of the rotation rate of the turbine w.r.t. time
-    Vinf::K #Magnitude of the freestream velocity (m/s)
-    RS::L #Rotation rate of Turbine (rads/s)
+
+"""
+    Constant{T}
+
+Callable struct wrapping a scalar or `SVector` value. Calling it with any
+argument returns the stored value.
+
+**Fields**
+- `val::T`: The value to return.
+"""
+struct Constant{T}
+    val::T
+end
+(c::Constant)(_) = c.val
+
+
+"""
+    TurbulentInflow{A}
+
+Callable struct that evaluates three interpolants (one per velocity component)
+at a given time and returns the result as an `SVector{3}`. Replaces the
+anonymous closures that previously held an Akima fit per component.
+
+**Fields**
+- `Ufit::A`, `Vfit::A`, `Wfit::A`: Per-component interpolants (typically `FLOWMath.Akima`).
+"""
+struct TurbulentInflow{A}
+    Ufit::A
+    Vfit::A
+    Wfit::A
+end
+(t::TurbulentInflow)(s) = SVector(t.Ufit(s), t.Vfit(s), t.Wfit(s))
+
+
+"""
+    ScalarFit{A}
+
+Callable struct wrapping a 1D interpolant.
+
+**Fields**
+- `fit::A`: The interpolant (typically `FLOWMath.Akima`).
+"""
+struct ScalarFit{A}
+    fit::A
+end
+(f::ScalarFit)(t) = f.fit(t)
+
+
+"""
+    SimpleEnvironment{TF, F, G, H, J, K, L, M, N}
+
+Inflow conditions and fluid properties at the rotor plane. Each of the eight
+velocity/rotation fields is a callable struct of `t` — calling
+`env.Vinf(t)` returns the freestream magnitude at time `t`, etc. Using
+named callable structs (rather than anonymous closures) keeps the
+type-parameter count stable across distinct environments and lets JLD2
+roundtrip an env across sessions.
+
+**Fields**
+- `rho::TF`: Fluid density (kg/m³).
+- `mu::TF`: Fluid dynamic viscosity.
+- `a::TF`: Speed of sound (m/s).
+- `shearexp::TF`: Power-law shear exponent.
+- `U::F`: `t -> SVector{3}` freestream velocity vector.
+- `Omega::G`: `t -> SVector{3}` freestream rotation rate.
+- `Udot::H`, `Omegadot::J`: Their time derivatives.
+- `Vinf::K`: `t -> TF` magnitude of freestream velocity.
+- `RS::L`: `t -> TF` rotor angular speed (rad/s).
+- `Vinfdot::M`, `RSdot::N`: Time derivatives.
+"""
+struct SimpleEnvironment{TF, F, G, H, J, K, L, M, N} <: Environment
+    rho::TF
+    mu::TF
+    a::TF
+    shearexp::TF
+    U::F
+    Omega::G
+    Udot::H
+    Omegadot::J
+    Vinf::K
+    RS::L
     Vinfdot::M
     RSdot::N
 end
 
 """
-    environment(rho, mu, a, U, Omega, shearexp)
+    environment(rho, mu, a, U, Omega, shearexp) -> SimpleEnvironment
 
-Steady inflow conditions, velocities prescribed at the rotor plane 
-(unvarying in horizontal space), with a shear profile.
-Fluid properties are assumed constant throughout the field (incompressible). 
+Steady inflow conditions with a power-law shear profile. Fluid properties are
+treated as constant in space (incompressible).
 
-# Arguments
-- `rho::Number`: The flow field density
-- `mu::Number`: The flow field kinematic viscosity
-- `a::Number`: The flow field speed of sound 
-- `U::Number`: The freestream velocity
-- `Omega::Number`: The rotation rate of the rotor
-- `shearexp::Number`: The shear exponent of the wind shear profile
-
-# Output
-- SimpleEnvironment::Environment 
+**Arguments**
+- `rho::Number`: Density.
+- `mu::Number`: Dynamic viscosity.
+- `a::Number`: Speed of sound.
+- `U::Number`: Freestream velocity magnitude.
+- `Omega::Number`: Rotor angular speed (rad/s).
+- `shearexp::Number`: Power-law shear exponent.
 """
-function environment(rho::Number, mu::Number, a::Number, U::Number, Omega::Number, shearexp::Number)  #TODO: Originally using types for multiple dispatch. Need to change back. 
-    ufun(t) = SVector(U, 0.0, 0.0)
-    omegafun(t) = SVector(0.0, 0.0, 0.0)
-    udotfun(t) = SVector(0.0, 0.0, 0.0)
-    omegadotfun(t) = SVector(0.0, 0.0, 0.0)
-    Vinf(t) = U
-    RS(t) = Omega
-    Vinfdot(t) = 0.0
-    RSdot(t) = 0.0
+function environment(rho::Number, mu::Number, a::Number, U::Number, Omega::Number, shearexp::Number)
+    ufun       = Constant(SVector(U, 0.0, 0.0))
+    omegafun   = Constant(SVector(0.0, 0.0, 0.0))
+    udotfun    = Constant(SVector(0.0, 0.0, 0.0))
+    omegadotfun = Constant(SVector(0.0, 0.0, 0.0))
+    Vinf       = Constant(U)
+    RS         = Constant(Omega)
+    Vinfdot    = Constant(0.0)
+    RSdot      = Constant(0.0)
     return SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
 end
 
-function environment(filename::String, rho::Number, mu::Number, a::Number, Omega::Number, shearexp::Number; fit=Akima)  #TODO: Originally using types for multiple dispatch. Need to change back. 
+"""
+    environment(filename, rho, mu, a, Omega, shearexp; fit=Akima) -> SimpleEnvironment
 
+Construct a `SimpleEnvironment` from a turbulent inflow file. The full time
+range of the file is used.
+"""
+function environment(filename::String, rho::Number, mu::Number, a::Number, Omega::Number, shearexp::Number; fit=Akima)
     turb = readdlm(filename, skipstart=4)
-    n, m = size(turb)
-    tvec = range(turb[1, 1], turb[n, 1], length=n) #Because the file doesn't get the time vector correctly. 
+    n, _ = size(turb)
+    tvec = range(turb[1, 1], turb[n, 1], length=n)
     Ufit = fit(tvec, turb[:, 2])
     Vfit = fit(tvec, turb[:, 5])
     Wfit = fit(tvec, turb[:, 6])
 
-    ufun(t) = SVector(Ufit(t), Vfit(t), Wfit(t))
-    omegafun(t) = SVector(0.0, 0.0, 0.0)
-    udotfun(t) = SVector(0.0, 0.0, 0.0)
-    omegadotfun(t) = SVector(0.0, 0.0, 0.0)
-    Vinf(t) = Ufit(t)
-    RS(t) = Omega
-    Vinfdot(t) = 0.0
-    RSdot(t) = 0.0
+    ufun       = TurbulentInflow(Ufit, Vfit, Wfit)
+    omegafun   = Constant(SVector(0.0, 0.0, 0.0))
+    udotfun    = Constant(SVector(0.0, 0.0, 0.0))
+    omegadotfun = Constant(SVector(0.0, 0.0, 0.0))
+    Vinf       = ScalarFit(Ufit)
+    RS         = Constant(Omega)
+    Vinfdot    = Constant(0.0)
+    RSdot      = Constant(0.0)
     return SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
 end
 
-function environment(filename::String, time::Number, rho::Number, mu::Number, a::Number, Omega::Number, shearexp::Number; fit=Akima)  #TODO: Originally using types for multiple dispatch. Need to change back. 
+"""
+    environment(filename, time, rho, mu, a, Omega, shearexp; fit=Akima) -> SimpleEnvironment
 
+Construct a `SimpleEnvironment` from a turbulent inflow file. If the file is
+shorter than `time`, it is tiled forward-then-reversed to fill `time` without
+introducing a discontinuity at the seam.
+"""
+function environment(filename::String, time::Number, rho::Number, mu::Number, a::Number, Omega::Number, shearexp::Number; fit=Akima)
     turb = readdlm(filename, skipstart=4)
-    n, m = size(turb)
+    n, _ = size(turb)
     if turb[n, 1] >= time
-        nn = findfirst(x -> x>= time, turb[:, 1])
-        tvec = range(turb[1, 1], turb[nn, 1], length=nn) #Because the file doesn't get the time vector correctly. 
+        nn = findfirst(x -> x >= time, turb[:, 1])
+        tvec = range(turb[1, 1], turb[nn, 1], length=nn)
         Ufit = fit(tvec, turb[1:nn, 2])
         Vfit = fit(tvec, turb[1:nn, 5])
         Wfit = fit(tvec, turb[1:nn, 6])
     else
-        # println("Long case")
         tmax = turb[n, 1]
         nrepeat = ceil(Int, time/tmax)
-
         nn = nrepeat*n
-        tvec = range(turb[1, 1], turb[n, 1]*nrepeat, length=nn) #Because the file doesn't get the time vector correctly. 
-        # Ufit = fit(tvec, repeat(turb[:, 2], nrepeat))
-        # Vfit = fit(tvec, repeat(turb[:, 5], nrepeat))
-        # Wfit = fit(tvec, repeat(turb[:, 6], nrepeat))
+        tvec = range(turb[1, 1], turb[n, 1]*nrepeat, length=nn)
 
         Uvec = vcat([isodd(i) ? turb[:, 2] : reverse(turb[:, 2]) for i in 1:nrepeat]...)
         Vvec = vcat([isodd(i) ? turb[:, 5] : reverse(turb[:, 5]) for i in 1:nrepeat]...)
         Wvec = vcat([isodd(i) ? turb[:, 6] : reverse(turb[:, 6]) for i in 1:nrepeat]...)
-        # @show Uvec[n:n+10]
         Ufit = fit(tvec, Uvec)
         Vfit = fit(tvec, Vvec)
         Wfit = fit(tvec, Wvec)
     end
 
-    
-
-    ufun(t) = SVector(Ufit(t), Vfit(t), Wfit(t))
-    omegafun(t) = SVector(0.0, 0.0, 0.0)
-    udotfun(t) = SVector(0.0, 0.0, 0.0)
-    omegadotfun(t) = SVector(0.0, 0.0, 0.0)
-    Vinf(t) = Ufit(t)
-    RS(t) = Omega
-    Vinfdot(t) = 0.0
-    RSdot(t) = 0.0
+    ufun       = TurbulentInflow(Ufit, Vfit, Wfit)
+    omegafun   = Constant(SVector(0.0, 0.0, 0.0))
+    udotfun    = Constant(SVector(0.0, 0.0, 0.0))
+    omegadotfun = Constant(SVector(0.0, 0.0, 0.0))
+    Vinf       = ScalarFit(Ufit)
+    RS         = Constant(Omega)
+    Vinfdot    = Constant(0.0)
+    RSdot      = Constant(0.0)
     return SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
 end
 
 
 
 """
-    evaluate_flowfield_velocity(env, hubht, x, y, z, t)
+    evaluate_flowfield_velocity(env, hubht, x, y, z, t) -> SVector{3}
 
-A function to retrieve the free-stream velocity vector of a simple environment. Note that this function is part of a family that operates on Environment types. 
+Free-stream velocity vector at position `(x, y, z)` and time `t` for a
+`SimpleEnvironment` with a power-law shear profile.
 
-*Arguments*
-- `env::SimpleEnvironment`: 
-- `hubht::Number`: The hub height of the wind turbine. 
-- `x`, `y`, or `z::Number`: The position coordinates in the global reference frame of the point of interest.
-- `t::Number`: The time at which to evaluate the 
+**Arguments**
+- `env::SimpleEnvironment`: Environment object.
+- `hubht::Number`: Hub height.
+- `x`, `y`, `z::Number`: Global-frame coordinates of the query point.
+- `t::Number`: Time.
 """
 function evaluate_flowfield_velocity(env::SimpleEnvironment, hubht, x, y, z, t)
     factor = (z/hubht)^env.shearexp
@@ -132,21 +200,19 @@ end
 
 
 
-
-
-
 """
-    get_aero_velocities(rotor, blade, env, t, idx, azimuth)
+    get_aero_velocities(rotor, blade, env, t, idx, azimuth) -> (Vx, Vy)
 
-Calculate the velocities in the airfoil reference frame based on the flow-field, and blade geometry at the given time step. Note that in this function the blade is assumed to be infinitely stiff, so there is no structural deflection or motion. 
+Velocities in the airfoil reference frame given the flow field and rigid blade
+geometry at a single time step. No structural deflection.
 
-*Arguments*
-- `rotor::Rotor`: The rotor being analyzed. 
-- `blade::Blade`:
-- `env::Environment`:
-- `t::Number`: The time of that you want evaluated. 
-- `idx::Int`: The index of the blade node that you want the velocity of. 
-- `azimuth::Number`: The azimuthal position of the blade (radians).
+**Arguments**
+- `rotor::Rotor`
+- `blade::Blade`
+- `env::Environment`
+- `t::Number`: Time of evaluation.
+- `idx::Int`: Blade-node index.
+- `azimuth::Number`: Azimuth (rad).
 """
 function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, idx, azimuth)
 
@@ -159,22 +225,22 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
     rbc_x = blade.rx[idx] #Leadlag
     rbc_y = blade.ry[idx] #Flapwise
     rbc_z = blade.rz[idx] #Radial
-    
-    sweep = -blade.thetax[idx]  #The sweep is negative in the given reference frame 
+
+    sweep = -blade.thetax[idx]  #The sweep is negative in the given reference frame
     curve = blade.thetay[idx]
-    precone = blade.precone 
+    precone = blade.precone
 
 
-    ### Get the velocities from the freestream. 
-    #Rotate the blade positions from the blade center reference frame to the global. 
+    ### Get the velocities from the freestream.
+    #Rotate the blade positions from the blade center reference frame to the global.
     rgx, rgy, rgz = transform_BC_G(rbc_x, rbc_y, rbc_z, azimuth, precone, tilt, yaw)
 
 
     # Retrieve the flow field velocities
-    Ug = evaluate_flowfield_velocity(env, hubht, rgx, rgy, rgz + hubht, t) 
-    # I added hubht to rgz to translate the vector to the top of the tower. 
+    Ug = evaluate_flowfield_velocity(env, hubht, rgx, rgy, rgz + hubht, t)
+    # I added hubht to rgz to translate the vector to the top of the tower.
 
-    #Rotate the velocity into the local frame 
+    #Rotate the velocity into the local frame
     ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone, sweep, tilt, yaw)
 
 
@@ -183,40 +249,40 @@ function get_aero_velocities(rotor::Rotor, blade::Blade, env::Environment, t, id
     rhr_x, rhr_y, rhr_z = transform_BC_HR(rbc_x, rbc_y, rbc_z, precone)
     Omega_hr = (env.RS(t), 0, 0) #Angular velocity in hub-rotating reference frame
 
-    #Convert angular velocity to linear velocity 
+    #Convert angular velocity to linear velocity
     vx_rot, vy_rot, vz_rot = cross(Omega_hr, (rhr_x, rhr_y, rhr_z))
 
 
     #Convert from the hub-rotating frame to the local airfoil frame
     ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone)
 
-    
 
-    ### Sum the velocities in the airfoil reference frame. 
+
+    ### Sum the velocities in the airfoil reference frame.
     Vx = ulx_wind - ulx_rot
     Vy = uly_wind - uly_rot
-    # Vz = ulz_wind - ulz_rot
     #Note: The rotational velocities are subtracted rather than added because that's
-    #converting from structural velocity to the aerodynamic velocity. 
+    #converting from structural velocity to the aerodynamic velocity.
 
     return Vx, Vy
 end
 
 """
-    get_aerostructural_velocities(rotor, blade, env, t, idx, azimuth, dx, dy, dz, vsx, vsy, vsz) -> Vx, Vy
+    get_aerostructural_velocities(rotor, blade, env, t, idx, azimuth, delta, delta_theta, Vs) -> (Vx, Vy)
 
-Calculate the velocities in the airfoil reference frame based on the flow-field, blade geometry, and structural deflections and motions at the given time step. 
+Velocities in the airfoil reference frame given the flow field, rigid blade
+geometry, **and** structural deflection/motion at a single time step.
 
-*Arguments*
-- `rotor::Rotor`: The rotor being analyzed. 
-- `blade::Blade`:
-- `env::Environment`:
-- `t::Number`: The time of that you want evaluated. 
-- `told::Number`: The time of the previous time step (to remove the rotational velocity from )
-- `idx::Int`: The index of the blade node that you want the velocity of. 
-- `azimuth::Number`: The azimuthal position of the blade (radians).
-- `delta::StaticArray{Number, 3}`: The structural defelctions of the node. 
-- `Vs::StaticArray{Number, 3}`: The structural velocities of the node. 
+**Arguments**
+- `rotor::Rotor`
+- `blade::Blade`
+- `env::Environment`
+- `t::Number`: Time of evaluation.
+- `idx::Int`: Blade-node index.
+- `azimuth::Number`: Azimuth (rad).
+- `delta::SVector{3}`: Linear structural deflection.
+- `delta_theta::SVector{3}`: Angular structural deflection.
+- `Vs::SVector{3}`: Structural velocity at this node.
 """
 function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environment, t, idx, azimuth, delta, delta_theta, Vs)
 
@@ -225,7 +291,7 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     tilt = rotor.tilt
     hubht = rotor.hubht
 
-    #Transform the structural deflections into the aerodynamic reference frame. 
+    #Transform the structural deflections into the aerodynamic reference frame.
     dx = -delta[3]
     dy = delta[2]
     dz = delta[1]
@@ -234,58 +300,35 @@ function get_aerostructural_velocities(rotor::Rotor, blade::Blade, env::Environm
     rbc_x = blade.rx[idx] + dx #Leadlag
     rbc_y = blade.ry[idx] + dy #Flapwise
     rbc_z = blade.rz[idx] + dz #Radial
-    
-    sweep = -(blade.thetax[idx] - delta_theta[3])  #The sweep is negative in the given reference frame 
+
+    sweep = -(blade.thetax[idx] - delta_theta[3])
     curve = blade.thetay[idx] + delta_theta[2]
-    precone = blade.precone 
+    precone = blade.precone
 
 
-    ### Get the velocities from the freestream. 
-    #Rotate the blade positions from the hub reference frame to the global. 
+    ### Get the velocities from the freestream.
     rgx, rgy, rgz = transform_BC_G(rbc_x, rbc_y, rbc_z, azimuth, precone, tilt, yaw)
-
-    # Retrieve the flow field velocities
-    Ug = evaluate_flowfield_velocity(env, hubht, rgx, rgy, rgz + hubht, t) 
-    # I added hubht to rgz to translate the vector to the top of the tower.
-
-    #Rotate the velocity into the local frame 
-    # ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone, sweep, tilt, yaw)
-    ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone-delta_theta[2], sweep, tilt, yaw) #Note: Didn't have a large effect on the solution. 
-
-    
+    Ug = evaluate_flowfield_velocity(env, hubht, rgx, rgy, rgz + hubht, t)
+    ulx_wind, uly_wind, _ = transform_G_L(Ug..., azimuth, curve, precone-delta_theta[2], sweep, tilt, yaw)
 
 
     ### Get the rotational velocities
-    rhr_x, rhr_y, rhr_z = transform_BC_HR(rbc_x, rbc_y, rbc_z, precone) #TODO: I'm not sure that I need to rotate by the precone... because the deflections should move the aero nodes to there given position in the hub-rotating reference frame. 
-    Omega_hr = (env.RS(t), 0, 0) #Angular velocity in hub-rotating reference frame
-
-    #Convert angular velocity to linear velocity 
+    rhr_x, rhr_y, rhr_z = transform_BC_HR(rbc_x, rbc_y, rbc_z, precone)
+    Omega_hr = (env.RS(t), 0, 0)
     vx_rot, vy_rot, vz_rot = cross(Omega_hr, (rhr_x, rhr_y, rhr_z))
-
-
-    #Convert from the hub-rotating frame to the local airfoil frame
-    # ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone)
-    ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone-delta_theta[2]) #Note: Didn't have a large effect on the solution. 
-
+    ulx_rot, uly_rot, _ = transform_HR_L(vx_rot, vy_rot, vz_rot, curve, sweep, precone-delta_theta[2])
 
 
     ### Transform the structural velocities from the hub-rotating into the local frame
-    # usx, usy, _ = transform_HR_L(Vs..., curve, sweep, precone)
-    usx, usy, _ = transform_HR_L(Vs..., curve, sweep, precone-delta_theta[2]) #Note: Didn't have a large effect on the solution. 
+    usx, usy, _ = transform_HR_L(Vs..., curve, sweep, precone-delta_theta[2])
 
 
-    ### Sum the velocities in the airfoil reference frame. 
+    ### Sum the velocities in the airfoil reference frame.
     Vx = ulx_wind - ulx_rot + usx
     Vy = uly_wind - uly_rot + usy
-    # Vz = ulz_wind - ulz_rot + usz
-    #Note: The rotational velocities are subtracted rather than added because that's
-    #converting from structural velocity to the aerodynamic velocity. 
 
-    # return Vx, Vy
-
-    ### Trying to apply change in twist
+    ### Apply change in twist
     st, ct = sincos(delta_theta[1])
-
     Vxnew = Vx*ct - Vy*st
     Vynew = -Vx*st + Vy*ct
 

@@ -7,11 +7,21 @@ A fixed point solver that iterates back and forth between CCBlade and GXBeam unt
 
 
 """
-    initialize(blade, assembly; verbose=false, p=nothing, pfunc = (p,t) -> (;), xpfunc=nothing, structural_damping=true, linear=false)
+    initialize_static(blade, assembly; structural_damping=true, linear=false, kwargs...) -> aerostates, gxstates, mesh
 
-Initialize a steady state solution. 
+Pre-allocate buffers for the steady-state fixed-point aero-structural solver
+[`fixedpoint!`](@ref). No time dimension and no dynamic-stall state.
+
+**Arguments**
+- `blade::Blade`
+- `assembly::GXBeam.Assembly`
+
+**Returns**
+- `aerostates::StaticAeroStates`: Per-node BEM/load outputs at the equilibrium.
+- `gxstates::Vector`: GXBeam state buffer of length `2*length(system.x)`.
+- `mesh::StaticMesh`: Coupling buffers.
 """
-function initialize(blade::Blade, assembly::GXBeam.Assembly; verbose::Bool=false, p=nothing, pfunc = (p,t) -> (;), xpfunc=nothing, structural_damping::Bool=true, linear::Bool=false)
+function initialize_static(blade::Blade, assembly::GXBeam.Assembly; verbose::Bool=false, p=nothing, pfunc = (p,t) -> (;), xpfunc=nothing, structural_damping::Bool=true, linear::Bool=false)
 
     if verbose
         println("WATT.jl initializing solution...")
@@ -32,23 +42,10 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly; verbose::Bool=false
 
 
     ### ----- Prepare data storage for aerodynamic models ----- ###
-    phi = Array{inittype, 1}(undef,na)
-    alpha = Array{inittype, 1}(undef, na)
-    W = Array{inittype, 1}(undef, na)
+    aerostates = StaticAeroStates{inittype}(undef, na)
 
-    Cx = Array{inittype, 1}(undef, na)
-    Cy = Array{inittype, 1}(undef, na)
-    Cm = Array{inittype, 1}(undef, na)
-
-    Fx = Array{inittype, 1}(undef, na)
-    Fy = Array{inittype, 1}(undef, na)
-    Mx = Array{inittype, 1}(undef, na)
-
-    # A vector that CCBlade uses for solving. 
+    # A vector that CCBlade uses for solving.
     xcc = Vector{inittype}(undef, 11)
-
-    # Store everything in the aerostates 
-    aerostates = (;phi, alpha, W, Cx, Cy, Cm, Fx, Fy, Mx)
 
     
 
@@ -95,7 +92,7 @@ function initialize(blade::Blade, assembly::GXBeam.Assembly; verbose::Bool=false
     end
 
     
-    mesh = (; interpolationpoints, delta, def_theta, aerov, xcc,
+    mesh = StaticMesh(interpolationpoints, delta, def_theta, aerov, xcc,
                 assembly, system, prescribed_conditions, distributed_loads,
                 point_masses, linear_velocity, angular_velocity,
                 xpfunc, pfunc, two_dimensional, structural_damping, linear)
@@ -106,9 +103,28 @@ end
 
 
 """
-    fixedpoint!()
+    fixedpoint!(aerostates, gxstates, azimuth0, rotor, env, blade, mesh, pitch; iterations=1, kwargs...) -> aerostates, gxstates, mesh
 
-Calculate the initial condition of the rotor. 
+Solve the steady-state aero-structural fixed point by partitioned iteration
+between CCBlade and `GXBeam.steady_state_analysis!`. No dynamic-stall model.
+
+**Arguments**
+- `aerostates::StaticAeroStates`, `gxstates::Vector`, `mesh::StaticMesh`: From
+  [`initialize_static`](@ref).
+- `azimuth0::Real`: Fixed blade azimuth (rad).
+- `rotor::Rotor`, `env::Environment`, `blade::Blade`
+- `pitch::Real`: Blade pitch (rad).
+
+**Keyword Arguments**
+- `iterations::Int = 1`: Number of partitioned aero ↔ structural sweeps.
+- `atol::Real = 1e-3`: Reserved for a future convergence-tracking exit.
+- `g::Real = 9.81`: Gravity magnitude.
+- `solver::Solver = RK4()`, `prepp`, `p`, `pfunc`, `gxflag`, `verbose`
+
+**Notes**
+The first iteration matches a direct CCBlade call at the undeflected
+position; convergence is empirically near machine precision by ~10 iterations
+on NREL 5MW at rated conditions.
 """
 function fixedpoint!(aerostates, gxstates, azimuth0, rotor::Rotor, env::Environment, blade, mesh, pitch; iterations=1, atol=1e-3, g=9.81, gxflag=nothing, verbose::Bool=false, solver::Solver=RK4(), prepp=nothing, p=nothing, pfunc=nothing) #Todo: Maybe add in something to cut off the solution if it acheives a given tolerance...-> requires some extra memory? Unless maybe I can use the mesh or something? ... Naw, I think it'll require extra memory. 
     #TODO: Maybe include the coupled aerostructural solution as an option? 
