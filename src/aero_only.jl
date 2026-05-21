@@ -122,10 +122,7 @@ new aero outputs into the supplied views — does not allocate.
 - `solver::Solver = RK4()`: DS state integrator.
 """
 function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, azimuth, t, dt, pitch, mesh, rotor::Rotor, blade::Blade, env::Environment; solver::Solver=RK4())
-    #TODO: I don't think that I need pfunc, nor prepp, nor p here. 
-    #TODO: I'm thinking that I won't have any optional arguments here. It doesn't seem needed... Well... maybe it'd be handy when I'm using the function outside of the package for optimization. 
-
-    # println("Using this function")
+    #TODO: I'm thinking that I won't have any optional arguments here. It doesn't seem needed... Well... maybe it'd be handy when I'm using the function outside of the package for optimization.  -> And for if I use a different dynamic stall model. 
 
     na = length(blade.r)
     
@@ -134,24 +131,15 @@ function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, az
         error("Time step is negative")
     end
 
-    #update azimuthal position
-    # azimuth = env.RS(t)*dt + azimuth0 #Euler step for azimuthal position. #TODO: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
-
-    
 
     ### Update BEM inputs and solve
     for j = 1:na
         ### Update base inflow velocities
-        # @show mesh.aerov[j][1].value, mesh.aerov[j][2].value, mesh.aerov[j][2].value
-        # @show mesh.aerov[j]
         Vx, Vy = get_aerostructural_velocities(rotor, blade, env, t, j, azimuth, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
         #Todo: Angles aren't updated with angular deflection.... 
         
-        #TODO: Write a solver that is initialized with the previous inflow angle.
-        
-        # ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) 
-        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch - mesh.def_theta[j][1], mesh.xcc) 
-        # ccout = solve_BEM!(rotor, blade, env, phi_old[j], j, Vx, Vy, pitch, mesh.xcc) #Todo: Need to create some sort of fail safe for not converging. 
+        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch - mesh.def_theta[j][1], mesh.xcc) #Correct twist based on the structural deformation. 
+        # ccout = solve_BEM!(rotor, blade, env, phi_old[j], j, Vx, Vy, pitch, mesh.xcc) #todo: Need to create some sort of fail safe for not converging. 
 
         phi[j] = ccout.phi
         alpha[j] = ccout.alpha
@@ -234,16 +222,7 @@ function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environmen
 
     @unpack y_ds, p_ds, xds_idxs = mesh
 
-
-
-    # turbine = rotor.turbine #Flag: Is this a turbine or a propeller?
-
-    # rvec = @. sqrt(blade.rx^2 + blade.ry^2 + blade.rz^2)
-    # twistvec = blade.twist
-    
     airfoils = blade.airfoils
-    # chordvec = airfoils.c
-
 
     ### Initial Condition
     azimuth[1] = azimuth0
@@ -253,7 +232,7 @@ function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environmen
     W0 = view(W, 1, :)
 
     ### Initialize BEM solution
-    for j = 1:na #TODO. Write a solver that is initialized with the previous inflow angle. -> Doesn't drastically change much.
+    for j = 1:na 
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
 
         ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) #TODO: Does mesh.xcc allocate a new vector? 
@@ -282,7 +261,8 @@ function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environmen
     if verbose
         println("WATT.jl starting simulation...")
     end
-    ### Iterate through time 
+
+    ### Iterate through time #Note: It would be beneficial to save AD across a single time step and reuse (if reverse mode), but that only works if the dynamic stall model doesn't have any branching code, which it does. 
     for i = 2:nt
         t = tvec[i-1]
         dt = tvec[i] - tvec[i-1]

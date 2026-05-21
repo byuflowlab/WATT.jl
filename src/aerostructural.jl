@@ -77,7 +77,8 @@ The returned tuple is the canonical input to [`run_sim!`](@ref).
 **Keyword Arguments**
 - `structural_damping::Bool = true`: Passed through to GXBeam.
 - `linear::Bool = false`: Use linear structural response.
-- `pfunc`, `p`, `xpfunc`: GXBeam parameter callbacks (advanced).
+- `pfunc`, `xpfunc`: Sensitivity parameter callbacks (advanced). Xpfunc currently unused. 
+- `p::Vector{<:Real} = nothing`: The sensitivity parameter vector to pass to the pfunc and xpfunc functions (advanced).
 - `verbose::Bool = false`: Print progress.
 
 **Returns**
@@ -94,6 +95,8 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     if verbose
         println("WATT.jl initializing simulation...")
     end
+
+    #Todo: Why don't I store p and prepp in the mesh? 
 
     #Created testing file
     #TODO: Create tests
@@ -129,7 +132,7 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     # The DS state history lives in `aerostates.xds`; share the buffer that
     # `initialize_ds_model` already populated so call sites that pass `xds`
     # around continue to work.
-    copyto!(aerostates.xds, xds)
+    copyto!(aerostates.xds, xds) #Todo: What's going on here? 
     xds = aerostates.xds
 
     # CCBlade scratch vector
@@ -140,7 +143,6 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     ### ----- Allocate the GXBeam Data ----- ###
 
     system = GXBeam.DynamicSystem(assembly)
-    # @show typeof(system)
 
     gxhistory = Array{GXBeam.AssemblyState{inittype, 
         Vector{GXBeam.PointState{inittype}},
@@ -158,7 +160,6 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     point_masses=Dict{Int,PointMass{Float64}}()
     linear_velocity=(@SVector zeros(3))
     angular_velocity=(@SVector zeros(3))
-    # structural_damping=true #todo: I might add this in later. 
     two_dimensional=false
     xpfunc = nothing
     
@@ -169,8 +170,8 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     interpolationpoints = create_interpolationpoints(assembly, blade) 
 
 
-    delta = Vector{SVector{3, inittype}}(undef, na) #todo: What is this used for? 
-    def_theta = Vector{SVector{3, inittype}}(undef, na) #todo. What is this used for
+    delta = Vector{SVector{3, inittype}}(undef, na) #Linear deflection of the aerodynamic nodes relative to the reference configuration.
+    def_theta = Vector{SVector{3, inittype}}(undef, na) #Angular deflection of the aerodynamic nodes relative to the reference configuration.
     #The structural velocities interpolated to the aerodynamic nodes.
     aerov = Vector{SVector{3, inittype}}(undef, na)
 
@@ -206,11 +207,12 @@ the remaining `length(tvec)-1` steps advance with `take_aero_step!` and
 - `solver::Solver = RK4()`: DS state integrator.
 - `g::Real = 9.81`: Gravity magnitude.
 - `azimuth0::Real = 0.0`: Initial azimuth.
+- `gxflag::Union{Nothing,Symbol} = nothing`: A flag to initialize the structures in a particular way. Options are `nothing`, `:steady`, and `:spinning`. Currently does nothing. 
 - `verbose::Bool = false`, `speakiter::Int = 100`: Progress printing.
 - `runtimeflag::Bool = false`, `runtimeiter::Int`, `runtime`: Custom per-step callback.
 - `prepp::Function = nothing`: A function to update the loads within the parameter vector. 
-- `p`:
-- `gxflag`: 
+- `p`::Vector{<:Real} = nothing: The sensitivity parameter vector to pass to the pfunc and prepp functions.
+
 
 **Notes**
 AD through this function relies on the parameter prep function and p. See examples for how to use this for AD.
@@ -225,8 +227,6 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
 
     na = length(blade.r)
     nt = length(tvec)
-
-
 
     ### Initial Condition analysis. 
     t0 = tvec[1] 
@@ -388,19 +388,13 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
         end
 
 
-
-
         ### Update aero inputs from structures.
         update_mesh!(blade, mesh, assembly, gxhistory[i], env, t, na)
-
-
 
         if verbose & (mod(i-1, speakiter)==0) #todo: remove the dependence on i (move to just a verbose and runtime flag)
             println("")
             println("Simulation time: ", t)
         end
-
-
 
         if runtimeflag & (mod(i-1, runtimeiter)==0) 
             runtime(aerostates, gxhistory[i], i) 

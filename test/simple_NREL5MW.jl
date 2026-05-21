@@ -8,10 +8,16 @@ net for the Phase 1+ rework — any drift here means cleanup changed physics.
 
 Reference data: simpleNREL5_100s.jld2
 
+The JLD2 stores the simulation data plus env scalars and the TurbSim file
+path. The env itself is rebuilt below from those scalars via
+`WATT.environment(turbfile, …)` — keeps the fixture small and avoids
+serializing the ~70 MB of Akima interpolant tables the env holds for the
+turbulent inflow.
+
 Adam Cardoza 2026-05-15
 =#
 
-using Test, WATT, JLD2, GXBeam, FLOWMath, DelimitedFiles, StaticArrays
+using Test, WATT, JLD2, GXBeam
 
 localpath = @__DIR__
 cd(localpath)
@@ -19,46 +25,10 @@ cd(localpath)
 const RTOL = 1e-8
 const ATOL = 1e-10
 
-# Reference fields:
-#   blade, assembly, tvec_r, rotor_r, aerostates, gxhistory, mesh
-# Environment scalars (used to reconstruct `env` in-test — closure-based
-# SimpleEnvironment cannot be JLD2-serialized directly):
-#   rho, mu, a, U, Omega, shearexp
-# @load "simpleNREL5_100s.jld2" blade assembly tvec_r aerostates gxhistory mesh rotor_r \
-#                               rho mu a U Omega shearexp
-@load "simpleNREL5_100s.jld2" blade assembly tvec_r aerostates gxhistory mesh rotor_r env
+@load "simpleNREL5_100s.jld2" blade assembly tvec_r aerostates gxhistory rotor_r rho mu a shearexp RPM turbfile
 
-env_ = env # Because env is a closure-based SimpleEnvironment, we can't directly compare it to a freshly constructed one. So we load it as env_, then reconstruct env from the scalars and functions in the file. ->  #Todo: This whole thing is a closure... and I don't know if I like that. It's providing some issues. 
-
-RPM = 11.44
 omega = RPM * 2pi / 60
-
-rho = env_.rho
-mu = env_.mu
-a = env_.a
-shearexp = env_.shearexp
-
-
-
-turbfile = "../data/openfast/TurbSim.dat"
-
-turb = readdlm(turbfile, skipstart=4)
-n, m = size(turb)
-tvec_turb = range(turb[1, 1], turb[n, 1], length=n) #Because the file doesn't get the time vector correctly. 
-Ufit = Akima(tvec_turb, turb[:, 2])
-Vfit = Akima(tvec_turb, turb[:, 5])
-Wfit = Akima(tvec_turb, turb[:, 6])
-
-ufun(t) = SVector(Ufit(t), Vfit(t), Wfit(t))
-omegafun(t) = SVector(0.0, 0.0, 0.0)
-udotfun(t) = SVector(0.0, 0.0, 0.0) #Note: Could probably use the gradient function. 
-omegadotfun(t) = SVector(0.0, 0.0, 0.0)
-# Vinf(t) = Ufit(t) 
-Vinf(t) = sqrt(Ufit(t)^2 + Vfit(t)^2)
-RS(t) = omega
-Vinfdot(t) = 0.0
-RSdot(t) = 0.0
-env = WATT.SimpleEnvironment(rho, mu, a, shearexp, ufun, omegafun, udotfun, omegadotfun, Vinf, RS, Vinfdot, RSdot)
+env = environment(turbfile, rho, mu, a, omega, shearexp)
 
 aerostates_ref = aerostates
 gxhistory_ref = gxhistory
