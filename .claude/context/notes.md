@@ -105,3 +105,17 @@ Several items were flagged but not acted on:
 - Carried-over from plan.md but **NOT addressed this session**: end-to-end AD through `run_sim!` / `fixedpoint!` remains gated on Phase 6+ (ImplicitAD wrapping at the coupled-state level). Those `@test_broken`s are untouched.
 - Files modified this session: `src/WATT.jl`, `src/types.jl`, `src/mesh.jl`, `src/environments.jl`, `src/aerostructural.jl`, `src/aero_only.jl`, `src/static.jl`, `test/test_aero_only.jl`, `test/test_aerostructural.jl`, `test/test_static.jl`. No new files in `src/` — struct files live alongside related code per the user's decision.
 - Plan file: `~/.claude/plans/use-that-subplan-to-elegant-petal.md`.
+
+---
+
+## Session — 2026-05-20 (cont. — JLD2 fixture regeneration)
+
+- Regenerated `test/simpleNREL5_100s.jld2` against the new callable-struct env. Wrote `test/regenerate_reference.jl` that loads the old reference, rebuilds env, re-runs `initialize_sim` + `run_sim!`, asserts bit-exact match (all aerostates fields and gxhistory at i ∈ {1, mid, end} reported max|Δ| = 0.0), then writes a new file. The bit-exact match is **only** because `env.U` and `env.RS` are the only env fields the solvers actually query — `Vinf`, `Udot`, `Vinfdot`, etc. are metadata, so the choice of callable doesn't perturb numerical results.
+- **Gotcha (load-bearing finding)**: the original fixture's fluid scalars are NOT sea-level standard. Saved env had `mu=1.8375e-5, a=335.0, shearexp=0.1` (not 1.81e-5 / 343 / 0.2). The active test passed because it pulled scalars from the loaded `env_`; my first regen attempt hard-coded standard values and produced max|ΔFx|≈650 N (~8% of peak) at the integrated-load level. Don't hard-code — always pull from the loaded reference or save the scalars alongside.
+- Fixture schema decision: save only **simulation data + env scalars + the TurbSim file path** (`rho, mu, a, shearexp, RPM, turbfile`); rebuild env via `WATT.environment(turbfile, ...)` at test load time. Alternative considered was saving the full env (which is now possible with callable structs), but it adds ~70 MB of Akima interpolant tables for the 600k-row TurbSim file — and the source file is already in the repo. Final fixture: ~41.6 MB (vs 41.8 MB original).
+- `test/simple_NREL5MW.jl` rewritten: ~50 lines of manual closure rebuild scaffolding → one `environment(turbfile, rho, mu, a, omega, shearexp)` call. JLD2 reconstruction warnings (`Main.#ufun does not exist`, `type parameters for NamedTuple … do not match`, etc.) — gone.
+- Final `Pkg.test()` = 1261 pass / 0 warn / 0 fail.
+- `test/simpleNREL5_100s.jld2.bak` retained as a safety net; user should `rm` once satisfied.
+- New file: `test/regenerate_reference.jl` (re-runnable; reads OLD file, asserts bit-match, writes new file). Useful as a template for any future fixture regen after API changes.
+- **Git history rewrite**: committed the 113 MB intermediate `_v2.jld2` by accident in `8680846`, then deleted it in `a5e3a2b` — but the blob was still in the unpushed pack and GitHub's 100 MB file limit rejected the push. Fixed via `git reset --soft origin/rewrite` + single recommit (`3573cc3`). Verified `git diff --stat origin/rewrite HEAD` had no v2.jld2 in net diff before resetting. Lesson: never commit large intermediates even temporarily; if you do, scrub them via squash/rebase before pushing.
+- Plan file (unchanged from earlier this session): `~/.claude/plans/use-that-subplan-to-elegant-petal.md`. Phase 3 + JLD2 fixture work both complete.
