@@ -43,9 +43,6 @@ end
 
 
 
-
-
-
 """
     initial_condition_checks(gxflag)
 
@@ -57,9 +54,6 @@ function initial_condition_checks(gxflag)
         error("The flag $gxflag isn't offered for GXBeam initialization.")
     end
 end
-
-
-
 
 
 
@@ -96,20 +90,11 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
         println("WATT.jl initializing simulation...")
     end
 
-    #Todo: Why don't I store p and prepp in the mesh? 
-
-    #Created testing file
-    #TODO: Create tests
-
-    #TODO: Look into whether or not I really need this function. If I can just use the initialize function... then why would I need duplicate functions? 
-
-    
+    #TODO: Why don't I store p and prepp in the mesh? -> It's not that big of a deal to pass them around... so might not be worth the effort. 
 
     # if warnings
     #     checkforwarnings(rvec, twistvec, rhub, rtip, pitch, precone, tilt, yaw)
-    # end
-
-    
+    # end #TODO: Why did I comment out these checks? -> What if I just have the user check the inputs? Like check for warnings could be a function that the user can call if they want, but I don't want to call it by default.
     #TODO: It might be a good idea to check rvec, chordvec, and twistvec to get the design variables to get the right types.
 
     ### Initialization information
@@ -119,7 +104,6 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     t0 = first(tvec)
 
     inittype = find_inittype(blade.c[1], blade.twist[1])
-
 
 
     ### ----- Prepare data storage for aerodynamic models ----- ###
@@ -132,8 +116,8 @@ function initialize_sim(blade::Blade, assembly::GXBeam.Assembly, tvec; verbose::
     # The DS state history lives in `aerostates.xds`; share the buffer that
     # `initialize_ds_model` already populated so call sites that pass `xds`
     # around continue to work.
-    copyto!(aerostates.xds, xds) #Todo: What's going on here? 
-    xds = aerostates.xds
+    copyto!(aerostates.xds, xds) #Copying the initialized xds values into the aerostates buffer. This is a little bit redundant, but it allows me to keep the xds buffer that I initialized for the DS model, and also have it be part of the aerostates struct. -> Could update initialize_ds_model to accept the aerostates buffer and write directly into that, but this is probably fine for now.
+    xds = aerostates.xds #Aliasing the buffer... but it 
 
     # CCBlade scratch vector
     xcc = Vector{inittype}(undef, 11)
@@ -253,7 +237,7 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
     for j = 1:na
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth0)
 
-        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
+        ccout = solve_BEMT(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc)
 
         phi0[j] = ccout.phi
         alpha0[j] = ccout.alpha
@@ -280,8 +264,6 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
         prepp(p, fx0, fy0, mx0)
     end
 
-
-
     Omega0 = SVector(0.0, 0.0, -env.RS(t0))
     gravity0 = SVector(-g*cos(azimuth0), -g*sin(azimuth0), 0.0)
 
@@ -294,7 +276,6 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
         @warn("The initial condition structural analysis failed to converge.")
         return 
     end
-
 
 
     ### Update mesh transfer variables
@@ -362,23 +343,18 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
             a1 = azimuth[i-1]
         end
 
-        #TODO: Figure out if I need to use this, or if I can just calculate it at a single point. 
-        gravity = (tee) -> SVector(-g*cos((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), -g*sin((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), 0.0) ##Todo t = tvec[i].... So this be way wrong. Oh... this is an inline function so the solver can linearly interpolate the gravity vector across time. But... I think the time domain analysis only analyzes at the given time steps... which means that this function doesn't get called really... I dunno. -> TODO: This would only make a difference if the solver used intermediate steps (using DifferentialEquations to solve GXBeam.) -> I should get rid of this. 
-
+        gravity = (tee) -> SVector(-g*cos((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), -g*sin((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), 0.0)  
         #Note: Taylor applies the gravitational load by C'*mass*C*gvec
 
-        ### Solve GXBeam for time step 
-        #todo: This function is taking a lot of time. -> I might be able to save time by branching his code and writing another function, but most of the time is spent in nlsolve. I think all of the time spent is just time solving, not really inside of Taylor's code, but of course, if I make his code faster, then I make the solve faster. 
 
+        ### Update the sensitivity parameter vector if necessary.
         if isnothing(prepp)  
             p = nothing
         else
             prepp(p, fx_i, fy_i, mx_i)
         end 
 
-        
-
-    
+        ### Solve GXBeam for time step 
         system, gxhistory[i], constants, paug, xgx, convergedi = GXBeam.step_system!(system, paug, xgx, constants, gxhistory[i-1], assembly, tvec, i; prescribed_conditions, distributed_loads, structural_damping, gravity, angular_velocity=Omega, pfunc=pfunc, p=p) 
 
 

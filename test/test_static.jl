@@ -67,11 +67,11 @@ include("fixtures/nrel5mw.jl")
                          iterations=1, verbose=false)
 
         # Interior node — undeflected mesh, no DS → first-iteration loads
-        # must equal a direct (Vx, Vy) → solve_BEM! → dimensionalize pass.
+        # must equal a direct (Vx, Vy) → solve_BEMT → dimensionalize pass.
         xv = zeros(11)
         for idx in (2, n ÷ 2, n - 1)
             Vx, Vy = WATT.get_aero_velocities(rotor, blade, env_rated, 0.0, idx, azimuth0)
-            out = WATT.solve_BEM!(rotor, blade, env_rated, idx, Vx, Vy, pitch, xv)
+            out = WATT.solve_BEMT(rotor, blade, env_rated, idx, Vx, Vy, pitch, xv)
 
             sphi, cphi = sincos(out.phi)
             q = 0.5 * env_rated.rho * out.W^2

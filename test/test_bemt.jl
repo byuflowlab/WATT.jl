@@ -1,7 +1,7 @@
 #=
 Tests for WATT's BEMT solver.
 
-WATT.solve_BEM! is a thin wrapper around CCBlade.jl — the actual 
+WATT.solve_BEMT is a thin wrapper around CCBlade.jl — the actual 
 blade-element-momentum-theory math lives upstream. What can break
 in the wrapper is the *translation* between WATT's data structures 
 (Rotor, Blade, Environment,DS.Airfoil polars) and CCBlade's 
@@ -95,10 +95,10 @@ errfun(x, xt) = 100*(x - xt)/xt
         pitch = 0.0
         Vx    = vinf                # axial inflow at every section (no yaw, no shear)
 
-        xv = zeros(11)   # scratch buffer required by the in-place solve_BEM!
+        xv = zeros(11)   # scratch buffer reused inside solve_BEMT
 
         ### -------------------------------------------------------------------
-        ### Compare WATT.solve_BEM! against a direct CCBlade.solve at each
+        ### Compare WATT.solve_BEMT against a direct CCBlade.solve at each
         ### interior blade station. This is the wrapper-fidelity test: WATT's
         ### data-structure translation must yield the same numbers a direct
         ### CCBlade call would produce for the same physical inputs.
@@ -107,7 +107,7 @@ errfun(x, xt) = 100*(x - xt)/xt
         ###   rvec[1] == rhub and rvec[end] == rtip (since BlSpn[1]==0 and
         ###   BlSpn[end]==blade length). CCBlade short-circuits any section
         ###   coincident with rhub/rtip to zero Outputs (CCBlade.jl:441),
-        ###   while WATT.solve_BEM! computes nonzero loads there. The
+        ###   while WATT.solve_BEMT computes nonzero loads there. The
         ###   simulation in practice never places aero nodes on the hub or
         ###   tip — see the checkforwarnings() guard in aerostructural.jl —
         ###   so the endpoint disagreement is outside both solvers' contract.
@@ -117,7 +117,7 @@ errfun(x, xt) = 100*(x - xt)/xt
                 Vy = omega*rvec[idx]
 
                 # WATT path: pass the WATT-side structs through the wrapper.
-                rotorout = WATT.solve_BEM!(rotor, blade, env, idx, Vx, Vy, pitch, xv; npts=10)
+                rotorout = WATT.solve_BEMT(rotor, blade, env, idx, Vx, Vy, pitch, xv; npts=10)
 
                 # Direct CCBlade path: rebuild equivalent CCBlade inputs from
                 # the *same* underlying polars and geometry, then call solve().

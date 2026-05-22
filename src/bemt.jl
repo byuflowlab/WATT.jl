@@ -2,8 +2,6 @@
 
 The blade element momentum theory (BEMT) code. Most of this wraps the package CCBlade.jl
 
-TODO: I should probably rename this file to BEMT. It appears that most people refer to panel codes as BEMs, and refer to BEMT as BEMT. 
-
 =#
 
 import CCBlade.afeval
@@ -12,9 +10,8 @@ function afeval(af::DS.Airfoil, alpha, Re, Mach)
     return af.cl(alpha), af.cd(alpha)
 end
 
-function update_BEM_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch)
+function update_BEMT_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch)
     # [r, airfoil.c, twist, blade.rhub, blade.rtip, Vx, Vy, env.rho, pitch, env.mu, env.a]
-    # @show typeof(twist) #Shows as a tracked real when it needs to.
     xv[1] = r
     xv[2] = chord
     xv[3] = twist
@@ -31,28 +28,32 @@ end
 
 
 """
-    solve_BEM(rotor, blade, env, idx, Vx, Vy, pitch, op; npts=10)
-Solve the BEM equations for given rotor geometry and operating point. This function is based on CCBlade's solve function. 
+    solve_BEMT(rotor, blade, env, phi0, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts=10, newbounds=true)
 
-### Inputs
-- `rotor::Rotor` - rotor properties
-- `blade::Blade` - section properties
-- `env::Environment` - operating point
-- `idx::Int` - The 
-- `npts::Int` - number of discretization points to find bracket in residual solve
+Solve the BEMT equations for a given rotor geometry and operating point using an
+initial guess `phi0` for the flow angle. When `newbounds=true` and `phi0` is
+already a root (residual ≈ 0), the previous solution is returned without
+re-bracketing; otherwise `phi0` is used to tighten the bracket before the
+Brent root solve. Based on CCBlade's `solve` function.
 
-### Outputs
-- `outputs::Outputs`: BEM output data including loads, induction factors, etc.
+**Arguments**
+- `rotor::Rotor`: rotor properties.
+- `blade::Blade`: section properties.
+- `env::Environment`: operating point.
+- `phi0`: initial guess for the flow angle (radians).
+- `idx::Int`: index of the blade section.
+- `Vx`: x-component of the wind velocity (freestream).
+- `Vy`: y-component of the wind velocity (rotational).
+- `pitch`: pitch angle (radians).
+- `xv::Vector`: scratch vector of length 11 populated by `update_BEMT_variables!` and reused by the residual.
+- `twist`: twist angle (radians). Defaults to `blade.twist[idx]`.
+- `npts::Int`: number of discretization points used to find the bracket in the residual solve.
+- `newbounds::Bool`: if `true`, use `phi0` to either short-circuit the solve (when it's already a root) or refine the bracket before Brent.
+
+**Returns**
+- `outputs::CCBlade.Outputs`: BEMT outputs including inflow angle, angle of attack, loads, and induction factors.
 """
-function solve_BEM(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx, Vy, pitch; npts::Int=10, newbounds::Bool=true)
-    xv = zeros(11)
-
-    return solve_BEM!(rotor, blade, env, phi0, idx, Vx, Vy, pitch, xv; npts, newbounds)
-end
-
-function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts::Int=10, newbounds::Bool=true)
-#TODO: This shouldn't have an exclamation point in the name because it doesn't actually appear to be inplace. And it returns a struct, not a vector, so it's not an allocation... Or shouldn't be. 
-
+function solve_BEMT(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts::Int=10, newbounds::Bool=true)
 
     airfoil = blade.airfoils[idx]
     # rR = blade.rR[idx]
@@ -60,7 +61,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
     chord = blade.c[idx]
     
 
-    # check if we are at hub/tip
+    # check if we are at hub/tip #TODO: Maybe instead of checking every iteration... we just check beforehand... I think I'm currently letting these interior nodes be solved... or be cylinder loads? Or maybe I'm just counting on it not being an aero node? I need to check this closer. 
     # if isapprox(rR, 0.0, atol=1e-6) || isapprox(rR, 1.0, atol=1e-6)
     #     return Outputs()  # no loads at hub/tip
     # end
@@ -69,7 +70,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
     theta = twist + pitch
 
     # package up variables and parameters for residual 
-    update_BEM_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
+    update_BEMT_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. -> It might not matter at all.. 
     pv = (airfoil, rotor.B, rotor.turbine, rotor.re, rotor.mach, rotor.rotation, rotor.tip)
 
     if newbounds
@@ -143,8 +144,6 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
     # pull out first argument
     residual(phi, x, p) = CCBlade.residual_and_outputs(phi, x, p)[1]
 
-    
-
     success = false
     for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
         phimin, phimax = order[j]
@@ -205,7 +204,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
 end
 
 """
-    solve_BEM!(rotor, blade, env, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts::Int=10, epsilon=1.1e-3)
+    solve_BEMT(rotor, blade, env, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts=10, epsilon=1e-6)
 
 Solve the BEMT equations for given rotor geometry and operating point. This function is based on CCBlade's solve function.
 
@@ -217,7 +216,7 @@ Solve the BEMT equations for given rotor geometry and operating point. This func
 - `Vx::Float64`: x-component of the wind velocity (Freestream)
 - `Vy::Float64`: y-component of the wind velocity (Rotational)
 - `pitch::Float64`: pitch angle (radians)
-- `xv::Vector{Float64}`: vector of variables for the residual function
+- `xv::Vector{Float64}`: a scratch vector of variables for the residual function
 - `twist::Float64`: twist angle (radians)
 - `npts::Int`: number of discretization points to find bracket in residual solve
 - `epsilon::Float64`: small value to avoid division by zero
@@ -225,8 +224,7 @@ Solve the BEMT equations for given rotor geometry and operating point. This func
 **Returns**
 - `outputs::Outputs`: BEMT output data including inflow angle, angle of attack, loads, induction factors, etc.
 """
-function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts::Int=10, epsilon=1e-6) #epsilon=1.1e-3)
-    #TODO: This shouldn't have an exclamation point in the name because it doesn't actually appear to be inplace. And it returns a struct, not a vector, so it's not an allocation... Or shouldn't be. 
+function solve_BEMT(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, pitch, xv; twist=blade.twist[idx], npts::Int=10, epsilon=1e-6)
     
     
     airfoil = blade.airfoils[idx]
@@ -234,7 +232,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     r = blade.r[idx]
     chord = blade.c[idx]
 
-    #todo: Add the cylinder bypass (based on the airfoil type). 
+    #Note: if we have issues in the future with cylinders not solving, I can add in a cylinder bypass here, I just need to add in some sort of flag to see if it's a cylinder or not. 
     
 
     # check if we are at hub/tip
@@ -315,7 +313,7 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     residual(phi, x, p) = CCBlade.residual_and_outputs(phi, x, p)[1]
 
     # package up variables and parameters for residual 
-    update_BEM_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
+    update_BEMT_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
     pv = (airfoil, rotor.B, rotor.turbine, rotor.re, rotor.mach, rotor.rotation, rotor.tip)
 
     success = false
@@ -341,14 +339,13 @@ function solve_BEM!(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
         if success
             function solve(x, p) #todo: Is there a more efficient way to do this instead of a closure? 
                 phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
-                # phistar, _ = sub_brent(phi -> residual(phi, x, p), phiL, phiU, 5e-10; maxiter = 10000, xtoler=1e-6, epsilon=eps())
 
                 return phistar
             end
             
             phistar = IAD.implicit(solve, residual, xv, pv)
             
-            _, outputs = CCBlade.residual_and_outputs(phistar, xv, pv) #TODO: Instead of creating a new function... I could just check if x0 is inbetween a and b outside of the loop. If it is, then I can check if it is a zero. If not, then replace one of the bounds into Brent's method. 
+            _, outputs = CCBlade.residual_and_outputs(phistar, xv, pv)
                 return outputs
             end    
         end    
@@ -363,23 +360,24 @@ end
 
 
 """
-    thrusttorque(rotor, sections, outputs::AbstractVector{TO}) where TO
+    CCBlade.thrusttorque(rvec, N, T, B=1; precone=0.0)
 
-integrate the thrust/torque across the blade, 
-including 0 loads at hub/tip, using a trapezoidal rule.
+Trapezoidal integration of pre-resolved normal and tangential per-unit-span
+loads `N` and `T` defined at the radial stations `rvec`. Hub/tip loads are
+assumed to already be included.
 
 **Arguments**
-- `rotor::Rotor`: rotor object
-- `sections::Vector{Section}`: rotor object
-- `outputs::Vector{Outputs}`: output data along blade
+- `rvec`: radial stations.
+- `N`: normal (out-of-plane) load per unit span at each station.
+- `T`: tangential (in-plane) load per unit span at each station.
+- `B`: number of blades.
+- `precone`: precone angle (radians).
 
 **Returns**
-- `T::Float64`: thrust (along x-dir see Documentation).
-- `Q::Float64`: torque (along x-dir see Documentation).
+- `T::Float64`: total thrust.
+- `Q::Float64`: total torque.
 """
-function thrusttorque(rvec, N, T, B=1; precone=0.0)
-    #Todo: I think I have this function implemented several times across the package. 
-
+function CCBlade.thrusttorque(rvec, N, T, B=1; precone=0.0)
     # integrate Thrust and Torque (trapezoidal)
     thrust = N*cos(precone)
     torque = T.*rvec*cos(precone)
@@ -390,10 +388,26 @@ function thrusttorque(rvec, N, T, B=1; precone=0.0)
     return T, Q
 end
 
-function ccthrusttorque(rvec, Rhub, Rtip, Np, Tp, B; precone=0.0)
+"""
+    CCBlade.thrusttorque(rvec, Rhub, Rtip, Np, Tp, B; precone=0.0)
 
+Trapezoidal integration of per-unit-span loads with zero hub/tip loads
+prepended. Use this overload when `Np`/`Tp` come straight from a per-station
+BEM solve and don't already include endpoints.
+
+**Arguments**
+- `rvec`: radial stations (excluding hub/tip).
+- `Rhub`, `Rtip`: hub and tip radii.
+- `Np`, `Tp`: per-unit-span normal/tangential loads at the stations in `rvec`.
+- `B`: number of blades.
+- `precone`: precone angle (radians).
+
+**Returns**
+- `T::Float64`: total thrust.
+- `Q::Float64`: total torque.
+"""
+function CCBlade.thrusttorque(rvec, Rhub, Rtip, Np, Tp, B; precone=0.0)
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
-    # rvec = [s.r for s in sections]
     rfull = [Rhub; rvec; Rtip]
     Npfull = [0.0; Np; 0.0]
     Tpfull = [0.0; Tp; 0.0]

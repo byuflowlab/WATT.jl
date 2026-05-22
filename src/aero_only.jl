@@ -122,24 +122,19 @@ new aero outputs into the supplied views — does not allocate.
 - `solver::Solver = RK4()`: DS state integrator.
 """
 function take_aero_step!(phi, alpha, W, xds, cx, cy, cm, fx, fy, mx, xds_old, azimuth, t, dt, pitch, mesh, rotor::Rotor, blade::Blade, env::Environment; solver::Solver=RK4())
-    #TODO: I'm thinking that I won't have any optional arguments here. It doesn't seem needed... Well... maybe it'd be handy when I'm using the function outside of the package for optimization.  -> And for if I use a different dynamic stall model. 
 
     na = length(blade.r)
-    
     
     if dt<0
         error("Time step is negative")
     end
 
-
     ### Update BEM inputs and solve
     for j = 1:na
         ### Update base inflow velocities
         Vx, Vy = get_aerostructural_velocities(rotor, blade, env, t, j, azimuth, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
-        #Todo: Angles aren't updated with angular deflection.... 
         
-        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch - mesh.def_theta[j][1], mesh.xcc) #Correct twist based on the structural deformation. 
-        # ccout = solve_BEM!(rotor, blade, env, phi_old[j], j, Vx, Vy, pitch, mesh.xcc) #todo: Need to create some sort of fail safe for not converging. 
+        ccout = solve_BEMT(rotor, blade, env, j, Vx, Vy, pitch - mesh.def_theta[j][1], mesh.xcc) #Correct twist based on the structural deformation. 
 
         phi[j] = ccout.phi
         alpha[j] = ccout.alpha
@@ -235,7 +230,7 @@ function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environmen
     for j = 1:na 
         Vx, Vy = get_aero_velocities(rotor, blade, env, t0, j, azimuth[1])
 
-        ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) #TODO: Does mesh.xcc allocate a new vector? 
+        ccout = solve_BEMT(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) #TODO: Does mesh.xcc allocate a new vector? 
         phi0[j] = ccout.phi
         alpha0[j] = ccout.alpha
         W0[j] = ccout.W

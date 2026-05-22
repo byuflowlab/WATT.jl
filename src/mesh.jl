@@ -1,7 +1,6 @@
-
-
-
-
+#=
+functions to transfer loads to the structural mesh and interpolate structural displacements/velocities to the aerodynamic mesh. Also includes the SimMesh structs that hold the coupling state and scratch buffers for the different simulation modes (aero-only transient, coupled transient, steady aero-structural).
+=#
 
 """
     find_point_indices(rvec, r)
@@ -39,17 +38,17 @@ end
 
 
 """
-    find_interpolation_percent(rvec, pair, r)
+    find_interpolation_percent(rvec, pair, r) -> Number
 
-Find the percentage location of the point of interest between the neighboring nodes.
+Fractional position of `r` between the two `rvec` nodes identified by `pair`.
 
-**Inputs**
-- `rvec::Vector{Number}`: The 1D mesh of interest. 
-- `pair::Tuple{Int, Int}`: The indicial pair of the surrounding neighbors.
-- `r::Number`: The point of interest (on the second mesh... not the mesh of interest)
+**Arguments**
+- `rvec`: 1D mesh containing the neighboring nodes.
+- `pair::Tuple{Int, Int}`: indices of the bracketing neighbors.
+- `r`: position of interest on the same axis as `rvec`.
 
-**Outputs**
-- `percent::Number`: The percentage location between the two neighboring nodes.
+**Returns**
+- Fractional location in `[0, 1]` (0 at `rvec[pair[1]]`, 1 at `rvec[pair[2]]`).
 """
 function find_interpolation_percent(rvec, pair, r)
 
@@ -59,9 +58,16 @@ function find_interpolation_percent(rvec, pair, r)
 end
 
 """
-    InterpolationPoint(pair, percent)
+    InterpolationPoint{TF}(pair, percent)
 
-A struct to quickly interpolate from one mesh to another. . 
+A precomputed 1D linear-interpolation handle: the two source-mesh indices
+that bracket a target point, plus the fractional position between them.
+Cached so the structural→aero interpolation doesn't repeat the bracket
+search every time step.
+
+**Fields**
+- `pair::Tuple{Int64, Int64}`: indices of the bracketing source-mesh nodes.
+- `percent::TF`: fractional position in `[0, 1]` between `pair[1]` and `pair[2]`.
 """
 struct InterpolationPoint{TF}
     pair::Tuple{Int64, Int64}
@@ -180,17 +186,23 @@ struct StaticMesh{TF, TIP, TA, TS, TPC, TDL, TPM, TXP, TPF} <: AbstractSimMesh
 end
 
 """
-    create_interpolationpoints(assembly, rvec)
+    create_interpolationpoints(assembly, blade) -> Vector{InterpolationPoint}
 
-**Inputs**
-- assembly - A GXBeam assembly
-- rvec - The radial location of the aerodynamic nodes
+Build a cache of [`InterpolationPoint`](@ref)s that maps each aerodynamic
+station in `blade.r` onto the structural arc-length of `assembly`. Used
+once during simulation setup so per-step calls to
+[`interpolate_position`](@ref) / [`interpolate_deflection`](@ref) etc. can
+skip the bracket search.
 
-**Outputs**
-- `interpolationpoints::Vector{InterpolationPoint}`
+Assumes both the structural assembly points and `blade.r` are ordered
+root→tip.
 
-### Notes
-- This assumes that the structural points are in order and go from root to tip. Additionally, the aerodynamic points follow a similar order. 
+**Arguments**
+- `assembly::GXBeam.Assembly`: structural assembly.
+- `blade::Blade`: blade providing the aerodynamic station radii.
+
+**Returns**
+- `Vector{InterpolationPoint}` of length `length(blade.r)`.
 """
 function create_interpolationpoints(assembly::GXBeam.Assembly, blade::Blade)
 
@@ -212,10 +224,19 @@ end
 
 
 """
-    interpolate_position(ip, assembly, state)
+    interpolate_position(ip, assembly, state) -> SVector{3}
 
-Get the position of aerodynamic nodes from the interpolation struct 
-and the structural structs. 
+Position of the aerodynamic node represented by `ip` in the deformed
+configuration: the linear blend of the two bracketing structural points
+shifted by their current displacements.
+
+**Arguments**
+- `ip::InterpolationPoint`: cached interpolation handle for the aero node.
+- `assembly::GXBeam.Assembly`: reference (undeformed) point positions.
+- `state`: GXBeam state holding the per-point displacement `u`.
+
+**Returns**
+- Deformed position in the same frame as `assembly.points`.
 """
 function interpolate_position(ip, assembly, state)  
 
@@ -226,12 +247,20 @@ function interpolate_position(ip, assembly, state)
 end
 
 """
-    interpolate_deflection(ip, assembly, state)
+    interpolate_deflection(ip, assembly, state) -> SVector{3}
 
-Interpolate the structural deflection onto the aerodynamic mesh. 
+Linearly blend the structural displacement `u` at the two bracketing
+points to produce the displacement at the aerodynamic node. `assembly` is
+accepted for signature symmetry with [`interpolate_position`](@ref) but
+isn't used directly here.
 
 **Arguments**
-- `ip::InterpolationPoint`: The interpolation point of interest.
+- `ip::InterpolationPoint`: cached interpolation handle.
+- `assembly::GXBeam.Assembly`: structural assembly (unused).
+- `state`: GXBeam state holding the per-point displacement `u`.
+
+**Returns**
+- Interpolated 3-component displacement.
 """
 function interpolate_deflection(ip, assembly, state)
     p1 = state.points[ip.pair[1]].u
@@ -241,11 +270,22 @@ function interpolate_deflection(ip, assembly, state)
 end
 
 """
-    interpolate_velocity(ip, assembly, state, env)
+    interpolate_velocity(ip, assembly, state) -> SVector{3}
 
-Get the relative velocity of an aerodynamic point. 
+Linearly blend the structural velocity `V` at the two bracketing points to
+produce the velocity at the aerodynamic node. Used inside
+[`convert_velocities`](@ref) to subtract structural motion from the
+inflow.
+
+**Arguments**
+- `ip::InterpolationPoint`: cached interpolation handle.
+- `assembly::GXBeam.Assembly`: structural assembly (unused).
+- `state`: GXBeam state holding the per-point velocity `V`.
+
+**Returns**
+- Interpolated 3-component velocity in the structural frame.
 """
-function interpolate_velocity(ip, assembly, state) 
+function interpolate_velocity(ip, assembly, state)
 
     v1 = state.points[ip.pair[1]].V
     v2 = state.points[ip.pair[2]].V
@@ -253,7 +293,23 @@ function interpolate_velocity(ip, assembly, state)
     return (1-ip.percent)*v1 + ip.percent*v2
 end
 
-function interpolate_angle(ip, assembly, state) 
+"""
+    interpolate_angle(ip, assembly, state) -> SVector{3}
+
+Linearly blend the Wiener–Milenkovic rotation parameters at the two
+bracketing points to produce a 3-2-1 Euler-angle triple for the
+aerodynamic node. The per-point rotations are first converted to Euler
+angles via [`WMPtoangle`](@ref) before averaging.
+
+**Arguments**
+- `ip::InterpolationPoint`: cached interpolation handle.
+- `assembly::GXBeam.Assembly`: structural assembly (unused).
+- `state`: GXBeam state holding per-point WMP rotations `theta`.
+
+**Returns**
+- Interpolated 3-component Euler-angle vector (roll, pitch, yaw) in radians.
+"""
+function interpolate_angle(ip, assembly, state)
     
     theta1 = WMPtoangle(state.points[ip.pair[1]].theta)
     theta2 = WMPtoangle(state.points[ip.pair[2]].theta) 
@@ -262,12 +318,30 @@ function interpolate_angle(ip, assembly, state)
 end
 
 """
-    convert_velocities(blade, env, assembly, state, interpolationpoints, t, idx)
+    convert_velocities(blade, env, assembly, state, interpolationpoints, t, idx) -> NTuple{3}
 
-Interpolate the aerostructural velocities, transform them into the aerodynamic reference frame, and remove the rotational portion.
+Interpolate the structural displacement and velocity at aero station `idx`,
+rotate them into the aerodynamic reference frame, and subtract the rigid
+rotational contribution so what's returned is the *relative* velocity the
+airfoil sees (i.e. structural-motion-induced inflow only — the freestream
+is added downstream).
+
+The axis flips (`dy = +delta[2]`, `dz = +delta[1]`, `usy = -Vs[2]`,
+`usz = -Vs[1]`) account for the structural-frame → aero-frame rotation and
+the sign convention that "structure moving in `+x`" is "wind moving in
+`-x`" from the airfoil's perspective.
 
 **Arguments**
+- `blade::Blade`: blade providing the undeformed station coordinates `ry`, `rz`.
+- `env::Environment`: environment supplying the rotor speed `env.RS(t)`.
+- `assembly::GXBeam.Assembly`: structural assembly (forwarded to interpolators).
+- `state`: current GXBeam state.
+- `interpolationpoints::Vector{InterpolationPoint}`: precomputed handles for every aero station.
+- `t`: current time (rotor speed is evaluated here).
+- `idx::Int`: aero-station index.
 
+**Returns**
+- `(ux, uy, uz)`: relative velocity at the aerodynamic node in the aero frame.
 """
 function convert_velocities(blade::Blade, env::Environment, assembly, state, interpolationpoints, t, idx)
 
@@ -290,8 +364,6 @@ function convert_velocities(blade::Blade, env::Environment, assembly, state, int
     ray = blade.ry[idx] + dy
     raz = blade.rz[idx] + dz
 
-    
-
     omega = env.RS(t)
 
     #Rotational velocities
@@ -302,6 +374,25 @@ function convert_velocities(blade::Blade, env::Environment, assembly, state, int
     return (usx, usy-ury, usz-urz)
 end
 
+"""
+    update_mesh!(blade, mesh, assembly, gxstate, env, t, na)
+
+Refresh the per-step coupling buffers stored in `mesh` (`delta`,
+`def_theta`, `aerov`) by interpolating the latest GXBeam state onto the
+aerodynamic stations. Called once per time step ahead of the BEM/DS load
+evaluation.
+
+Mutates `mesh.delta`, `mesh.def_theta`, and `mesh.aerov` in place.
+
+**Arguments**
+- `blade::Blade`: blade with aerodynamic stations.
+- `mesh`: simulation mesh carrying `interpolationpoints` and the buffers to be filled.
+- `assembly::GXBeam.Assembly`: structural assembly (undeformed reference).
+- `gxstate`: current GXBeam state.
+- `env::Environment`: environment for the rotational-velocity subtraction.
+- `t`: current time.
+- `na::Int`: number of aerodynamic stations to update.
+"""
 function update_mesh!(blade::Blade, mesh, assembly::GXBeam.Assembly, gxstate, env::Environment, t, na)
 
     for j = 1:na
@@ -315,6 +406,20 @@ end
 
 
 
+"""
+    transform_BC_G(rhr_x, rhr_y, rhr_z, azimuth, precone, tilt, yaw) -> NTuple{3}
+
+Transform a 3-vector from the **blade-coned** frame (after precone, before
+azimuth/tilt/yaw) into the **global** ground frame. The rotation order is
+precone → azimuth → tilt → yaw.
+
+**Arguments**
+- `rhr_x`, `rhr_y`, `rhr_z`: components in the blade-coned frame.
+- `azimuth`, `precone`, `tilt`, `yaw`: rotation angles in radians.
+
+**Returns**
+- `(rg_x, rg_y, rg_z)`: components in the global frame.
+"""
 function transform_BC_G(rhr_x, rhr_y, rhr_z, azimuth, precone, tilt, yaw)
 
     rtx, rty, rtz = rotate_y(rhr_x, rhr_y, rhr_z, precone; T=false)
@@ -325,6 +430,20 @@ function transform_BC_G(rhr_x, rhr_y, rhr_z, azimuth, precone, tilt, yaw)
     return rg_x, rg_y, rg_z
 end
 
+"""
+    transform_BC_HR(rbc_x, rbc_y, rbc_z, precone) -> NTuple{3}
+
+Transform a 3-vector from the **blade-coned (BC)** frame into the
+**hub-rotating (HR)** frame by applying the precone rotation about the
+y-axis.
+
+**Arguments**
+- `rbc_x`, `rbc_y`, `rbc_z`: components in the blade-coned frame.
+- `precone`: precone angle in radians.
+
+**Returns**
+- `(rhr_x, rhr_y, rhr_z)`: components in the hub-rotating frame.
+"""
 function transform_BC_HR(rbc_x, rbc_y, rbc_z, precone)
 
     rhr_x, rhr_y, rhr_z = rotate_y(rbc_x, rbc_y, rbc_z, precone; T=false)
@@ -332,6 +451,19 @@ function transform_BC_HR(rbc_x, rbc_y, rbc_z, precone)
     return rhr_x, rhr_y, rhr_z
 end
 
+"""
+    transform_HR_L(rhr_x, rhr_y, rhr_z, curve, sweep, precone) -> NTuple{3}
+
+Transform a 3-vector from the **hub-rotating (HR)** frame into the
+**local-element (L)** frame by undoing sweep, curve, and precone in turn.
+
+**Arguments**
+- `rhr_x`, `rhr_y`, `rhr_z`: components in the hub-rotating frame.
+- `curve`, `sweep`, `precone`: blade-local geometry angles in radians.
+
+**Returns**
+- `(rl_x, rl_y, rl_z)`: components in the local-element frame.
+"""
 function transform_HR_L(rhr_x, rhr_y, rhr_z, curve, sweep, precone)
 
     rt_x, rt_y, rt_z = rotate_x(rhr_x, rhr_y, rhr_z, sweep; T=true)
@@ -341,6 +473,21 @@ function transform_HR_L(rhr_x, rhr_y, rhr_z, curve, sweep, precone)
     return rl_x, rl_y, rl_z
 end
 
+"""
+    transform_G_L(rg_x, rg_y, rg_z, azimuth, curve, precone, sweep, tilt, yaw) -> NTuple{3}
+
+Composite transform from the **global** ground frame all the way down to
+the **local-element (L)** frame. Applies yaw → tilt → azimuth → sweep →
+curve → precone in order, undoing each step against the incoming
+rotation.
+
+**Arguments**
+- `rg_x`, `rg_y`, `rg_z`: components in the global frame.
+- `azimuth`, `curve`, `precone`, `sweep`, `tilt`, `yaw`: rotation angles in radians.
+
+**Returns**
+- `(rl_x, rl_y, rl_z)`: components in the local-element frame.
+"""
 function transform_G_L(rg_x, rg_y, rg_z, azimuth, curve, precone, sweep, tilt, yaw)
 
     rt_x, rt_y, rt_z = rotate_z(rg_x, rg_y, rg_z, yaw)

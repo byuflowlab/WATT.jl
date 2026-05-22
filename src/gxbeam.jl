@@ -3,16 +3,55 @@ Code used to interact with GXBeam.jl.
 Also some code to run GXBeam in the way that I'm doing it in the aerostructural simulation. 
 
 =#
+"""
+    retrieve_eulerangles(R) -> SVector{3}
+
+Extract the intrinsic 3-2-1 (roll, pitch, yaw) Euler angles from a 3×3
+rotation matrix `R`.
+
+**Arguments**
+- `R`: 3×3 rotation matrix.
+
+**Returns**
+- `SVector{3}` of `(roll, pitch, yaw)` in radians.
+"""
 function retrieve_eulerangles(R)
     return SVector{3}([atan(R[3,2], R[3,3]), asin(-R[3,1]), atan(R[2,1], R[1,1])])
 end
 
+"""
+    WMPtoangle(c) -> SVector{3}
+
+Convert a Wiener–Milenkovic rotation parameter vector `c` into the
+equivalent 3-2-1 Euler angles. Applies GXBeam's parameter scaling before
+building the rotation matrix.
+
+**Arguments**
+- `c`: Wiener–Milenkovic 3-vector.
+
+**Returns**
+- `SVector{3}` of `(roll, pitch, yaw)` in radians.
+"""
 function WMPtoangle(c)
     scaling = GXBeam.rotation_parameter_scaling(c)
     R = GXBeam.wiener_milenkovic(scaling*c)'
     return retrieve_eulerangles(R)
 end
 
+"""
+    get_bladelength_vector(assembly) -> Vector
+
+Cumulative arc-length along the assembly's point list, measured from the
+origin to each point. The first entry is `‖p₁‖`, and each subsequent
+entry adds the segment length `‖pᵢ − pᵢ₋₁‖`. Useful for mapping
+GXBeam points back to a 1D radial coordinate.
+
+**Arguments**
+- `assembly::GXBeam.Assembly`: assembly to measure.
+
+**Returns**
+- `Vector` of arc-lengths, one per point.
+"""
 function get_bladelength_vector(assembly::GXBeam.Assembly)
     inittype = eltype(assembly)
     ns = length(assembly.points)
@@ -27,9 +66,21 @@ end
 
 
 """
-    update_assembly(assembly; compliance=nothing, stiffness=nothing)
+    update_assembly(assembly; compliance=nothing, stiffness=nothing) -> GXBeam.Assembly
 
-Create a new assembly based on a previous assembly with new compliance or stiffness. 
+Return a copy of `assembly` with the per-element compliance matrices
+replaced. Either `compliance` or `stiffness` may be supplied — if
+`stiffness` is given it is inverted element-by-element. A single matrix
+broadcasts to all elements; a vector of matrices must be the same length
+as `assembly.elements`.
+
+**Arguments**
+- `assembly::GXBeam.Assembly`: assembly to copy.
+- `compliance`: a 6×6 matrix or a `length(elements)`-long vector of 6×6 matrices.
+- `stiffness`: a 6×6 matrix or a `length(elements)`-long vector of 6×6 matrices; inverted to produce compliance.
+
+**Returns**
+- A new `GXBeam.Assembly` with the same points/connectivity but updated element compliances.
 """
 function update_assembly(assembly; compliance=nothing, stiffness=nothing)
 
@@ -69,16 +120,21 @@ function update_assembly(assembly; compliance=nothing, stiffness=nothing)
 end
 
 """
-    interpolate_matrix_symmetric(f1, f2, Kmat)
-Interpolate a set of symmetric matrices from one vector of fractions to any number of new fractions.
+    interpolate_matrix_symmetric(f1, f2, Kmat; fit=Linear)
 
-### Inputs
-- f1::Vector{Float64}: The fractional locations of the original stiffness matrices.
-- f2::Vector{Float64}: The fractional locations of the new stiffness matrices.
-- Kmat::Array{Float64, 3}: The stiffness matrices at the original locations.
+Interpolate a set of symmetric 6×6 matrices from one vector of fractional
+locations to any number of new fractions. Only the upper triangle is
+interpolated; the lower triangle is filled by symmetry at each output
+location.
 
-### Outputs
-- Kfit::Array{Float64, 3}: The stiffness matrices at the new locations.
+**Arguments**
+- `f1::Vector`: fractional locations of the input matrices.
+- `f2::Vector`: fractional locations to interpolate to.
+- `Kmat::Array{Float64, 3}`: input matrices, sized `6×6×length(f1)`.
+- `fit`: interpolant constructor (default `Linear`).
+
+**Returns**
+- `Kfit::Array{Float64, 3}`: interpolated matrices, sized `6×6×length(f2)`.
 """
 function interpolate_matrix_symmetric(f1, f2, Kmat; fit=Linear)
     if length(f1)!=size(Kmat, 3)
@@ -164,7 +220,24 @@ end
 """
     pane_assembly(assembly; ne=nothing, verbose=false, fit=Linear)
 
-Create a new assembly based on an old one with a new number of elements. 
+Resample the GXBeam point distribution of `assembly` to `ne` equal-length
+elements along the arc-length of the original point list. Coordinates of
+the new points are interpolated from the original ones using the provided
+`fit` constructor.
+
+!!! warning
+    Currently returns the per-element non-dimensional arc-length vector
+    `sevec_new`, not a rebuilt `GXBeam.Assembly`. Treat the return value
+    as a meshing helper, not a full assembly replacement.
+
+**Arguments**
+- `assembly::GXBeam.Assembly`: assembly to resample.
+- `ne::Int`: target number of elements. Pass `nothing` to no-op and return `assembly`.
+- `verbose::Bool`: print a warning when `ne` is clamped to 1.
+- `fit`: interpolant constructor used to resample point coordinates.
+
+**Returns**
+- `sevec_new::Vector`: non-dimensional midpoint locations of the new elements (see warning above).
 """
 function pane_assembly(assembly; ne=nothing, verbose::Bool=false, fit=Linear)
     if isnothing(ne)
@@ -210,10 +283,6 @@ function pane_assembly(assembly; ne=nothing, verbose::Bool=false, fit=Linear)
 
     # elvec = [assembly.elements[i].L for i = 1:ne_cur]
     sevec = [(sum(lvec[1:i-1])+(lvec[i]/2))/L for i in 1:ne_cur]
-
-
-
-
 
 
     ### New Beam
@@ -379,58 +448,32 @@ end
 
 
 
-# function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.Linear)
 
-#     #todo: I think that this is a bit of a problem, because what if the rvec already includes rhub? (problem from before that needs to be resolved, see next Todo statement. ) #todo: I need to nail down behavior outside of the aero node regions. 
-#     #todo: I might need to extract the value out of Fx, Fy, and Mx if there is a tracked real present. 
-#     # @show eltype(Fx)
-#     if isa(Fx[1], ReverseDiff.TrackedReal)
-#         # println("Entered cleansing function..")
-#         fx = zeros(length(Fx)) #TODO: Allocation every time step!!!
-#         fy = zeros(length(Fx))
-#         # mx = zeros(length(Fx))
+"""
+    update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.linear)
 
-#         GXBeam.dual_safe_copy!(fx, Fx)
-#         GXBeam.dual_safe_copy!(fy, Fy)
-#         # GXBeam.dual_safe_copy!(fx, Fx)
+Populate `distributed_loads` element-by-element from the current aero
+loads at the blade's radial stations. For each GXBeam element, builds a
+`GXBeam.DistributedLoads` whose `fy(s)` and `fz(s)` are 1D interpolants of
+`Fy` and `-Fx` over `blade.r`, evaluated on the element's arc-length
+sub-range `[s1, s2]` defined by the bracketing assembly points.
 
-#         Fzfit = fit(blade.r, -fx)  
-#         Fyfit = fit(blade.r, fy) 
-#         # Mxfit = fit(blade.r, Mx)
-#     elseif isa(Fx[1], ForwardDiff.Dual)
-#         # println("Entered cleansing function..")
-#         fx = zeros(length(Fx))
-#         fy = zeros(length(Fx))
-#         # mx = zeros(length(Fx))
+When `Fx` carries dual numbers (`ForwardDiff.Dual` or
+`ReverseDiff.TrackedReal`), the loads are first run through
+`GXBeam.dual_safe_copy!` to strip tracking before interpolation —
+preserving the dual seed without confusing GXBeam's load builder.
 
-#         GXBeam.dual_safe_copy!(fx, Fx)
-#         GXBeam.dual_safe_copy!(fy, Fy)
-#         # GXBeam.dual_safe_copy!(fx, Fx)
+Mutates `distributed_loads` in place. `Mx` is currently accepted but not
+applied (bending moment coupling is not yet wired in).
 
-#         Fzfit = fit(blade.r, -fx)  
-#         Fyfit = fit(blade.r, fy) 
-#         # Mxfit = fit(blade.r, Mx)
-#     else
-#         Fzfit = fit(blade.r, -Fx)  
-#         Fyfit = fit(blade.r, Fy) 
-#         # Mxfit = fit(blade.r, Mx)
-#     end
-
-
-#     for ielem = eachindex(assembly.elements)
-#         # r1 = assembly.points[ielem][1] #Todo,: I want a vector of just lengths, of the points. Not just the X distance. 
-#         # r2 = assembly.points[ielem+1][1]
-#         r1 = norm(assembly.points[ielem])
-#         r2 = norm(assembly.points[ielem+1])
-#         # @show typeof(r1), typeof(r2) #Correct types
-#         distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy_follower = (s) -> Fyfit(s), fz_follower = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s) #Todo: Bending moment isn't coupled in!!!
-#         # distributed_loads[ielem] = GXBeam.DistributedLoads(assembly, ielem; fy = (s) -> Fyfit(s), fz = (s) -> Fzfit(s), s1=r1, s2=r2) #, mx = (s) -> Mxfit(s)
-#         #todo: There is a slight problem here, if changing from follower loads to dead loads does absolutely nothing... then I'm not sure that what Taylor says they are doing is what they are actually doing. I need to look into that behavior. -> He applies the rotation matrix to the follower loads... And it looks like he does it correctly, or rather 
-#     end
-
-# end
-
-
+**Arguments**
+- `distributed_loads::Dict{Int, GXBeam.DistributedLoads}`: per-element load dict to fill.
+- `Fx`, `Fy`: per-station aerodynamic force components along the blade.
+- `Mx`: per-station moment (accepted but unused — see note above).
+- `blade::Blade`: blade providing the radial-station vector `blade.r`.
+- `assembly::GXBeam.Assembly`: assembly whose elements will receive loads.
+- `fit`: 1D interpolant constructor taking `(snew, x, y)` signature (default `DS.linear`).
+"""
 function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.linear)
 
     #Todo: The problem here is that I'm creating a new interpolation struct every iteration... which is taking a significant amount of time. So I need to rethink how this is being done. If I'm going to use an arbitrary interpolation like this, then I need to pass the interpolation from timestep to time step and update it. Otherwise, I need to manually interpolate (without a functor). -> I think the function approach should work well here. 
@@ -439,7 +482,6 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.l
     #todo: I might need to extract the value out of Fx, Fy, and Mx if there is a tracked real present. 
     # @show eltype(Fx)
     if isa(Fx[1], ReverseDiff.TrackedReal)
-        # println("Entered cleansing function..")
         fz = zeros(length(Fx)) #TODO: Allocation every time step!!!
         fy = zeros(length(Fx))
         # mx = zeros(length(Fx))
@@ -449,7 +491,6 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.l
         # GXBeam.dual_safe_copy!(fx, Fx)
 
     elseif isa(Fx[1], ForwardDiff.Dual)
-        # println("Entered cleansing function..")
         fz = zeros(length(Fx))
         fy = zeros(length(Fx))
         # mx = zeros(length(Fx))
@@ -461,8 +502,6 @@ function update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly; fit=DS.l
     else
         fz = -Fx
         fy = Fy
-        # Fzfit = fit(blade.r, -Fx)  
-        # Fyfit = fit(blade.r, Fy) 
         # Mxfit = fit(blade.r, Mx)
     end
 
@@ -489,6 +528,20 @@ end
 
 
 
+"""
+    get_blade_weight(assembly) -> Float64
+
+Estimate the blade mass per unit length integrated along the assembly's
+radial coordinate via the trapezoidal rule. Uses each element's
+`mass[1,1]` entry (translational inertia along the first axis) as the
+linear mass density at the element's midpoint.
+
+**Arguments**
+- `assembly::GXBeam.Assembly`: assembly with populated element mass matrices.
+
+**Returns**
+- Integrated blade mass (units follow the element mass-matrix convention).
+"""
 function get_blade_weight(assembly::GXBeam.Assembly)
 
     n = length(assembly.elements)

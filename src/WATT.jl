@@ -3,9 +3,8 @@ module WATT
 using FLOWMath, LinearAlgebra, StaticArrays, NLsolve, UnPack
 using CCBlade, GXBeam, DynamicStallModels
 using ImplicitAD, ForwardDiff, ReverseDiff
-using DelimitedFiles #Todo: Why is this here?
+using DelimitedFiles #Needed for reading Turbsim files. 
 using RecipesBase
-#Todo: Add the solution parameters as arguments to the user functions.
 
 # Types
 export Rotor, Blade
@@ -33,18 +32,14 @@ include("./utils.jl")
 include("./types.jl")
 include("./environments.jl")
 include("./mesh.jl")
-include("./bem.jl")
+include("./bemt.jl")
 include("./dynamicstallmodels.jl")
 include("./gxbeam.jl")
 
 
 ### Couplings
 include("./aero_only.jl")
+include("./static.jl")
 include("./aerostructural.jl")
-
-# include("../dev/indicialgxbeam.jl")
-
-include("./static.jl")  
-
 
 end # module

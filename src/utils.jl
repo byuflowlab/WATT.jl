@@ -1,5 +1,19 @@
 
 
+"""
+    nearestto(xvec, x) -> (minval, minidx)
+
+Find the element of `xvec` closest in value to `x` and return both the
+value and its index.
+
+**Arguments**
+- `xvec::AbstractVector`: vector to search.
+- `x::Number`: target value.
+
+**Returns**
+- `minval`: the entry of `xvec` nearest to `x`.
+- `minidx::Int`: its index in `xvec`.
+"""
 function nearestto(xvec, x)
     mins = abs.(xvec.-x)
     minval, minidx = findmin(mins)
@@ -7,6 +21,20 @@ function nearestto(xvec, x)
     return minval, minidx
 end
 
+"""
+    dualcopy(x) -> Vector
+
+Copy `x` while preserving any AD tracking attached to its elements. When
+`x` carries `ForwardDiff.Dual` or `ReverseDiff.TrackedReal` entries, the
+result is a new `Vector` with the same dual element type so the tape /
+seed survives. Falls back to `deepcopy` otherwise.
+
+**Arguments**
+- `x::AbstractVector`: vector whose element type may carry AD tracking.
+
+**Returns**
+- A copy of `x` with AD tracking preserved when present.
+"""
 function dualcopy(x)
     if isa(x[1], ReverseDiff.TrackedReal) || isa(x[1], ForwardDiff.Dual)
         TF = typeof(x[1])
@@ -23,10 +51,30 @@ function dualcopy(x)
     end
 end
 
+"""
+    getfieldnames(obj) -> Tuple{Symbol}
+
+Convenience wrapper around `fieldnames(typeof(obj))`. Lets callers obtain
+the field-name tuple of a value without first reaching for its type.
+"""
 function getfieldnames(obj)
     return fieldnames(typeof(obj))
 end
 
+"""
+    compare_fieldnames(obj1, obj2) -> Vector{Bool}
+
+Element-wise `isapprox` comparison of the fields of two same-typed
+structs. Returns a `Vector{Bool}` aligned with `getfieldnames(obj1)` —
+`true` for fields that match, `false` otherwise. If the two objects are
+not of the same type, warns and returns all-`false`.
+
+**Arguments**
+- `obj1`, `obj2`: values to compare. Expected to share a concrete type.
+
+**Returns**
+- `Vector{Bool}` of per-field match flags.
+"""
 function compare_fieldnames(obj1, obj2)
     
     names = getfieldnames(obj1)
@@ -51,6 +99,18 @@ function compare_fieldnames(obj1, obj2)
 end
 
 
+"""
+    isnanvec(vec) -> Bool
+
+Short-circuiting check for any `NaN` entry in `vec`. Returns `true` as
+soon as one is found.
+
+**Arguments**
+- `vec::AbstractVector`: vector to scan.
+
+**Returns**
+- `true` if any element is `NaN`, `false` otherwise.
+"""
 function isnanvec(vec)
     for i=1:length(vec)
         if isnan(vec[i])
@@ -61,6 +121,20 @@ function isnanvec(vec)
 end
 
 
+"""
+    derivative_me(sol, tvec) -> Matrix
+
+Evaluate an ODE solution `sol` at `tvec`, then differentiate each
+component column-wise using an Akima spline through the sampled values.
+
+**Arguments**
+- `sol`: callable solution object (`sol(tvec)` must return a matrix-like result).
+- `tvec::AbstractVector`: time points to evaluate / differentiate at.
+
+**Returns**
+- `Matrix` with the same `size(sol(tvec)')` whose columns are the time
+  derivatives of the corresponding components of the solution.
+"""
 function derivative_me(sol, tvec)
     solatt = sol(tvec)
     x = Array(solatt)'
@@ -74,6 +148,19 @@ function derivative_me(sol, tvec)
     return du
 end
 
+"""
+    mat_derivative(data, tvec) -> Matrix
+
+Column-wise time derivative of a sampled-signal matrix `data` (rows =
+time, columns = signals) using an Akima spline through each column.
+
+**Arguments**
+- `data::AbstractMatrix`: `length(tvec) × n` matrix of samples.
+- `tvec::AbstractVector`: time points corresponding to the rows of `data`.
+
+**Returns**
+- `Matrix` of the same shape as `data` holding the per-column derivatives.
+"""
 function mat_derivative(data, tvec)
     m,n = size(data)
 
@@ -87,6 +174,21 @@ function mat_derivative(data, tvec)
 end
 
 
+"""
+    linear_interp(xnew, x0, x1, y0, y1) -> Number
+
+Single-point linear interpolation between `(x0, y0)` and `(x1, y1)`
+evaluated at `xnew`. No bounds check — extrapolates if `xnew` lies
+outside `[x0, x1]`.
+
+**Arguments**
+- `xnew`: location to evaluate at.
+- `x0`, `x1`: bracketing x-coordinates.
+- `y0`, `y1`: corresponding y-values.
+
+**Returns**
+- Interpolated value at `xnew`.
+"""
 function linear_interp(xnew, x0, x1, y0, y1)
     top = y0*(x1-xnew) + y1*(xnew-x0)
     bot = x1-x0
@@ -94,121 +196,13 @@ function linear_interp(xnew, x0, x1, y0, y1)
 end
 
 
-# """
-#     brent_init(f, a, b, x0; args=(), atol=2e-12, rtol=4*eps(), maxiter=100)
+"""
+    rotate_x(alpha_x) -> Matrix{Float64}
 
-# As Brent's method from FLOWMath, but with an initial guess. 
-
-# **Inputs**
-# """
-# function brent_init(f, a, b, x0; args=(), atol=2e-12, rtol=4*eps(), maxiter=100)
-
-#     fx0 = f(x0)
-#     if isapprox(fx0, 0; atol, rtol)
-#         return x0, (iter=0, fcalls=1, flag="CONVERGED")
-#     end
-
-#     fa = f(a)
-#     fb = f(b)
-
-#     #Todo: I need to come up with a way to select out of the three spots which bound to use. -> Instead of creating a new function... I could just check if x0 is inbetween a and b outside of the loop. If it is, then I can check if it is a zero. If not, then replace one of the bounds into Brent's method. 
-#     if a<x0<b && fa*fx0<0
-#         xpre = a; xcur = b
-#     elseif x0<a
-#         xpre = a; xcur = b
-#     elseif b<x0
-#         xpre = a; xcur = b
-#     else #Original 
-#         xpre = a; xcur = b
-#     end
-    
-#     # xblk = 0.0; fblk = 0.0; spre = 0.0; scur = 0.0
-#     error_num = "INPROGRESS"
-
-#     fpre = f(xpre, args...)
-#     fcur = f(xcur, args...)
-#     xblk = zero(fpre); fblk = zero(fpre); spre = zero(fpre); scur = zero(fpre)
-#     funcalls = 3
-#     iterations = 0
-    
-#     if fpre*fcur > 0
-#         error_num = "SIGNERR"
-#         return 0.0, (iter=iterations, fcalls=funcalls, flag=error_num)
-#     end
-#     if fpre == zero(fpre)
-#         error_num = "CONVERGED"
-#         return xpre, (iter=iterations, fcalls=funcalls, flag=error_num)
-#     end
-#     if fcur == zero(fcur)
-#         error_num = "CONVERGED"
-#         return xcur, (iter=iterations, fcalls=funcalls, flag=error_num)
-#     end
-
-#     for i = 1:maxiter
-#         iterations += 1
-#         if fpre*fcur < 0
-#             xblk = xpre
-#             fblk = fpre
-#             spre = scur = xcur - xpre
-#         end
-#         if abs(fblk) < abs(fcur)
-#             xpre = xcur
-#             xcur = xblk
-#             xblk = xpre
-
-#             fpre = fcur
-#             fcur = fblk
-#             fblk = fpre
-#         end
-
-#         delta = (atol + rtol*abs(xcur))/2
-#         sbis = (xblk - xcur)/2
-#         if fcur == zero(fcur) || abs(sbis) < delta
-#             error_num = "CONVERGED"
-#             return xcur, (iter=iterations, fcalls=funcalls, flag=error_num)
-#         end
-
-#         if abs(spre) > delta && abs(fcur) < abs(fpre)
-#             if xpre == xblk
-#                 # interpolate
-#                 stry = -fcur*(xcur - xpre)/(fcur - fpre)
-#             else
-#                 # extrapolate
-#                 dpre = (fpre - fcur)/(xpre - xcur)
-#                 dblk = (fblk - fcur)/(xblk - xcur)
-#                 stry = -fcur*(fblk*dblk - fpre*dpre)/(dblk*dpre*(fblk - fpre))
-#             end
-#             if 2*abs(stry) < min(abs(spre), 3*abs(sbis) - delta)
-#                 # good short step
-#                 spre = scur
-#                 scur = stry
-#             else
-#                 # bisect
-#                 spre = sbis
-#                 scur = sbis
-#             end
-#         else 
-#             # bisect
-#             spre = sbis
-#             scur = sbis
-#         end
-
-#         xpre = xcur; fpre = fcur
-#         if abs(scur) > delta
-#             xcur += scur
-#         else
-#             xcur += (sbis > 0 ? delta : -delta)
-#         end
-
-#         fcur = f(xcur, args...)
-#         funcalls += 1
-#     end
-#     error_num = "CONVERR"
-#     return xcur, (iter=iterations, fcalls=funcalls, flag=error_num)
-# end
-
-
-
+Build the 3×3 right-handed rotation matrix for an angle `alpha_x` about
+the X axis. See [`rotate_x(x, y, z, theta; T=false)`](@ref) for the
+allocation-free per-component version.
+"""
 function rotate_x(alpha_x)
     return [
         1.0     0.0             0.0;
@@ -217,15 +211,20 @@ function rotate_x(alpha_x)
 end
 
 """
-    rotate_x(x, y, z, theta; T=false) -> xnew, ynew, znew
+    rotate_x(x, y, z, theta; T=false) -> (xnew, ynew, znew)
 
-Rotate the vector x, y, z by theta about the X axis.
-Use T to calculate the transpose (inverse). 
+Rotate the vector `(x, y, z)` by `theta` about the X axis without
+allocating an intermediate matrix.
 
 **Arguments**
-- `x`, `y`, `z::Number`: The x, y, and z components of the vector
-- `theta::Number`: The rotation angle (radians). 
-- `T::Bool`: A flag of whether to calculate the rotation or inverse rotation. 
+- `x`, `y`, `z::Number`: components of the input vector.
+- `theta::Number`: rotation angle (rad).
+
+**Keyword Arguments**
+- `T::Bool = false`: when `true`, apply the transposed (inverse) rotation.
+
+**Returns**
+- `(xnew, ynew, znew)`: components of the rotated vector.
 """
 function rotate_x(x, y, z, theta; T::Bool=false)
 
@@ -244,6 +243,13 @@ function rotate_x(x, y, z, theta; T::Bool=false)
     end
 end
 
+"""
+    rotate_y(alpha_y) -> Matrix{Float64}
+
+Build the 3×3 right-handed rotation matrix for an angle `alpha_y` about
+the Y axis. See [`rotate_y(x, y, z, theta; T=false)`](@ref) for the
+allocation-free per-component version.
+"""
 function rotate_y(alpha_y)
     return [cos(alpha_y) 0 sin(alpha_y);
             0.0 1.0 0.0;
@@ -251,15 +257,20 @@ function rotate_y(alpha_y)
 end
 
 """
-    rotate_y(x, y, z, theta; T=false) -> xnew, ynew, znew
+    rotate_y(x, y, z, theta; T=false) -> (xnew, ynew, znew)
 
-Rotate the vector x, y, z by theta about the Y axis.
-Use T to calculate the transpose (inverse). 
+Rotate the vector `(x, y, z)` by `theta` about the Y axis without
+allocating an intermediate matrix.
 
 **Arguments**
-- `x`, `y`, `z::Number`: The x, y, and z components of the vector
-- `theta::Number`: The rotation angle (radians). 
-- `T::Bool`: A flag of whether to calculate the rotation or inverse rotation. 
+- `x`, `y`, `z::Number`: components of the input vector.
+- `theta::Number`: rotation angle (rad).
+
+**Keyword Arguments**
+- `T::Bool = false`: when `true`, apply the transposed (inverse) rotation.
+
+**Returns**
+- `(xnew, ynew, znew)`: components of the rotated vector.
 """
 function rotate_y(x, y, z, theta; T::Bool=false)
 
@@ -278,6 +289,13 @@ function rotate_y(x, y, z, theta; T::Bool=false)
     end
 end
 
+"""
+    rotate_z(alpha_z) -> Matrix{Float64}
+
+Build the 3×3 right-handed rotation matrix for an angle `alpha_z` about
+the Z axis. See [`rotate_z(x, y, z, theta; T=false)`](@ref) for the
+allocation-free per-component version.
+"""
 function rotate_z(alpha_z)
     return [cos(alpha_z) -sin(alpha_z) 0.0;
             sin(alpha_z) cos(alpha_z) 0.0;
@@ -285,15 +303,20 @@ function rotate_z(alpha_z)
 end
 
 """
-    rotate_z(x, y, z, theta; T=false) -> xnew, ynew, znew
+    rotate_z(x, y, z, theta; T=false) -> (xnew, ynew, znew)
 
-Rotate the vector x, y, z by theta about the Z axis.
-Use T to calculate the transpose (inverse). 
+Rotate the vector `(x, y, z)` by `theta` about the Z axis without
+allocating an intermediate matrix.
 
 **Arguments**
-- `x`, `y`, `z::Number`: The x, y, and z components of the vector
-- `theta::Number`: The rotation angle (radians). 
-- `T::Bool`: A flag of whether to calculate the rotation or inverse rotation. 
+- `x`, `y`, `z::Number`: components of the input vector.
+- `theta::Number`: rotation angle (rad).
+
+**Keyword Arguments**
+- `T::Bool = false`: when `true`, apply the transposed (inverse) rotation.
+
+**Returns**
+- `(xnew, ynew, znew)`: components of the rotated vector.
 """
 function rotate_z(x, y, z, theta; T::Bool=false)
 
@@ -314,6 +337,24 @@ end
 
 
 
+"""
+    rotate_vector(x, y, z, theta_x, theta_y, theta_z; forward=true) -> NTuple{3}
+
+Apply the composite Z–Y–X intrinsic rotation
+`Rz(theta_z) · Ry(theta_y) · Rx(theta_x)` to the input vector
+`(x, y, z)`. Pass `forward=false` to apply the transpose (inverse)
+rotation instead.
+
+**Arguments**
+- `x`, `y`, `z`: vector components.
+- `theta_x`, `theta_y`, `theta_z`: rotation angles about the X, Y, Z axes (rad).
+
+**Keyword Arguments**
+- `forward::Bool = true`: when `false`, applies the transposed rotation.
+
+**Returns**
+- `(x_new, y_new, z_new)`: rotated vector components.
+"""
 function rotate_vector(x, y, z, theta_x, theta_y, theta_z; forward::Bool=true)
     sx, cx = sincos(theta_x)
     sy, cy = sincos(theta_y)
@@ -334,6 +375,18 @@ function rotate_vector(x, y, z, theta_x, theta_y, theta_z; forward::Bool=true)
 
 end
 
+"""
+    cross(a, b) -> NTuple{3}
+
+Tuple-returning 3D cross product `a × b`. Avoids the array allocation of
+`LinearAlgebra.cross` when only the scalar components are needed.
+
+**Arguments**
+- `a`, `b`: indexable 3-component vectors.
+
+**Returns**
+- `(i, j, k)`: the three components of `a × b`.
+"""
 function cross(a, b) #Todo: Test this
     i = a[2]*b[3] - a[3]*b[2]
     j = a[3]*b[1] - a[1]*b[3]

@@ -4,7 +4,7 @@ AD compatibility tests, gated on ENV["WATT_AD_TESTS"]=="true".
 Two layers:
 
 1. BEM-level (cheap): ForwardDiff and ReverseDiff propagate through
-   `solve_BEM!` via the ImplicitAD wrapping of the BEM residual. Verified
+   `solve_BEMT` via the ImplicitAD wrapping of the BEM residual. Verified
    against central finite differences to ~1e-10.
 
 2. Coupled-solver level (expensive): ForwardDiff propagates through
@@ -192,7 +192,7 @@ end
     # BEM-level (cheap, no GXBeam) — verifies ImplicitAD wrapping of the
     # BEM residual is correct.
     # -----------------------------------------------------------------
-    @testset "ForwardDiff through solve_BEM!" begin
+    @testset "ForwardDiff through solve_BEMT" begin
         idx = 10
         Vx = 10.0
         Vy = (10.0 * 7.55 / blade_ad.rtip) * blade_ad.r[idx]
@@ -204,7 +204,7 @@ end
                              blade_ad.xcp, blade_ad.airfoils;
                              rhub=blade_ad.rhub, rtip=blade_ad.rtip)
             xv = Vector{typeof(s)}(undef, 11)
-            WATT.solve_BEM!(rotor_ad, bld, env_ad, idx, Vx, Vy, 0.0, xv).phi
+            WATT.solve_BEMT(rotor_ad, bld, env_ad, idx, Vx, Vy, 0.0, xv).phi
         end
         d_ad = ForwardDiff.derivative(bem_phi_scale, 1.0)
         d_fd = fd_deriv(bem_phi_scale, 1.0)
@@ -213,7 +213,7 @@ end
         # pitch
         bem_phi_pitch = function(p)
             xv = Vector{typeof(p)}(undef, 11)
-            WATT.solve_BEM!(rotor_ad, blade_ad, env_ad, idx, Vx, Vy, p, xv).phi
+            WATT.solve_BEMT(rotor_ad, blade_ad, env_ad, idx, Vx, Vy, p, xv).phi
         end
         d_ad = ForwardDiff.derivative(bem_phi_pitch, 0.0)
         d_fd = fd_deriv(bem_phi_pitch, 0.0)
@@ -221,7 +221,7 @@ end
     end
 
 
-    @testset "ReverseDiff through solve_BEM!" begin
+    @testset "ReverseDiff through solve_BEMT" begin
         idx = 10
         Vx = 10.0
         Vy = (10.0 * 7.55 / blade_ad.rtip) * blade_ad.r[idx]
@@ -233,7 +233,7 @@ end
                              blade_ad.xcp, blade_ad.airfoils;
                              rhub=blade_ad.rhub, rtip=blade_ad.rtip)
             xv = Vector{typeof(s)}(undef, 11)
-            WATT.solve_BEM!(rotor_ad, bld, env_ad, idx, Vx, Vy, 0.0, xv).phi
+            WATT.solve_BEMT(rotor_ad, bld, env_ad, idx, Vx, Vy, 0.0, xv).phi
         end
         g    = ReverseDiff.gradient(bem_phi_scale_vec, [1.0])
         d_fd = fd_deriv(s -> bem_phi_scale_vec([s]), 1.0)

@@ -147,23 +147,14 @@ function fixedpoint!(aerostates, gxstates, azimuth0, rotor::Rotor, env::Environm
 
     airfoils = blade.airfoils
 
-    # @infiltrate
-    # gxstate = nothing
-
-
     for i = 1:iterations
         ###BEMT solution 
         for j = 1:na
             ### Update base inflow velocities
             Vx, Vy = get_aerostructural_velocities(rotor, blade, env, 0.0, j, azimuth0, mesh.delta[j], mesh.def_theta[j], mesh.aerov[j])
-
-            # @infiltrate
-
             
-            #todo: Write a solver that is initialized with the previous inflow angle. -> I don't think this matters. 
-            
-            ccout = solve_BEM!(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) 
-            # ccout = solve_BEM!(rotor, blade, env, phi_old[j], j, Vx, Vy, pitch, mesh.xcc) #todo: Need to create some sort of fail safe for not converging. 
+            ccout = solve_BEMT(rotor, blade, env, j, Vx, Vy, pitch, mesh.xcc) 
+            # ccout = solve_BEMT(rotor, blade, env, phi_old[j], j, Vx, Vy, pitch, mesh.xcc) #todo: Need to create some sort of fail safe for not converging. 
 
             phi[j] = ccout.phi
             alpha[j] = ccout.alpha
@@ -175,13 +166,7 @@ function fixedpoint!(aerostates, gxstates, azimuth0, rotor::Rotor, env::Environm
             Cm[j] = 0.0 #airfoils[j].cm(alpha[j]) #todo: Is this applied correctly? 
         end
 
-        # @infiltrate
-
-
-        #Todo. extract the loads from the BEMT solution. -> This is what I do in the DSM. 
         #Note: I don't use take_aero_step because these functions are different. 
-
-
         dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade, env, W) 
         update_forces!(distributed_loads, Fx, Fy, Mx, blade, assembly)
 
@@ -193,14 +178,7 @@ function fixedpoint!(aerostates, gxstates, azimuth0, rotor::Rotor, env::Environm
             prepp(p, Fx, Fy, Mx)
         end
 
-        # @show p[1]
-        # @show p[21]
-        # @show p[27]
-        # @show p[47]
-
         system, gxstates, converged = GXBeam.steady_state_analysis!(system, assembly; prescribed_conditions, distributed_loads, angular_velocity, gravity, pfunc, p, linear)  
-
-        # @show gxstate.elements[19].u[3]
 
         ### Update mesh transfer variables
         update_mesh!(blade, mesh, assembly, gxstates, env, 0., na)
