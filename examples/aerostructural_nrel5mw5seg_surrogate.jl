@@ -22,6 +22,8 @@ Adam Cardoza
 using WATT, OpenFASTTools, DynamicStallModels, GXBeam
 using StaticArrays, StructArrays, JLD2
 using LinearAlgebra
+using FLOWMath
+using Printf
 using Plots
 
 const of = OpenFASTTools
@@ -275,6 +277,10 @@ function WATT.encode_initial(surr::ConditionedKoopman, u0_struct::WATT.Surrogate
     end
     u_regrid = Matrix{Float64}(undef, N_REGRID, N_SEL)
     for k in 1:N_SEL
+        # Hermite-regrid each component from np structural points → 6 surrogate
+        # nodes, then SCALE (multiply) by NORM_SCALES_VEC[k] to enter the
+        # network's scaled-units convention. Matches training data prep:
+        #   u_scaled = u_phys .* scale_vec
         u_regrid[:, k] = hermite_regrid(u_raw[:, k], surr.s_state_infer, surr.s_regrid) .*
                          NORM_SCALES_VEC[k]
     end
@@ -285,6 +291,9 @@ end
 function WATT.step_latent(surr::ConditionedKoopman, z, f_per_element::AbstractMatrix)
     f_regrid = Matrix{Float64}(undef, N_REGRID, 6)
     for k in 1:6
+        # Force scaling: divide by FNORM (=1e4) to match training (`f_raw ./ fnorm`),
+        # then Hermite-regrid each load component from nelem element midpoints
+        # → 6 surrogate nodes using s_elem_infer (the WATT-side element grid).
         f_regrid[:, k] = hermite_regrid(Float64.(f_per_element[:, k]) ./ FNORM,
                                          surr.s_elem_infer, surr.s_regrid)
     end
@@ -297,11 +306,15 @@ end
 function WATT.decode(surr::ConditionedKoopman, z)
     # Promote the output to Float64 so it matches the host blade/assembly's
     # element type (run_sim_surrogate! infers history `TF` from `blade.c[1]`).
-    u_flat = film_mlp_forward(z, surr.ps_decoder, surr.dec_g, surr.dec_b, mish)
-    u_scaled = reshape(u_flat, N_REGRID, N_SEL)
+    u_flat   = film_mlp_forward(z, surr.ps_decoder, surr.dec_g, surr.dec_b, mish)
+    u_scaled = reshape(u_flat, N_REGRID, N_SEL)   # (6 surrogate nodes × 18 components) in SCALED units
     np = length(surr.s_state_infer)
     u_pts = Matrix{Float64}(undef, np, N_SEL)
     for k in 1:N_SEL
+        # DESCALE: divide by NORM_SCALES_VEC[k] to leave scaled-units land and
+        # return to physical units. Then Hermite-regrid each component from
+        # 6 surrogate nodes → np structural points.
+        # (Scale and regrid commute since NORM_SCALES_VEC[k] is a scalar.)
         u_pts[:, k] = hermite_regrid(u_scaled[:, k] ./ NORM_SCALES_VEC[k],
                                       surr.s_regrid, surr.s_state_infer)
     end
@@ -386,18 +399,70 @@ println("Conditioned surrogate built: nlatent=$(surr.nlatent)  ncp=$(surr.n_comp
 # ---------------------------------------------------------------------------
 tvec = collect(0:0.05:10.0)   # dt matches training (0.05 s)
 
+### Baseline GXBeam simulation FIRST — its IC state is needed to seed the
+### surrogate, since the training data's first frame is the GXBeam
+### structural equilibrium (not a zero-state).
+println("\n=== Running GXBeam baseline ===")
+aerostates_gx, gxhistory, mesh_gx = WATT.initialize_sim(blade, assembly, tvec; verbose=true)
+WATT.run_sim!(rotor, blade, mesh_gx, env, tvec, aerostates_gx, gxhistory; verbose=true)
+
+# Convert gxhistory[1] → SurrogateAssemblyState, matching the training-data
+# extraction convention in unsteady_analysis (Cardoza2026):
+#   u/theta/V/Omega come straight from points
+#   F/M at the root point = -reaction (negated)
+#   F/M at interior points (j≥2) = Akima(element midpoint Fi/Mi)
+function gx_state_to_surrogate(gx::GXBeam.AssemblyState, assembly::GXBeam.Assembly)
+    np = length(assembly.points)
+    nelem = length(assembly.elements)
+    span_elem = Float64[norm(e.x) for e in assembly.elements]
+    span_node = Float64[norm(p) for p in assembly.points]
+
+    Fi = zeros(Float64, nelem, 3)
+    Mi = zeros(Float64, nelem, 3)
+    for j in 1:nelem
+        Fi[j, :] = gx.elements[j].Fi
+        Mi[j, :] = gx.elements[j].Mi
+    end
+
+    F_pts = zeros(Float64, np, 3)
+    M_pts = zeros(Float64, np, 3)
+    F_pts[1, :] = -gx.points[1].F
+    M_pts[1, :] = -gx.points[1].M
+    for k in 1:3
+        Fi_spl = FLOWMath.Akima(span_elem, Fi[:, k])
+        Mi_spl = FLOWMath.Akima(span_elem, Mi[:, k])
+        for j in 2:np
+            F_pts[j, k] = Fi_spl(span_node[j])
+            M_pts[j, k] = Mi_spl(span_node[j])
+        end
+    end
+
+    points = Vector{WATT.SurrogatePointState{Float64}}(undef, np)
+    for j in 1:np
+        p = gx.points[j]
+        points[j] = WATT.SurrogatePointState{Float64}(
+            SVector{3,Float64}(p.u...),
+            SVector{3,Float64}(p.theta...),
+            SVector{3,Float64}(p.V...),
+            SVector{3,Float64}(p.Omega...),
+            SVector{3,Float64}(F_pts[j, 1], F_pts[j, 2], F_pts[j, 3]),
+            SVector{3,Float64}(M_pts[j, 1], M_pts[j, 2], M_pts[j, 3]),
+        )
+    end
+    return WATT.SurrogateAssemblyState{Float64}(points)
+end
+
+u0_struct_gx = gx_state_to_surrogate(gxhistory[1], assembly)
+
+
+
+### Now run the surrogate, seeded with the GXBeam IC.
+println("\n=== Running surrogate ===")
 aerostates, surr_history, mesh =
     WATT.initialize_sim_surrogate(blade, assembly, tvec; verbose=true)
 
-WATT.run_sim_surrogate!(rotor, blade, mesh, env, tvec, aerostates, surr_history, surr;
-                        verbose=true)
-
-# ---------------------------------------------------------------------------
-# Baseline GXBeam simulation on the same blade / assembly / env / tvec
-# ---------------------------------------------------------------------------
-println("\n=== Running GXBeam baseline for comparison ===")
-aerostates_gx, gxhistory, mesh_gx = WATT.initialize_sim(blade, assembly, tvec; verbose=true)
-WATT.run_sim!(rotor, blade, mesh_gx, env, tvec, aerostates_gx, gxhistory; verbose=true)
+WATT.run_sim_surrogate!(rotor, blade, mesh, env, tvec, aerostates, surr_history, surr; u0_struct=u0_struct_gx, verbose=true)
+# WATT.run_sim_surrogate!(rotor, blade, mesh, env, tvec, aerostates, surr_history, surr; verbose=true)
 
 # ---------------------------------------------------------------------------
 # Extract comparable quantities
@@ -416,6 +481,30 @@ root_M_x_surr  = [s.points[1].M[1]   for s in surr_history]
 tip_def_z_gx = [gx.points[end].u[3]   for gx in gxhistory]
 tip_F_y_gx   = [gx.elements[end].Fi[2] for gx in gxhistory]
 root_M_x_gx  = [-gx.points[1].M[1]    for gx in gxhistory]
+
+
+############ Compare initial states
+
+z0 = encode_initial(surr, u0_struct_gx)
+u0 = decode(surr, z0)
+
+
+println("Initial state comparison (surrogate decode of surrogate encode of GXBeam IC):")
+println("  - u0_struct_gx (GXBeam IC): $(u0_struct_gx.points[end].u)")
+println("  - u0 (surrogate decode):    $(u0.points[end].u)")
+println("  - surrogate initial state:  $(surr_history[1].points[end].u)")
+println("  - GXBeam initial state:     $(gxhistory[1].points[end].u)")
+
+
+
+
+
+
+
+
+
+
+
 
 # ---------------------------------------------------------------------------
 # Plot — surrogate vs GXBeam overlaid

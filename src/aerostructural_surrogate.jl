@@ -168,6 +168,12 @@ local variable inside the loop, so re-binding is AD-safe.
   / `x` already baked in by the caller).
 
 **Keyword Arguments**
+- `u0_struct::Union{Nothing, SurrogateAssemblyState} = nothing`: Initial
+  structural state passed to `encode_initial`. Default `nothing` uses an
+  at-rest zero state; pass a precomputed structural equilibrium (e.g.
+  the first slot of a GXBeam baseline run, converted via the user's
+  state-extraction convention) when the surrogate was trained on data
+  whose first frame is non-zero.
 - `pitch::Real = 0.0`
 - `solver::Solver = RK4()`
 - `g::Real = 9.81`
@@ -179,6 +185,7 @@ function run_sim_surrogate!(rotor::Rotor, blade::Blade, mesh::SurrogateMesh,
                             env::Environment, tvec,
                             aerostates::AeroStates, surr_history,
                             surr::AbstractStructuralSurrogate;
+                            u0_struct=nothing,
                             pitch=0.0, solver::Solver=RK4(), g=9.81, azimuth0=0.0,
                             verbose::Bool=false, speakiter::Int=100,
                             runtimeflag::Bool=false, runtimeiter::Int=speakiter,
@@ -206,7 +213,7 @@ function run_sim_surrogate!(rotor::Rotor, blade::Blade, mesh::SurrogateMesh,
     xds0   = view(xds, 1, :)
 
     if verbose
-        println("Calculating initial condition...")
+        println("Calculating initial surrogate condition...")
     end
 
     for j = 1:na
@@ -223,12 +230,16 @@ function run_sim_surrogate!(rotor::Rotor, blade::Blade, mesh::SurrogateMesh,
 
     azimuth[1] = azimuth0
 
-    ### Encode the at-rest IC into the latent space.
+    ### Encode the IC into the latent space.
+    # If the caller didn't supply one, default to the at-rest zero state.
+    # Surrogates trained on data whose first frame is a non-zero structural
+    # equilibrium (e.g. GXBeam's initialize_system! output) should be given
+    # that equilibrium here via the `u0_struct` kwarg.
     np = length(assembly.points)
     inittype = find_inittype(blade.c[1], blade.twist[1])
-    u0_struct = zero_surrogate_state(inittype, np)
-    z = encode_initial(surr, u0_struct)
-    surr_history[1] = decode(surr, z)
+    u0_ic = u0_struct === nothing ? zero_surrogate_state(inittype, np) : u0_struct
+    z = encode_initial(surr, u0_ic) #
+    surr_history[1] = decode(surr, z) #Todo: The zero struct doesn't map to a zero surrogate state after decode, at least with what's currently in the example. 
 
     update_mesh!(blade, mesh, assembly, surr_history[1], env, t0, na)
 
