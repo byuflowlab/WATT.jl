@@ -257,3 +257,94 @@ function StaticAeroStates{TF}(::UndefInitializer, na::Integer) where {TF}
         Vector{TF}(undef, na),
     )
 end
+
+
+"""
+    SurrogatePointState{TF}
+
+Per-structural-point state predicted by a structural surrogate.
+
+Duck-compatible with `GXBeam.PointState` on the three fields the aero
+coupling reads (`u`, `theta`, `V`); also carries `Omega`, `F`, `M` for
+downstream analyses (fatigue, failure checks).
+
+**Fields**
+- `u::SVector{3,TF}`     — linear displacement (aero coupling)
+- `theta::SVector{3,TF}` — Wiener–Milenkovic rotation (aero coupling)
+- `V::SVector{3,TF}`     — linear velocity (aero coupling)
+- `Omega::SVector{3,TF}` — angular velocity (post-processing)
+- `F::SVector{3,TF}`     — internal force (post-processing)
+- `M::SVector{3,TF}`     — internal moment (post-processing)
+"""
+struct SurrogatePointState{TF}
+    u::SVector{3,TF}
+    theta::SVector{3,TF}
+    V::SVector{3,TF}
+    Omega::SVector{3,TF}
+    F::SVector{3,TF}
+    M::SVector{3,TF}
+end
+
+"""
+    SurrogateAssemblyState{TF}
+
+Per-step assembly state produced by a structural surrogate's `decode`.
+Holds one [`SurrogatePointState`](@ref) per structural point.
+
+**Fields**
+- `points::Vector{SurrogatePointState{TF}}`
+"""
+struct SurrogateAssemblyState{TF}
+    points::Vector{SurrogatePointState{TF}}
+end
+
+Base.eltype(::SurrogateAssemblyState{TF}) where {TF} = TF
+Base.eltype(::Type{SurrogateAssemblyState{TF}}) where {TF} = TF
+
+"""
+    zero_surrogate_state(TF, np) -> SurrogateAssemblyState{TF}
+
+Allocate a `SurrogateAssemblyState{TF}` with `np` points, all fields zero.
+"""
+function zero_surrogate_state(::Type{TF}, np::Integer) where {TF}
+    z = SVector{3,TF}(zero(TF), zero(TF), zero(TF))
+    pts = [SurrogatePointState{TF}(z, z, z, z, z, z) for _ in 1:np]
+    return SurrogateAssemblyState{TF}(pts)
+end
+
+"""
+    AbstractStructuralSurrogate
+
+Supertype for user-supplied structural surrogates plugged into
+[`run_sim_surrogate!`](@ref). Concrete subtypes must implement the three
+pure methods `encode_initial`, `step`, and `decode`. See the
+`run_sim_surrogate!` docstring for the interface contract.
+"""
+abstract type AbstractStructuralSurrogate end
+
+"""
+    encode_initial(surr::AbstractStructuralSurrogate, u0_struct::SurrogateAssemblyState)
+
+Return the initial latent state `z0` from a physical-state IC on the
+structural points. Pure — must not mutate `surr`.
+"""
+function encode_initial end
+
+"""
+    step_latent(surr::AbstractStructuralSurrogate, z, f_per_element::AbstractMatrix)
+
+Advance the latent state one step under the per-element load matrix
+`f_per_element` (size `nelem × 6`, columns are `Fx, Fy, Fz, Mx, My, Mz`).
+Pure — returns the new latent state, must not mutate `surr` or `z`.
+
+Named `step_latent` (not `step`) to avoid shadowing `Base.step`.
+"""
+function step_latent end
+
+"""
+    decode(surr::AbstractStructuralSurrogate, z) -> SurrogateAssemblyState
+
+Decode the latent state `z` into a fresh [`SurrogateAssemblyState`](@ref)
+on the structural-point grid. Pure.
+"""
+function decode end

@@ -9,7 +9,9 @@ using RecipesBase
 # Types
 export Rotor, Blade
 export AeroStates, StaticAeroStates
-export AbstractSimMesh, SimMesh, AeroMesh, StaticMesh
+export AbstractSimMesh, SimMesh, AeroMesh, StaticMesh, SurrogateMesh
+export SurrogatePointState, SurrogateAssemblyState, AbstractStructuralSurrogate
+export encode_initial, step_latent, decode
 export RK4, BDF1
 
 # Environment
@@ -18,6 +20,7 @@ export environment, SimpleEnvironment
 # Simulation entry points
 export initialize_aero, simulate!
 export initialize_sim, run_sim!, run_sim
+export initialize_sim_surrogate, run_sim_surrogate!, run_sim_surrogate
 export initialize_static, fixedpoint!
 
 # Post-processing
@@ -41,5 +44,6 @@ include("./gxbeam.jl")
 include("./aero_only.jl")
 include("./static.jl")
 include("./aerostructural.jl")
+include("./aerostructural_surrogate.jl")
 
 end # module
