@@ -251,7 +251,7 @@ function solve_BEMT(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
 
     phi_geo = atan(Vx, Vy)
     if abs(phi_geo)<=epsilon
-        warn("The geometric inflow angle is approximately the same as the solution ϵ, which may cause the BEMT to fail.")
+        @warn("The geometric inflow angle is approximately the same as the solution ϵ, which may cause the BEMT to fail.")
     end
 
     ### quadrants

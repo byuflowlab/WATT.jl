@@ -24,6 +24,7 @@ using StaticArrays, StructArrays, JLD2
 using LinearAlgebra
 using FLOWMath
 using Printf
+using BenchmarkTools
 using Plots
 
 const of = OpenFASTTools
@@ -36,7 +37,7 @@ ofpath  = joinpath(datadir, "openfast")
 # Surrogate forward primitives (Lux-free reimplementation)
 # ---------------------------------------------------------------------------
 
-mish(x) = x * tanh(log1p(exp(x)))
+mish(x) = x * tanh(log1p(exp(x))) #Can't have lux in the namespace. 
 sigmoid(x) = one(x) / (one(x) + exp(-x))
 
 # Recursive cast of Lux NamedTuple parameter trees to Float64.
@@ -182,6 +183,17 @@ const FNORM     = 1e4
 const N_REGRID  = 6
 const N_SEL     = 18    # selected state components
 
+# Sign-convention switch:
+# WATT.run_sim! uses Ω_z = -env.RS (negative); the original Cardoza2026
+# unsteady_analysis training-data generator used Ω_z = +env.RS (positive).
+# Rigid-body V inherits the sign of Ω, so flipping one flips both.
+#
+#   true  → trained model expects the +Ω (training-original) convention;
+#           flip V and Ω at the WATT↔surrogate boundary so the encoder
+#           sees +Ω inputs and the decoder's +Ω outputs are flipped back.
+#   false → trained model already uses WATT's -Ω convention; no flip needed.
+const FLIP_V_OMEGA_AT_BOUNDARY = false
+
 # ---------------------------------------------------------------------------
 # Conditioned surrogate struct + AbstractStructuralSurrogate interface
 # ---------------------------------------------------------------------------
@@ -268,10 +280,11 @@ function WATT.encode_initial(surr::ConditionedKoopman, u0_struct::WATT.Surrogate
     u_raw = Matrix{Float64}(undef, np, N_SEL)
     for j in 1:np
         p = u0_struct.points[j]
+        s = FLIP_V_OMEGA_AT_BOUNDARY ? -1.0 : 1.0
         u_raw[j, 1:3]   = p.u
         u_raw[j, 4:6]   = p.theta
-        u_raw[j, 7:9]   = p.V
-        u_raw[j, 10:12] = p.Omega
+        u_raw[j, 7:9]   = s .* p.V
+        u_raw[j, 10:12] = s .* p.Omega
         u_raw[j, 13:15] = p.F
         u_raw[j, 16:18] = p.M
     end
@@ -319,14 +332,15 @@ function WATT.decode(surr::ConditionedKoopman, z)
                                       surr.s_regrid, surr.s_state_infer)
     end
     points = Vector{WATT.SurrogatePointState{Float64}}(undef, np)
+    s = FLIP_V_OMEGA_AT_BOUNDARY ? -1.0 : 1.0
     for j in 1:np
         points[j] = WATT.SurrogatePointState{Float64}(
-            SVector{3,Float64}(u_pts[j, 1],  u_pts[j, 2],  u_pts[j, 3]),   # u
-            SVector{3,Float64}(u_pts[j, 4],  u_pts[j, 5],  u_pts[j, 6]),   # theta
-            SVector{3,Float64}(u_pts[j, 7],  u_pts[j, 8],  u_pts[j, 9]),   # V
-            SVector{3,Float64}(u_pts[j, 10], u_pts[j, 11], u_pts[j, 12]),  # Omega
-            SVector{3,Float64}(u_pts[j, 13], u_pts[j, 14], u_pts[j, 15]),  # F
-            SVector{3,Float64}(u_pts[j, 16], u_pts[j, 17], u_pts[j, 18]),  # M
+            SVector{3,Float64}(  u_pts[j, 1],   u_pts[j, 2],   u_pts[j, 3]),   # u
+            SVector{3,Float64}(  u_pts[j, 4],   u_pts[j, 5],   u_pts[j, 6]),   # theta
+            SVector{3,Float64}(s*u_pts[j, 7], s*u_pts[j, 8], s*u_pts[j, 9]),   # V (flip iff flag)
+            SVector{3,Float64}(s*u_pts[j,10], s*u_pts[j,11], s*u_pts[j,12]),   # Omega (flip iff flag)
+            SVector{3,Float64}(  u_pts[j,13],   u_pts[j,14],   u_pts[j,15]),   # F
+            SVector{3,Float64}(  u_pts[j,16],   u_pts[j,17],   u_pts[j,18]),   # M
         )
     end
     return WATT.SurrogateAssemblyState{Float64}(points)
@@ -380,19 +394,108 @@ env      = environment(turbfile, rho, mu_air, a, omega, shearexp)
 # ---------------------------------------------------------------------------
 # Build the conditioned surrogate
 # ---------------------------------------------------------------------------
-surr_path = joinpath(datadir,
-    "global_model_selstates_0_1_2_6_7_8_12_13_14_18_19_20_24_25_26_27_28_29_x_jordan_film_globalKQ_svdstable_multidata_lux_20260522_121111.jld2")
+surr_path = joinpath(datadir, "model_new.jld2")
 
-# x_norm = zeros(nx) → training-set mean in normalized space. Replace with the
-# normalized design vector that actually corresponds to this NREL 5MW blade if
-# you have the design-to-x mapping from the surrogate's training pipeline.
-ckpt_meta = JLD2.load(surr_path, "nx")
-x_norm    = zeros(Float64, ckpt_meta)
+# For the seed-only model the training script sets x_mean=0 / x_std=1 and
+# feeds the FiLM hypernets the RAW design vector — NOT zeros. We pull that
+# exact x_b from the AE-IC diagnostic JLD2 the training-script sister script
+# (`x_jordan_lux_f64_seed_ae_ic_test.jl`) wrote out, so the FiLM conditioning
+# at inference is byte-identical to what the model was trained with.
+diag_path = joinpath(datadir, "ae_ic_diagnostic_new.jld2")
+diag      = JLD2.load(diag_path)
+x_b_true     = diag["x_b"]        # (nx, 1)  actual design vector used at train-time
+u_b_train    = diag["u_b_train"]  # (108, 1) scaled+regridded IC of training case 1
+enc_g_true   = diag["enc_g"]      # Vector{Matrix} (5 entries, (width_i, 1))
+enc_b_true   = diag["enc_b"]
+dec_g_true   = diag["dec_g"]
+dec_b_true   = diag["dec_b"]
+z0_true      = diag["z0"]         # (nlatent, 1)
+u_rec_true   = diag["u_rec"]      # (108, 1)
 
-surr = build_conditioned_koopman(surr_path, x_norm, assembly)
+x_norm = vec(x_b_true)
+surr   = build_conditioned_koopman(surr_path, x_norm, assembly)
 
 println("Conditioned surrogate built: nlatent=$(surr.nlatent)  ncp=$(surr.n_complex_pairs)  ",
         "nelem_infer=$(length(surr.s_elem_infer))  np=$(length(surr.s_state_infer))")
+
+# ---------------------------------------------------------------------------
+# Byte-comparison against the training-script ground truth
+# ---------------------------------------------------------------------------
+println("\n=== Byte-compare WATT reimplementation vs trained model ===")
+
+# (1) FiLM γ/β at every encoder & decoder layer
+function _layer_diff(label, mine_tuple, true_vec)
+    println("$label:")
+    for i in eachindex(mine_tuple)
+        mine = mine_tuple[i]
+        truth = true_vec[i]
+        if size(mine) != size(truth)
+            @warn "  layer $i: shape mismatch  mine=$(size(mine))  truth=$(size(truth))"
+            continue
+        end
+        d = maximum(abs.(mine .- truth))
+        @printf "  layer %d: shape=%s  max|Δ| = %.3e\n" i string(size(mine)) d
+    end
+end
+_layer_diff("encoder FiLM γ", surr.enc_g, enc_g_true)
+_layer_diff("encoder FiLM β", surr.enc_b, enc_b_true)
+_layer_diff("decoder FiLM γ", surr.dec_g, dec_g_true)
+_layer_diff("decoder FiLM β", surr.dec_b, dec_b_true)
+
+# (2) Encoder forward, *using the saved u_b_train* (eliminates preprocessing).
+z0_mine = film_mlp_forward(u_b_train, surr.ps_encoder, surr.enc_g, surr.enc_b, mish)
+@printf "\nencoder(u_b_train) :  max|Δz0|       = %.3e   shape=%s\n" maximum(abs.(z0_mine .- z0_true)) string(size(z0_mine))
+
+# (3) Decoder forward, *using the saved z0* (eliminates encoder dependence).
+u_rec_mine = film_mlp_forward(z0_true, surr.ps_decoder, surr.dec_g, surr.dec_b, mish)
+@printf "decoder(z0_true)   :  max|Δu_rec|    = %.3e   shape=%s\n" maximum(abs.(u_rec_mine .- u_rec_true)) string(size(u_rec_mine))
+
+# (4) Full AE round-trip using saved tensors (mine should match training residual).
+u_round_mine = film_mlp_forward(z0_mine, surr.ps_decoder, surr.dec_g, surr.dec_b, mish)
+@printf "decoder(my_z0)     :  max|u_round - u_b_train| (mine)  = %.3e\n" maximum(abs.(u_round_mine .- u_b_train))
+@printf "                      max|u_rec   - u_b_train| (truth) = %.3e\n" maximum(abs.(u_rec_true   .- u_b_train))
+
+println()
+println("If all four numbers are ≲ 1e-10:  WATT reimplementation is correct on the AE.")
+println("If (1) is large:  FiLM hyper-net path differs (layer ordering, target_widths, … ).")
+println("If (1)≈0 but (2) is large:  encoder MLP path differs (Dense/FiLM/activation order).")
+println("If (2)≈0 but (3) is large:  decoder MLP path differs.")
+
+# (5) Preprocessing check: does my encode_initial preprocessing of THIS WATT
+# run's GXBeam IC produce the same scaled+regridded 108-vector the training
+# data has at frame 1?  If yes → the IC environment matches and the only
+# remaining residual is the AE training error.  If no → this WATT example
+# is generating a different IC than the training data did (different Vrated /
+# TSR / TurbSim file / gravity / etc.), and the surrogate is being asked to
+# generalize to an out-of-distribution IC.
+
+function _u_flat_from_gx(u0_struct, surr)
+    np = length(u0_struct.points)
+    u_raw = Matrix{Float64}(undef, np, N_SEL)
+    for j in 1:np
+        p = u0_struct.points[j]
+        s = FLIP_V_OMEGA_AT_BOUNDARY ? -1.0 : 1.0
+        u_raw[j, 1:3]   = p.u
+        u_raw[j, 4:6]   = p.theta
+        u_raw[j, 7:9]   = s .* p.V
+        u_raw[j, 10:12] = s .* p.Omega
+        u_raw[j, 13:15] = p.F
+        u_raw[j, 16:18] = p.M
+    end
+    u_regrid = Matrix{Float64}(undef, N_REGRID, N_SEL)
+    for k in 1:N_SEL
+        u_regrid[:, k] = hermite_regrid(u_raw[:, k], surr.s_state_infer, surr.s_regrid) .*
+                         NORM_SCALES_VEC[k]
+    end
+    return reshape(u_regrid, N_REGRID * N_SEL, 1)
+end
+
+# The (5) preprocessing-vs-training check is deferred until after the GXBeam
+# baseline runs (we need `u0_struct_gx`). See block immediately following
+# the `u0_struct_gx = gx_state_to_surrogate(...)` line below.
+const _BAND_LABELS = ("u_x","u_y","u_z","θ_x","θ_y","θ_z",
+                      "V_x","V_y","V_z","Ω_x","Ω_y","Ω_z",
+                      "F_x","F_y","F_z","M_x","M_y","M_z")
 
 # ---------------------------------------------------------------------------
 # Simulate via the surrogate path
@@ -454,6 +557,21 @@ end
 
 u0_struct_gx = gx_state_to_surrogate(gxhistory[1], assembly)
 
+# --- (5) Preprocessing-vs-training byte check (now that u0_struct_gx exists) ---
+u_flat_mine = _u_flat_from_gx(u0_struct_gx, surr)
+@printf "\n(5) max|u_flat (this WATT IC) - u_b_train (training IC)|  = %.3e\n" maximum(abs.(u_flat_mine .- u_b_train))
+println("    Per-component-block summary (max|Δ| in scaled units):")
+for k in 1:N_SEL
+    rng = (k-1)*N_REGRID + 1 : k*N_REGRID
+    d   = maximum(abs.(u_flat_mine[rng] .- u_b_train[rng]))
+    @printf "      %s (%2d:%2d)  max|Δ| = %.3e   |truth|_max = %.3e\n" _BAND_LABELS[k] first(rng) last(rng) d maximum(abs.(u_b_train[rng]))
+end
+println()
+println("If (5) is ~0:  the AE residual you're seeing IS the trained model's IC AE limit.")
+println("If (5) is large:  this WATT example is generating a different IC than training.")
+println("                  The dominant bands tell you which physical quantity differs")
+println("                  (often Ω from a different rated_omega, or V from a different inflow).")
+
 
 
 ### Now run the surrogate, seeded with the GXBeam IC.
@@ -461,7 +579,7 @@ println("\n=== Running surrogate ===")
 aerostates, surr_history, mesh =
     WATT.initialize_sim_surrogate(blade, assembly, tvec; verbose=true)
 
-WATT.run_sim_surrogate!(rotor, blade, mesh, env, tvec, aerostates, surr_history, surr; u0_struct=u0_struct_gx, verbose=true)
+WATT.run_sim_surrogate!(rotor, blade, mesh, env, tvec, aerostates, surr_history, surr; u0_struct=u0_struct_gx, verbose=true) #Todo: I think I want it to initialize using GXBeam's IC state by default and if the user provides an initial state, then it uses that instead. 
 # WATT.run_sim_surrogate!(rotor, blade, mesh, env, tvec, aerostates, surr_history, surr; verbose=true)
 
 # ---------------------------------------------------------------------------
@@ -472,19 +590,14 @@ tip_def_z_surr = [s.points[end].u[3] for s in surr_history]
 tip_F_y_surr   = [s.points[end].F[2] for s in surr_history]
 root_M_x_surr  = [s.points[1].M[1]   for s in surr_history]
 
-# GXBeam baseline.
-# Training-data sign convention (see Cardoza2026 unsteady_analysis):
-#   u[:, 1, F/M] = -gxhistory.points[1].F/M    (root reaction, sign-flipped)
-#   u[:, j, F/M] = Akima-interp of element midpoint Fi/Mi at structural nodes (j ≥ 2)
-# Use elements[end].Fi/Mi at the tip and -points[1].M at the root to match the
-# surrogate's per-point output convention.
+# GXBeam baseline
 tip_def_z_gx = [gx.points[end].u[3]   for gx in gxhistory]
-tip_F_y_gx   = [gx.elements[end].Fi[2] for gx in gxhistory]
+# tip_F_y_gx   = [gx.elements[end].Fi[2] for gx in gxhistory] #Todo: I'm not sure this is making the same comparison. 
+tip_F_y_gx   = [gx.points[end].F[2] for gx in gxhistory] #Todo: I'm not sure this is making the same comparison. -> It's totally possible it could be either because the scaling on it. -> I'll have to compare, but my guess is it's this second one. -> If it is, I'll have to force the output to zero... cause physics.  
 root_M_x_gx  = [-gx.points[1].M[1]    for gx in gxhistory]
 
 
 ############ Compare initial states
-
 z0 = encode_initial(surr, u0_struct_gx)
 u0 = decode(surr, z0)
 
@@ -494,15 +607,6 @@ println("  - u0_struct_gx (GXBeam IC): $(u0_struct_gx.points[end].u)")
 println("  - u0 (surrogate decode):    $(u0.points[end].u)")
 println("  - surrogate initial state:  $(surr_history[1].points[end].u)")
 println("  - GXBeam initial state:     $(gxhistory[1].points[end].u)")
-
-
-
-
-
-
-
-
-
 
 
 
@@ -533,5 +637,39 @@ fplt = plot(tvec, tip_F_y_gx, label="GXBeam",
             title="Tip internal force (y)", lw=2, color=:black)
 plot!(fplt, tvec, tip_F_y_surr, label="Surrogate", lw=2, color=:crimson, linestyle=:dash)
 
-plt = plot(tipplt, loadplt, mplt, fplt, layout=(4, 1), size=(800, 1100))
+
+plt = plot(tipplt, loadplt, mplt, fplt, layout=(2, 2), size=(1200, 800))
 display(plt)
+
+# savefig(plt, joinpath("/Users/adamcardoza/.julia/dev/WATT/examples", "surrogate_comparison.png"))
+
+# ---------------------------------------------------------------------------
+# Benchmark: 100 s simulation, GXBeam vs surrogate
+# ---------------------------------------------------------------------------
+# Pre-allocate the buffers once each so we time only the inner mutating run!.
+# Both run_sim! and run_sim_surrogate! recompute the IC inside, so re-running
+# against the same buffers is well-defined (each sample starts from the IC).
+println("\n=== Benchmark: 100 s simulation (samples = 5) ===")
+bench_tvec = collect(0:0.05:100.0)
+println("  bench tvec length = $(length(bench_tvec))   dt = $(bench_tvec[2]-bench_tvec[1])")
+
+aerostates_bgx, gxhistory_b, mesh_bgx = WATT.initialize_sim(blade, assembly, bench_tvec)
+aerostates_bsu, surr_history_b, mesh_bsu = WATT.initialize_sim_surrogate(blade, assembly, bench_tvec)
+
+println("Warming up (one untimed run each)...")
+WATT.run_sim!(rotor, blade, mesh_bgx, env, bench_tvec, aerostates_bgx, gxhistory_b)
+WATT.run_sim_surrogate!(rotor, blade, mesh_bsu, env, bench_tvec, aerostates_bsu, surr_history_b, surr)
+
+println("\nBenchmarking GXBeam run_sim! ...")
+b_gx = @benchmark WATT.run_sim!($rotor, $blade, $mesh_bgx, $env, $bench_tvec,
+                                 $aerostates_bgx, $gxhistory_b) samples=5 evals=1 seconds=1000
+
+println("Benchmarking surrogate run_sim_surrogate! ...")
+b_su = @benchmark WATT.run_sim_surrogate!($rotor, $blade, $mesh_bsu, $env, $bench_tvec,
+                                           $aerostates_bsu, $surr_history_b, $surr) samples=5 evals=1 seconds=1000
+
+println("\n--- GXBeam ---");    display(b_gx)
+println("\n--- Surrogate ---"); display(b_su)
+@printf "\nSpeedup (GXBeam median / surrogate median): %.2fx\n" (median(b_gx).time / median(b_su).time)
+
+
