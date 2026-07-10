@@ -36,6 +36,7 @@ include("./types.jl")
 include("./environments.jl")
 include("./mesh.jl")
 include("./bemt.jl")
+include("./bemt_gpu.jl")
 include("./dynamicstallmodels.jl")
 include("./gxbeam.jl")
 
