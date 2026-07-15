@@ -38,6 +38,7 @@ include("./mesh.jl")
 include("./bemt.jl")
 include("./bemt_gpu.jl")
 include("./dynamicstallmodels.jl")
+include("./dsmodel_gpu.jl")
 include("./gxbeam.jl")
 
 

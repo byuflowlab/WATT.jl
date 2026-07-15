@@ -9,3 +9,4 @@ docs/build/
 *.pvd
 .vscode
 *Manifest.toml
+*claude_response.md
