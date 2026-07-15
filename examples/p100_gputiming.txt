@@ -1,0 +1,19 @@
+┌ Info: Backend selected
+│   BACKEND = :cuda
+│   DevArrayType = CuArray{Float64}
+└   DevFloat = Float64
+
+=== GPU-BEMT throughput benchmark ===
+n_sections = 25,  n_iters = 20,  backend = cuda,  eltype = Float64
+
+n_sims  | GPU (ms)       | CPU-serial (ms) | CPU-@threads (ms) | speedup GPU vs serial
+----------------------------------------------------------------------------------------------------
+1       | 0.447          | 0.263          | 0.390          | 0.6x
+5       | 0.326          | 1.419          | 1.574          | 4.4x
+10      | 0.485          | 2.818          | 3.110          | 5.8x
+20      | 0.506          | 5.614          | 5.864          | 11.1x
+50      | 0.510          | 13.918         | 14.717         | 27.3x
+100     | 0.513          | 27.876         | 40.991         | 54.3x
+
+Julia threads available: 1
+(Use `julia -t auto --project examples/gpu_bemt_benchmark.jl` on the cluster.)

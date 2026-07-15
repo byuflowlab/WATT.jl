@@ -293,6 +293,31 @@ end
 # Fixed-iteration Brent
 # ---------------------------------------------------------------------------
 
+# Fixed sub-bracket scan over (phi_a, phi_b). Evaluates the residual at
+# `NSUB + 1` uniformly-spaced phi values and returns the first sub-interval
+# where the residual changes sign, or the full [phi_a, phi_b] with
+# `found = false` if no sign change is seen. Every thread executes the same
+# number of residual evaluations, keeping the warp in lockstep.
+@inline function scan_sign_change(resfun, phi_a, phi_b, ::Val{NSUB}) where {NSUB}
+    TF = typeof(phi_a)
+    dphi = (phi_b - phi_a) / TF(NSUB)
+    Rprev = resfun(phi_a)
+    found = false
+    phi_lo = phi_a
+    phi_hi = phi_b
+    for i in 1:NSUB
+        phi_i = phi_a + dphi * TF(i)
+        Rnext = resfun(phi_i)
+        if !found && (Rprev * Rnext) < zero(TF)
+            phi_lo = phi_i - dphi
+            phi_hi = phi_i
+            found = true
+        end
+        Rprev = Rnext
+    end
+    return phi_lo, phi_hi, found
+end
+
 # Brent's method as in FLOWMath but with a fixed iteration count and no
 # early exit. Every thread does exactly `n_iters` iterations. `f` is a
 # closure that captures the (section, sim) inputs and returns just the
@@ -442,13 +467,15 @@ similar_type(AT::Type, ::Type{U}) where {U} =
     chord = c_vec[j]
     twist = twist_vec[j]
 
-    # q1 bracket: mirror CPU firstbracket with a fixed 10-point sub-scan
-    # so we find a well-conditioned interior sub-bracket even when the
-    # tip-loss term makes the endpoints singular.
+    # Sub-bracket scans on q1 = (eps, pi/2), then falling back to
+    # q3 = (pi/2, pi - eps) only if q1 doesn't produce a sign-change.
+    # Rationale: the aerostructural-bracket trace observed 0.25% of
+    # transient solves landing in q3, all at root-cylinder sections where
+    # Vy is small (phi_geom sits right at 90°). Because those sections
+    # cluster into a single warp on the GPU, the divergence cost of the
+    # conditional q3 is small — most warps never take the fallback.
     TF = typeof(Vx)
     eps_phi = TF(1e-6)
-    phi_a = eps_phi
-    phi_b = TF(pi / 2) - eps_phi
 
     # residual closure captures the inputs for this thread
     resfun = phi -> bemt_residual_and_outputs(
@@ -458,26 +485,17 @@ similar_type(AT::Type, ::Type{U}) where {U} =
         alpha_min, dalpha, n_alpha, cl_table, cd_table,
         B_blades, tip_mode)[1]
 
-    # Fixed sub-bracket scan: NSUB intervals over (phi_a, phi_b).
-    # Walk left→right; latch onto the first sign-change we see.
-    NSUB = 10
-    dphi = (phi_b - phi_a) / TF(NSUB)
-    Rprev = resfun(phi_a)
-    found = false
-    phi_lo = phi_a
-    phi_hi = phi_b
-    for i in 1:NSUB
-        phi_i = phi_a + dphi * TF(i)
-        Rnext = resfun(phi_i)
-        # only latch on first sign change; keep looping to keep the warp lockstep
-        if !found && (Rprev * Rnext) < zero(TF)
-            phi_lo = phi_i - dphi
-            phi_hi = phi_i
-            found = true
-        end
-        Rprev = Rnext
+    # --- Try q1 first ---
+    phi_lo, phi_hi, q1_found = scan_sign_change(resfun,
+        eps_phi, TF(pi / 2) - eps_phi, Val(10))
+
+    # --- Fallback to q3 only if q1 didn't produce a sign change ---
+    q3_found = false
+    if !q1_found
+        phi_lo, phi_hi, q3_found = scan_sign_change(resfun,
+            TF(pi / 2) + eps_phi, TF(pi) - eps_phi, Val(10))
     end
-    bracket_ok = found
+    bracket_ok = q1_found | q3_found
 
     phistar, _ = brent_fixed(resfun, phi_lo, phi_hi, Val(NIT))
 

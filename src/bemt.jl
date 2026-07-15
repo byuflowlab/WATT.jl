@@ -10,6 +10,25 @@ function afeval(af::DS.Airfoil, alpha, Re, Mach)
     return af.cl(alpha), af.cd(alpha)
 end
 
+# ---------------------------------------------------------------------------
+# Optional per-solve quadrant trace (used by examples/aerostructural_bracket_trace.jl).
+# When BEMT_QUAD_TRACE[] is `nothing` (the default), the hook in solve_BEMT is
+# a single pointer compare — no allocation, no counting. To enable the trace,
+# set BEMT_QUAD_TRACE[] to a `Dict{Symbol,Int}` with keys :q1, :q2, :q3, :q4,
+# :other; every successful solve_BEMT then increments the entry for the
+# quadrant whose bracket produced the root.
+# ---------------------------------------------------------------------------
+const BEMT_QUAD_TRACE = Ref{Union{Nothing, Dict{Symbol, Int}}}(nothing)
+
+function bemt_quad_label(phimin, phimax; epsilon=1e-6)
+    if     phimin == epsilon && phimax == pi/2            return :q1
+    elseif phimin == -pi/2 && phimax == -epsilon           return :q2
+    elseif phimin == pi/2 && phimax == pi - epsilon        return :q3
+    elseif phimin == -pi + epsilon && phimax == -pi/2      return :q4
+    end
+    return :other
+end
+
 function update_BEMT_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch)
     # [r, airfoil.c, twist, blade.rhub, blade.rtip, Vx, Vy, env.rho, pitch, env.mu, env.a]
     xv[1] = r
@@ -344,11 +363,18 @@ function solve_BEMT(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
             end
             
             phistar = IAD.implicit(solve, residual, xv, pv)
-            
+
             _, outputs = CCBlade.residual_and_outputs(phistar, xv, pv)
+
+            # Quadrant trace: no-op unless the user enabled it. See the
+            # BEMT_QUAD_TRACE docstring at the top of this file.
+            if !isnothing(BEMT_QUAD_TRACE[])
+                BEMT_QUAD_TRACE[][bemt_quad_label(phimin, phimax; epsilon=epsilon)] += 1
+            end
+
                 return outputs
-            end    
-        end    
+            end
+        end
 
     # it shouldn't get to this point.  if it does it means no solution was found
     # it will return empty outputs
