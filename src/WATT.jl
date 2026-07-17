@@ -11,7 +11,7 @@ export Rotor, Blade
 export AeroStates, StaticAeroStates
 export AbstractSimMesh, SimMesh, AeroMesh, StaticMesh, SurrogateMesh
 export SurrogatePointState, SurrogateAssemblyState, AbstractStructuralSurrogate
-export encode_initial, step_latent, decode
+export encode_initial, step_latent, decode, decode!
 export RK4, BDF1
 
 # Environment
@@ -47,5 +47,6 @@ include("./aero_only.jl")
 include("./static.jl")
 include("./aerostructural.jl")
 include("./aerostructural_surrogate.jl")
+include("./aerostructural_surrogate_gpu.jl")
 
 end # module

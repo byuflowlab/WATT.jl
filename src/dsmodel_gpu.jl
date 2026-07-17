@@ -31,7 +31,7 @@ Ports of:
 Adam Cardoza
 =#
 
-export DSAirfoilGPU, DSHistory, march_ds_gpu!, DS_NSTATES
+export DSAirfoilGPU, DSHistory, march_ds_gpu!, DS_NSTATES, ds_init_step_gpu!, ds_step_gpu!
 
 const DS_NSTATES = 32
 const DS_FCLIMIT = (1.0 + 0.2)^2   # matches DynamicStallModels.fclimit
@@ -725,4 +725,104 @@ function march_ds_gpu!(hist::DSHistory, dsaf::DSAirfoilGPU,
     end
     KernelAbstractions.synchronize(backend)
     return hist
+end
+
+# ---------------------------------------------------------------------------
+# Per-step (ping-pong) kernels for the coupled aeroelastic solver.
+#
+# The march above precomputes the whole (U, aoa) history and stores the full
+# 4D state trace. In a coupled sim the inputs at step i depend on the
+# structural feedback from step i-1, so U/aoa aren't known ahead of time and
+# the march must advance one step at a time. These kernels take 3D state
+# buffers `(DS_NSTATES, n_sections, n_sims)` — a current/previous ping-pong
+# pair — and 2D inputs/outputs `(n_sections, n_sims)` for the current step.
+#
+# They call the identical `ds_init_adg`/`ds_step_adg`/`ds_loads_adg` functions
+# as the march kernels, so a per-step drive over a prescribed history is
+# bit-identical to `march_ds_gpu!` (verified in the Phase-1 unit test).
+# ---------------------------------------------------------------------------
+
+# Step-1 quasi-steady IC into a 3D state buffer.
+@kernel function dsmodel_init_step_kernel!(xds_cur, Cl, Cd, Cm, U, aoa,
+        consts, cl_t, cd_t, cm_t, alpha_min, dalpha, n_alpha)
+    j, s = @index(Global, NTuple)
+    @inbounds begin
+        Uv = U[j, s]
+        av = aoa[j, s]
+        snew, cl0, cd0, cm0 = ds_init_adg(Uv, av, Int32(j), consts,
+                                          cl_t, cd_t, cm_t, alpha_min, dalpha, n_alpha)
+        Base.Cartesian.@nexprs 32 k -> (xds_cur[k, j, s] = snew[k])
+        Cl[j, s] = cl0; Cd[j, s] = cd0; Cm[j, s] = cm0
+    end
+end
+
+# Advance every (section, sim) one step: read `xds_prev`, write `xds_cur`.
+@kernel function dsmodel_step_step_kernel!(xds_cur, xds_prev, Cl, Cd, Cm, U, aoa, dt,
+        consts, cl_t, cd_t, cm_t, alpha_min, dalpha, n_alpha)
+    j, s = @index(Global, NTuple)
+    @inbounds begin
+        sold = ntuple(k -> xds_prev[k, j, s], Val(DS_NSTATES))
+        Uv = U[j, s]; av = aoa[j, s]
+        snew = ds_step_adg(sold, Uv, av, dt, Int32(j), consts,
+                           cl_t, cd_t, cm_t, alpha_min, dalpha, n_alpha)
+        Base.Cartesian.@nexprs 32 k -> (xds_cur[k, j, s] = snew[k])
+        cl, cd, cm = ds_loads_adg(snew, Uv, Int32(j), consts,
+                                  cl_t, cd_t, cm_t, alpha_min, dalpha, n_alpha)
+        Cl[j, s] = cl; Cd[j, s] = cd; Cm[j, s] = cm
+    end
+end
+
+"""
+    ds_init_step_gpu!(xds_cur, Cl, Cd, Cm, dsaf, U, aoa)
+
+Fill the quasi-steady dynamic-stall initial condition for every `(section, sim)`
+into the 3D state buffer `xds_cur` `(DS_NSTATES, n_sections, n_sims)` and write
+the step-1 load coefficients into the 2D buffers `Cl/Cd/Cm` `(n_sections, n_sims)`.
+`U`, `aoa` are the current-step `(n_sections, n_sims)` inputs. All arrays must
+share the backend of `xds_cur`. This is the per-step (ping-pong) companion to
+[`march_ds_gpu!`](@ref) used by the coupled aeroelastic solver.
+"""
+function ds_init_step_gpu!(xds_cur::AbstractArray, Cl::AbstractMatrix, Cd::AbstractMatrix,
+                           Cm::AbstractMatrix, dsaf::DSAirfoilGPU,
+                           U::AbstractMatrix, aoa::AbstractMatrix)
+    n_sections, n_sims = size(U)
+    size(xds_cur) == (DS_NSTATES, n_sections, n_sims) ||
+        error("ds_init_step_gpu!: xds_cur is $(size(xds_cur)), expected $((DS_NSTATES, n_sections, n_sims)).")
+    backend = KernelAbstractions.get_backend(xds_cur)
+    initk = dsmodel_init_step_kernel!(backend)
+    initk(xds_cur, Cl, Cd, Cm, U, aoa,
+          dsaf.consts, dsaf.cl_table, dsaf.cd_table, dsaf.cm_table,
+          dsaf.alpha_min, dsaf.dalpha, dsaf.n_alpha; ndrange=(n_sections, n_sims))
+    KernelAbstractions.synchronize(backend)
+    return xds_cur
+end
+
+"""
+    ds_step_gpu!(xds_cur, xds_prev, Cl, Cd, Cm, dsaf, U, aoa, dt)
+
+Advance the batched Beddoes-Leishman v3 model one step for every `(section, sim)`:
+read the previous state `xds_prev`, write the new state into `xds_cur`, and
+write the new load coefficients into `Cl/Cd/Cm`. All state buffers are 3D
+`(DS_NSTATES, n_sections, n_sims)`; inputs/outputs are 2D `(n_sections, n_sims)`.
+
+Caller owns the ping-pong: pass distinct `xds_cur`/`xds_prev` buffers and swap
+them between steps. This advances identically to one iteration of
+[`march_ds_gpu!`](@ref)'s inner loop.
+"""
+function ds_step_gpu!(xds_cur::AbstractArray, xds_prev::AbstractArray,
+                      Cl::AbstractMatrix, Cd::AbstractMatrix, Cm::AbstractMatrix,
+                      dsaf::DSAirfoilGPU, U::AbstractMatrix, aoa::AbstractMatrix, dt)
+    n_sections, n_sims = size(U)
+    size(xds_cur) == (DS_NSTATES, n_sections, n_sims) ||
+        error("ds_step_gpu!: xds_cur is $(size(xds_cur)), expected $((DS_NSTATES, n_sections, n_sims)).")
+    size(xds_prev) == size(xds_cur) ||
+        error("ds_step_gpu!: xds_prev $(size(xds_prev)) != xds_cur $(size(xds_cur)).")
+    TF = eltype(xds_cur)
+    backend = KernelAbstractions.get_backend(xds_cur)
+    stepk = dsmodel_step_step_kernel!(backend)
+    stepk(xds_cur, xds_prev, Cl, Cd, Cm, U, aoa, TF(dt),
+          dsaf.consts, dsaf.cl_table, dsaf.cd_table, dsaf.cm_table,
+          dsaf.alpha_min, dsaf.dalpha, dsaf.n_alpha; ndrange=(n_sections, n_sims))
+    KernelAbstractions.synchronize(backend)
+    return xds_cur
 end

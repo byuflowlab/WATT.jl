@@ -447,25 +447,14 @@ similar_type(AT::Type, ::Type{U}) where {U} =
     error("GPUBEMTOutputs: don't know how to build a Bool-eltype array like $AT. " *
           "Define `WATT.similar_type(::Type{$AT}, ::Type{Bool})` in your GPU extension.")
 
-@kernel function bemt_solve_kernel!(
-        out_Np, out_Tp, out_phi, out_alpha, out_W,
-        out_cl, out_cd, out_cn, out_ct, out_F,
-        out_a, out_ap, out_success,
-        Vx_all, Vy_all, pitch_all,
-        r_vec, c_vec, twist_vec, rhub, rtip,
+# Per-thread BEMT solve for one (section, sim): bracket → fixed-iteration
+# Brent → recompute outputs. Shared by the vector-pitch and matrix-pitch
+# kernels so the physics lives in exactly one place. Returns the full output
+# tuple plus the bracket-valid flag.
+@inline function bemt_solve_one(Vx, Vy, pitch, section::Int32,
+        r, chord, twist, rhub, rtip, rho,
         alpha_min, dalpha, n_alpha, cl_table, cd_table,
-        rho,
-        B_blades, tip_mode,
-        ::Val{NIT}) where {NIT}
-
-    j, s = @index(Global, NTuple)   # j = section index, s = sim index
-
-    Vx = Vx_all[j, s]
-    Vy = Vy_all[j, s]
-    pitch = pitch_all[s]
-    r = r_vec[j]
-    chord = c_vec[j]
-    twist = twist_vec[j]
+        B_blades, tip_mode, ::Val{NIT}) where {NIT}
 
     # Sub-bracket scans on q1 = (eps, pi/2), then falling back to
     # q3 = (pi/2, pi - eps) only if q1 doesn't produce a sign-change.
@@ -479,7 +468,7 @@ similar_type(AT::Type, ::Type{U}) where {U} =
 
     # residual closure captures the inputs for this thread
     resfun = phi -> bemt_residual_and_outputs(
-        phi, Int32(j), Vx, Vy, pitch,
+        phi, section, Vx, Vy, pitch,
         r, chord, twist, rhub, rtip,
         rho,
         alpha_min, dalpha, n_alpha, cl_table, cd_table,
@@ -501,16 +490,24 @@ similar_type(AT::Type, ::Type{U}) where {U} =
 
     # Recompute all outputs at phistar. Even if bracket_ok is false, we still
     # run the residual once — cheaper than branching. If bracket was invalid,
-    # we clobber all outputs with zero below (matches CPU CCBlade.Outputs()).
+    # the caller clobbers all outputs with zero (matches CPU CCBlade.Outputs()).
     (_, Np, Tp, alpha, W, cl, cd, cn, ct, F, a, ap) =
         bemt_residual_and_outputs(
-            phistar, Int32(j), Vx, Vy, pitch,
+            phistar, section, Vx, Vy, pitch,
             r, chord, twist, rhub, rtip,
             rho,
             alpha_min, dalpha, n_alpha, cl_table, cd_table,
             B_blades, tip_mode)
 
-    z = zero(TF)
+    return (Np, Tp, phistar, alpha, W, cl, cd, cn, ct, F, a, ap, bracket_ok)
+end
+
+# Write one thread's outputs, zeroing everything if the bracket was invalid.
+@inline function _bemt_write_outputs!(out_Np, out_Tp, out_phi, out_alpha, out_W,
+        out_cl, out_cd, out_cn, out_ct, out_F, out_a, out_ap, out_success,
+        j, s, res)
+    (Np, Tp, phistar, alpha, W, cl, cd, cn, ct, F, a, ap, bracket_ok) = res
+    z = zero(typeof(Np))
     out_Np[j, s]      = ifelse(bracket_ok, Np,      z)
     out_Tp[j, s]      = ifelse(bracket_ok, Tp,      z)
     out_phi[j, s]     = ifelse(bracket_ok, phistar, z)
@@ -524,6 +521,53 @@ similar_type(AT::Type, ::Type{U}) where {U} =
     out_a[j, s]       = ifelse(bracket_ok, a,       z)
     out_ap[j, s]      = ifelse(bracket_ok, ap,      z)
     out_success[j, s] = bracket_ok
+end
+
+@kernel function bemt_solve_kernel!(
+        out_Np, out_Tp, out_phi, out_alpha, out_W,
+        out_cl, out_cd, out_cn, out_ct, out_F,
+        out_a, out_ap, out_success,
+        Vx_all, Vy_all, pitch_all,
+        r_vec, c_vec, twist_vec, rhub, rtip,
+        alpha_min, dalpha, n_alpha, cl_table, cd_table,
+        rho,
+        B_blades, tip_mode,
+        ::Val{NIT}) where {NIT}
+
+    j, s = @index(Global, NTuple)   # j = section index, s = sim index
+
+    res = bemt_solve_one(Vx_all[j, s], Vy_all[j, s], pitch_all[s], Int32(j),
+        r_vec[j], c_vec[j], twist_vec[j], rhub, rtip, rho,
+        alpha_min, dalpha, n_alpha, cl_table, cd_table,
+        B_blades, tip_mode, Val(NIT))
+
+    _bemt_write_outputs!(out_Np, out_Tp, out_phi, out_alpha, out_W,
+        out_cl, out_cd, out_cn, out_ct, out_F, out_a, out_ap, out_success, j, s, res)
+end
+
+# Matrix-pitch variant: pitch varies per (section, sim). Used by the coupled
+# aeroelastic solver, where the twist correction `pitch - def_theta_x` differs
+# per section and per sim.
+@kernel function bemt_solve_kernel_pitchmat!(
+        out_Np, out_Tp, out_phi, out_alpha, out_W,
+        out_cl, out_cd, out_cn, out_ct, out_F,
+        out_a, out_ap, out_success,
+        Vx_all, Vy_all, pitch_all,
+        r_vec, c_vec, twist_vec, rhub, rtip,
+        alpha_min, dalpha, n_alpha, cl_table, cd_table,
+        rho,
+        B_blades, tip_mode,
+        ::Val{NIT}) where {NIT}
+
+    j, s = @index(Global, NTuple)
+
+    res = bemt_solve_one(Vx_all[j, s], Vy_all[j, s], pitch_all[j, s], Int32(j),
+        r_vec[j], c_vec[j], twist_vec[j], rhub, rtip, rho,
+        alpha_min, dalpha, n_alpha, cl_table, cd_table,
+        B_blades, tip_mode, Val(NIT))
+
+    _bemt_write_outputs!(out_Np, out_Tp, out_phi, out_alpha, out_W,
+        out_cl, out_cd, out_cn, out_ct, out_F, out_a, out_ap, out_success, j, s, res)
 end
 
 """
@@ -544,17 +588,52 @@ function solve_BEMT_gpu!(outputs::GPUBEMTOutputs,
                           Vx::AbstractMatrix, Vy::AbstractMatrix,
                           pitch::AbstractVector;
                           n_iters::Integer=N_BRENT_ITERS_DEFAULT)
+    _, n_sims = size(Vx)
+    length(pitch) == n_sims ||
+        error("solve_BEMT_gpu!: length(pitch) $(length(pitch)) != n_sims $n_sims")
+    backend = KernelAbstractions.get_backend(Vx)
+    _solve_BEMT_gpu!(bemt_solve_kernel!(backend), outputs, rotor_gpu, blade_gpu,
+                     env, Vx, Vy, pitch; n_iters)
+    return outputs
+end
+
+"""
+    solve_BEMT_gpu!(outputs, rotor_gpu, blade_gpu, env, Vx, Vy, pitch::AbstractMatrix; n_iters)
+
+Matrix-pitch overload: `pitch` is a `(n_sections, n_sims)` matrix so the blade
+pitch can vary per section and per sim. Used by the coupled aeroelastic solver,
+where the effective pitch `pitch - def_theta_x` carries the structural twist
+correction at each station. Otherwise identical to the vector-pitch method.
+"""
+function solve_BEMT_gpu!(outputs::GPUBEMTOutputs,
+                          rotor_gpu::RotorGPU,
+                          blade_gpu::BladeGPU,
+                          env::Environment,
+                          Vx::AbstractMatrix, Vy::AbstractMatrix,
+                          pitch::AbstractMatrix;
+                          n_iters::Integer=N_BRENT_ITERS_DEFAULT)
+    n_sections, n_sims = size(Vx)
+    size(pitch) == (n_sections, n_sims) ||
+        error("solve_BEMT_gpu!: size(pitch) $(size(pitch)) != $((n_sections, n_sims))")
+    backend = KernelAbstractions.get_backend(Vx)
+    _solve_BEMT_gpu!(bemt_solve_kernel_pitchmat!(backend), outputs, rotor_gpu, blade_gpu,
+                     env, Vx, Vy, pitch; n_iters)
+    return outputs
+end
+
+# Shared launch glue for both pitch flavors. `kernel` is the already-selected
+# compiled kernel; `pitch` is a vector or matrix matching it.
+function _solve_BEMT_gpu!(kernel, outputs::GPUBEMTOutputs,
+                          rotor_gpu::RotorGPU, blade_gpu::BladeGPU, env::Environment,
+                          Vx::AbstractMatrix, Vy::AbstractMatrix, pitch;
+                          n_iters::Integer=N_BRENT_ITERS_DEFAULT)
     n_sections, n_sims = size(Vx)
     size(Vy) == (n_sections, n_sims) ||
         error("solve_BEMT_gpu!: size(Vy) $(size(Vy)) != size(Vx) $((n_sections, n_sims))")
-    length(pitch) == n_sims ||
-        error("solve_BEMT_gpu!: length(pitch) $(length(pitch)) != n_sims $n_sims")
     size(outputs.Np) == (n_sections, n_sims) ||
         error("solve_BEMT_gpu!: outputs sized $(size(outputs.Np)) != $((n_sections, n_sims))")
 
     backend = KernelAbstractions.get_backend(Vx)
-    kernel = bemt_solve_kernel!(backend)
-
     TF = eltype(blade_gpu.r)
 
     kernel(

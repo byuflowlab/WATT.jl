@@ -348,3 +348,15 @@ Decode the latent state `z` into a fresh [`SurrogateAssemblyState`](@ref)
 on the structural-point grid. Pure.
 """
 function decode end
+
+"""
+    decode!(surr, z, u, theta, V, Omega, F, M)
+
+Device / batched decode used by [`run_sim_surrogate_gpu!`](@ref). Writes the
+decoded structural point states in place into six preallocated `(3, np, ns)`
+buffers (`u`, `theta`, `V`, `Omega`, `F`, `M`) from the batched latent state
+`z` `(nlatent, ns)`. Companion to the scalar/host [`decode`](@ref); kept
+separate so the GPU path can stay allocation-free per step and never leaves the
+device. Concrete GPU surrogates implement this method.
+"""
+function decode! end
