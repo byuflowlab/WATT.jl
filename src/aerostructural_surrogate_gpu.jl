@@ -208,9 +208,6 @@ Adapt.adapt_structure(to, ip::InterpGPU) = InterpGPU(
 InterpGPU(p1::AbstractVector, p2::AbstractVector, pc::AbstractVector) =
     InterpGPU{typeof(p1), typeof(pc)}(p1, p2, pc)
 
-# Int32 flavor of similar_type (companion to the Bool method in bemt_gpu.jl).
-similar_type(::Type{Array{T}}, ::Type{Int32}) where {T} = Array{Int32}
-
 # ---------------------------------------------------------------------------
 # Kernel 1 — aero velocities (port of get_aerostructural_velocities).
 #

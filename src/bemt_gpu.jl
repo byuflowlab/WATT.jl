@@ -440,12 +440,15 @@ function GPUBEMTOutputs(n_sections::Integer, n_sims::Integer; ArrayType::Type=Ar
     )
 end
 
-# Match the elt-type swap for the success (Bool) matrix without hard-coding
-# a package. Users of GPU backends can add their own methods.
+# Swap the element type of an array-type constructor (e.g. CuArray{Float64} →
+# CuArray{Int32}) without hard-coding a package. The generic fallback rebuilds
+# the type from its wrapper, so CuArray / ROCArray / MtlArray / Array all work
+# out of the box; a vendor package may still add a more specific method.
 similar_type(::Type{Array{T}}, ::Type{U}) where {T, U} = Array{U}
+similar_type(AT::Type{<:AbstractArray}, ::Type{U}) where {U} = Base.typename(AT).wrapper{U}
 similar_type(AT::Type, ::Type{U}) where {U} =
-    error("GPUBEMTOutputs: don't know how to build a Bool-eltype array like $AT. " *
-          "Define `WATT.similar_type(::Type{$AT}, ::Type{Bool})` in your GPU extension.")
+    error("similar_type: don't know how to build a $U-eltype array like $AT. " *
+          "Define `WATT.similar_type(::Type{$AT}, ::Type{$U})`.")
 
 # Per-thread BEMT solve for one (section, sim): bracket → fixed-iteration
 # Brent → recompute outputs. Shared by the vector-pitch and matrix-pitch
