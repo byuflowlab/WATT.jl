@@ -1,5 +1,6 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 DynamicStallModels = "1fe18b12-a608-438b-96ea-7dfa0357455b"
 FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
 GXBeam = "974624c9-1acb-4ad6-a627-8ac40fc27a3e"

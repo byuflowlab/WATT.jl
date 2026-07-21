@@ -236,9 +236,13 @@ to_backend_array(AT::Type, a::AbstractArray) = AT(a)
     x  = (alpha - alpha_min) / dalpha
     x0 = clamp(x, zero(x), oftype(x, n_alpha - 1))
     i0 = unsafe_trunc(Int32, x0)
-    if i0 >= n_alpha - 1
-        i0 = Int32(n_alpha - 2)
-    end
+    # Two-sided index clamp. Besides the normal upper edge, this catches a
+    # non-finite `alpha` (from a diverging solve): `clamp(NaN,…)` is NaN and
+    # `unsafe_trunc(Int32, NaN)` is typemin(Int32), which would index far out of
+    # bounds — a caught BoundsError on CPU but an illegal memory access under
+    # the kernel's @inbounds on GPU. `t` stays NaN so the NaN still propagates
+    # into the output (divergence remains visible) without any OOB read.
+    i0 = clamp(i0, Int32(0), Int32(n_alpha - 2))
     t  = x0 - oftype(x0, i0)
     r0 = i0 + Int32(1)
     r1 = r0 + Int32(1)

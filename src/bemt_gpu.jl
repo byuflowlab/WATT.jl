@@ -187,9 +187,11 @@ end
     # clamp to valid range: index 0 .. n_alpha - 1 (0-based)
     x0 = clamp(x, zero(x), oftype(x, n_alpha - 1))
     i0 = unsafe_trunc(Int32, x0)             # 0-based lower index
-    if i0 >= n_alpha - 1
-        i0 = Int32(n_alpha - 2)
-    end
+    # Two-sided clamp: also catches a non-finite alpha, where clamp(NaN,…)=NaN
+    # and unsafe_trunc(Int32,NaN)=typemin(Int32) would index out of bounds
+    # (illegal memory access under @inbounds on GPU). t stays NaN so a NaN
+    # still propagates to the output instead of an OOB read.
+    i0 = clamp(i0, Int32(0), Int32(n_alpha - 2))
     t = x0 - oftype(x0, i0)
     # 1-based indexing into the tables (row = alpha, col = section)
     r0 = i0 + Int32(1)

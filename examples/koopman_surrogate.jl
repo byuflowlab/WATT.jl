@@ -346,6 +346,73 @@ function WATT.step_latent(surr::BatchedKoopman, z, f_elem::AbstractArray)
     return apply_jordan_A(z, surr.mu, surr.omega, surr.K_real, surr.ncd, surr.ncp) .+ surr.Q .* fi_enc
 end
 
+"""
+    HostBridgeKoopman <: AbstractStructuralSurrogate
+
+Single-sim wrapper that runs the Koopman math on `ArrayType` (a device) but
+presents the *host* surrogate interface, so the CPU coupled solver
+[`run_sim_surrogate!`](@ref) drives it with CPU BEMT + CPU dynamic stall while
+the structural step runs on the GPU. Each step uploads the `(nelem,6)` load
+matrix, keeps the latent state on device, and downloads the decoded state to a
+host `SurrogateAssemblyState`. Use to benchmark "original aero on CPU +
+structural surrogate on GPU". Wraps a `ns=1` [`BatchedKoopman`](@ref).
+"""
+struct HostBridgeKoopman{BK, GPS} <: WATT.AbstractStructuralSurrogate
+    bk::BK
+    gps_in::GPS
+    gps_out::GPS
+    AT::Type
+    nelem::Int
+end
+
+function build_hostbridge_koopman(jld_path::AbstractString, x_norm::AbstractVector,
+                                  assembly::GXBeam.Assembly; ArrayType::Type=Array{Float64})
+    bk = build_batched_koopman(jld_path, reshape(Float64.(x_norm), :, 1), assembly; ArrayType=ArrayType)
+    np = length(assembly.points); nelem = length(assembly.elements)
+    return HostBridgeKoopman(bk, GPUPointStates(np, 1; ArrayType=ArrayType),
+                             GPUPointStates(np, 1; ArrayType=ArrayType), ArrayType, nelem)
+end
+
+function _upload_state!(gps::GPUPointStates, u0::WATT.SurrogateAssemblyState)
+    np = length(u0.points)
+    h = (u=zeros(3,np,1), theta=zeros(3,np,1), V=zeros(3,np,1),
+         Omega=zeros(3,np,1), F=zeros(3,np,1), M=zeros(3,np,1))
+    for j in 1:np
+        p = u0.points[j]
+        h.u[:,j,1]=p.u; h.theta[:,j,1]=p.theta; h.V[:,j,1]=p.V
+        h.Omega[:,j,1]=p.Omega; h.F[:,j,1]=p.F; h.M[:,j,1]=p.M
+    end
+    copyto!(gps.u,h.u); copyto!(gps.theta,h.theta); copyto!(gps.V,h.V)
+    copyto!(gps.Omega,h.Omega); copyto!(gps.F,h.F); copyto!(gps.M,h.M)
+    return gps
+end
+
+function _download_state(gps::GPUPointStates)
+    u=Array(gps.u); th=Array(gps.theta); V=Array(gps.V)
+    Om=Array(gps.Omega); F=Array(gps.F); M=Array(gps.M)
+    np = size(u, 2)
+    pts = [WATT.SurrogatePointState{Float64}(
+              SVector{3,Float64}(u[:,j,1]),  SVector{3,Float64}(th[:,j,1]),
+              SVector{3,Float64}(V[:,j,1]),  SVector{3,Float64}(Om[:,j,1]),
+              SVector{3,Float64}(F[:,j,1]),  SVector{3,Float64}(M[:,j,1])) for j in 1:np]
+    return WATT.SurrogateAssemblyState{Float64}(pts)
+end
+
+function WATT.encode_initial(s::HostBridgeKoopman, u0::WATT.SurrogateAssemblyState)
+    _upload_state!(s.gps_in, u0)
+    return WATT.encode_initial(s.bk, s.gps_in)     # z stays on device
+end
+
+function WATT.step_latent(s::HostBridgeKoopman, z, f::AbstractMatrix)
+    f_dev = s.AT(reshape(Float64.(f), s.nelem, 6, 1))
+    return WATT.step_latent(s.bk, z, f_dev)
+end
+
+function WATT.decode(s::HostBridgeKoopman, z)
+    WATT.decode!(s.bk, z, s.gps_out)
+    return _download_state(s.gps_out)
+end
+
 function WATT.decode!(surr::BatchedKoopman, z, ps::GPUPointStates)
     np = size(ps.u, 2); ns = size(z, 2); s = surr.sflip
     u_flat = film_mlp_forward(z, surr.ps_decoder, surr.dec_g, surr.dec_b, mish)  # (108, ns)
