@@ -13,6 +13,7 @@ cd(localpath)
     include("test_dynamicstall.jl") #Added 2026-05-19 (Phase 2)
     include("test_aero_only.jl") #Added 2026-05-19 (Phase 2) — mostly @test_broken pending Phase 3/5
     include("test_aerostructural.jl") #Added 2026-05-19 (Phase 2)
+    include("test_step_solution.jl") #Added 2026-07-29 — single-step primitive equivalence gate
     include("test_static.jl") #Added 2026-05-19 (Phase 2)
 
     # AD tests are slow — gate behind WATT_AD_TESTS so CI can opt in.

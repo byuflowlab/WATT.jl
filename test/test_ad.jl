@@ -330,6 +330,81 @@ end
         end
     end
 
+
+    # -----------------------------------------------------------------
+    # Frozen-start windowed sensitivity — ForwardDiff through
+    # `initialize_from_state` + `run_from_state!`. Warm up rest→s in
+    # Float64, freeze the snapshot at s, then differentiate the windowed
+    # march s→s+k w.r.t. the compliance+mass vector p. The snapshot is
+    # held constant (zero partials): both AD and FD re-initialize from the
+    # same Float64 state each call, so they measure the same frozen-start
+    # derivative.
+    # -----------------------------------------------------------------
+    @testset "ForwardDiff through run_from_state! (frozen-start window)" begin
+        nelem    = nelem_ad
+        n_aero   = n_ad
+        nt       = 6
+        tvec     = collect(range(0.0, 0.02, length=nt))
+        s        = 3                       # snapshot step
+        tvec_win = tvec[s:end]             # window [t_s … t_end]
+        t_s      = tvec[s]
+
+        p0     = pack_p(assembly_ad, n_aero, Float64)
+        pfunc  = make_pfunc(assembly_ad, n_aero)
+        prepp! = make_prepp(nelem, n_aero)
+        a_skel = pfunc(p0, 0.0).assembly
+
+        # Warm up rest→s in Float64; freeze the native snapshot at s.
+        aw, gw, mw = WATT.initialize_sim(blade_ad, a_skel, tvec; verbose=false, pfunc=pfunc, p=p0)
+        WATT.run_sim!(rotor_ad, blade_ad, mw, env_ad, tvec, aw, gw; verbose=false, prepp=prepp!, p=p0)
+        state_s   = gw[s]
+        xds_s     = copy(aw.xds[s, :])
+        azimuth_s = aw.azimuth[s]
+
+        # Frozen-start windowed map: p ↦ sum of tip out-of-plane deflection over the window.
+        function window_tip_sum(x)
+            TF  = eltype(x)
+            p   = convert(Vector{TF}, x)
+            bld = WATT.Blade(blade_ad.r,
+                             convert(Vector{TF}, blade_ad.c),
+                             convert(Vector{TF}, blade_ad.twist),
+                             blade_ad.xcp, blade_ad.airfoils;
+                             rhub=blade_ad.rhub, rtip=blade_ad.rtip)
+            # Dual-typed window mesh (buffers follow eltype(bld) = TF).
+            _, _, meshw = WATT.initialize_sim(bld, a_skel, tvec_win; verbose=false, pfunc=pfunc, p=p)
+            init = WATT.initialize_from_state(state_s, xds_s, azimuth_s, meshw, bld,
+                                              env_ad, tvec_win, t_s; p=p)
+            acc = Ref(zero(TF))
+            WATT.run_from_state!(init..., meshw, rotor_ad, bld, env_ad, tvec_win;
+                                 prepp=prepp!, p=p,
+                                 out=(st, j) -> (acc[] += st.elements[end].u[3]))
+            return acc[]
+        end
+
+        f0 = window_tip_sum(p0)
+        @test isfinite(f0)
+
+        cfg  = ForwardDiff.GradientConfig(window_tip_sum, p0, ForwardDiff.Chunk{8}())
+        grad = ForwardDiff.gradient(window_tip_sum, p0, cfg)
+        @test length(grad) == length(p0)
+        @test all(isfinite, grad)
+
+        # Directional AD-vs-FD over the compliance+mass region (frozen start on both sides).
+        nc = n_comp_(nelem)
+        nm = n_mass_(nelem)
+        struct_idxs = 1:(nc + nm)
+        rng = MersenneTwister(2468)
+        for trial in 1:2
+            v = zeros(length(p0))
+            v[struct_idxs] .= randn(rng, length(struct_idxs))
+            v[struct_idxs] .*= abs.(@view p0[struct_idxs])
+            v ./= sqrt(sum(abs2, v))
+            d_fd = fd_deriv(t -> window_tip_sum(p0 .+ t .* v), 0.0)
+            d_ad = sum(grad .* v)
+            @test isapprox(d_ad, d_fd; rtol=1e-2, atol=1e-6)
+        end
+    end
+
 end #End AD compatibility
 
 nothing

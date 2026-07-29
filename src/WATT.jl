@@ -20,6 +20,7 @@ export environment, SimpleEnvironment
 # Simulation entry points
 export initialize_aero, simulate!
 export initialize_sim, run_sim!, run_sim
+export step_solution!, initialize_from_state, run_from_state!
 export initialize_sim_surrogate, run_sim_surrogate!, run_sim_surrogate
 export initialize_static, fixedpoint!
 

@@ -292,88 +292,43 @@ function run_sim!(rotor::Rotor, blade, mesh, env::Environment, tvec, aerostates,
     azimuth[1] = azimuth0
 
 
+    #Note: Coupling from structural velocities doesn't appear to kick in until the third time step.
+    #Note: the single-step logic lives in `step_solution!`; the loop below just threads the Newmark
+    #carriers (xgx/paug/constants), the aero history views, and the structural history.
     for i in 2:nt
 
-        ### Unpack
-        phi_i = view(phi, i, :)
-        alpha_i = view(alpha, i, :)
-        W_i = view(W, i, :)
-        cx_i = view(Cx, i, :)
-        cy_i = view(Cy, i, :)
-        cm_i = view(Cm, i, :)
-        fx_i = view(Fx, i, :)
-        fy_i = view(Fy, i, :)
-        mx_i = view(Mx, i, :)
-        xds_i = view(xds, i, :)
-        # phi_im1 = view(phi, i-1, :)
+        ### Unpack single-step aero output views (writes land directly in the history arrays).
+        aero = (; phi   = view(phi,   i, :),
+                  alpha = view(alpha, i, :),
+                  W     = view(W,     i, :),
+                  Cx    = view(Cx,    i, :),
+                  Cy    = view(Cy,    i, :),
+                  Cm    = view(Cm,    i, :),
+                  Fx    = view(Fx,    i, :),
+                  Fy    = view(Fy,    i, :),
+                  Mx    = view(Mx,    i, :))
+        xds_i   = view(xds, i, :)
         xds_im1 = view(xds, i-1, :)
-        
-        t = tvec[i]
-        tprev = tvec[i-1]
-        dt = t - tprev
-    
-        
-        if dt<0
-            error("Time step is negative")
-        end
 
-        #update azimuthal position
-        azimuth[i] = env.RS(t)*dt + azimuth[i-1] #Euler step for azimuthal position. 
-        #todo: Maybe do a better integration like a RK4 or something? I don't know if it matters much while I'm assuming the angular velocity is constant. 
-
-        if azimuth[i]<azimuth[i-1]
-            @warn("Blade moved backwards")
-        end
-
-        #Note: Coupling from structural velocities doesn't appear to kick in until the third time step. 
-        take_aero_step!(phi_i, alpha_i, W_i, xds_i, cx_i, cy_i, cm_i, fx_i, fy_i, mx_i, xds_im1, azimuth[i], t, dt, pitch, mesh, rotor, blade, env; solver)
-
-
-
-        ### Update GXBeam loads 
-        update_forces!(distributed_loads, fx_i, fy_i, mx_i, blade, assembly) 
-
-        Omega = SVector(0.0, 0.0, -env.RS(t)) 
-
-        if isa(azimuth[i], ForwardDiff.Dual)||isa(azimuth[i], ReverseDiff.TrackedReal) #todo: Does azimuth need to be a state?
-            a0 = azimuth[i].value
-            a1 = azimuth[i-1].value
-        else
-            a0 = azimuth[i]
-            a1 = azimuth[i-1]
-        end
-
-        gravity = (tee) -> SVector(-g*cos((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), -g*sin((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), 0.0)  
-        #Note: Taylor applies the gravitational load by C'*mass*C*gvec
-
-
-        ### Update the sensitivity parameter vector if necessary.
-        if isnothing(prepp)  
-            p = nothing
-        else
-            prepp(p, fx_i, fy_i, mx_i)
-        end 
-
-        ### Solve GXBeam for time step 
-        system, gxhistory[i], constants, paug, xgx, convergedi = GXBeam.step_system!(system, paug, xgx, constants, gxhistory[i-1], assembly, tvec, i; prescribed_conditions, distributed_loads, structural_damping, gravity, angular_velocity=Omega, pfunc=pfunc, p=p) 
-
+        ### Advance one coupled Newmark step (see step_solution!).
+        gxhistory[i], xgx, paug, constants, azimuth[i], convergedi = step_solution!(
+            gxhistory[i-1], xgx, paug, constants, aero, xds_i, xds_im1, azimuth[i-1],
+            mesh, rotor, blade, env, tvec, i;
+            pitch, solver, g, prepp, p)
 
         if !convergedi
             @warn("GXBeam failed to converge on the $i th time step.")
             break
         end
 
-
-        ### Update aero inputs from structures.
-        update_mesh!(blade, mesh, assembly, gxhistory[i], env, t, na)
-
+        t = tvec[i]
         if verbose & (mod(i-1, speakiter)==0) #todo: remove the dependence on i (move to just a verbose and runtime flag)
             println("")
             println("Simulation time: ", t)
         end
 
-        if runtimeflag & (mod(i-1, runtimeiter)==0) 
-            runtime(aerostates, gxhistory[i], i) 
+        if runtimeflag & (mod(i-1, runtimeiter)==0)
+            runtime(aerostates, gxhistory[i], i)
         end
     end
 end
@@ -404,5 +359,248 @@ function run_sim(rotor::Rotor, blade::Blade, assembly::GXBeam.Assembly, env::Env
     aerostates, gxhistory, mesh = initialize_sim(blade, assembly, tvec)
     run_sim!(rotor, blade, mesh, env, tvec, aerostates, gxhistory; kwargs...)
     return aerostates, gxhistory, mesh
+end
+
+
+# Strip a ForwardDiff/ReverseDiff dual to its primal value; passthrough otherwise.
+# Used to build the (non-dual) gravity-interpolation angles inside a coupled step.
+_azimuth_value(x) = (isa(x, ForwardDiff.Dual) || isa(x, ReverseDiff.TrackedReal)) ? x.value : x
+
+
+"""
+    step_solution!(state_prev, xgx, paug, constants, aero, xds_new, xds_old, azimuth_prev,
+                   mesh, rotor, blade, env, tvec, i;
+                   pitch=0.0, solver=RK4(), g=9.81, prepp=nothing, p=nothing)
+        -> (state_new, xgx, paug, constants, azimuth, converged)
+
+Advance the coupled aero-structural solution **exactly one Newmark-β time step**, from the state at
+`tvec[i-1]` to `tvec[i]`. This is the per-step primitive factored out of [`run_sim!`](@ref)'s time
+loop (`run_sim!` calls it), and the building block for windowed frozen-start sensitivity sweeps via
+[`initialize_from_state`](@ref) / [`run_from_state!`](@ref). It makes **no rest-IC assumption**: the
+starting state is an input.
+
+The sequence mirrors `run_sim!`'s loop body:
+1. Integrate the azimuth (`azimuth = env.RS(t)*dt + azimuth_prev`).
+2. Aero step (`take_aero_step!`) from `xds_old` → `xds_new` + sectional loads (written into `aero`).
+3. `update_forces!` to push aero loads into the GXBeam distributed loads.
+4. Structural step via `GXBeam.step_system!` → new flat state `xgx`, updated `paug`/`constants`, and
+   a new `AssemblyState`.
+5. `update_mesh!` (only when converged) to feed the new deflections/velocities back to the aero inputs.
+
+**Arguments**
+- `state_prev::GXBeam.AssemblyState`: structural state at `tvec[i-1]` (carries the Newmark rates).
+- `xgx`, `paug`, `constants`: GXBeam Newmark solver carriers (flat state, augmented rate-init/parameter
+  vector, and step constants) — as produced by [`initialize_from_state`](@ref) or a prior step.
+- `aero`: single-step aero scratch exposing `.phi/.alpha/.W/.Cx/.Cy/.Cm/.Fx/.Fy/.Mx` (a
+  [`StaticAeroStates`](@ref) or a `NamedTuple` of length-`na` vectors; written in place).
+- `xds_new`, `xds_old`: DS state buffers (written / read).
+- `azimuth_prev::Real`: azimuth at `tvec[i-1]`.
+- `mesh::AbstractSimMesh`, `rotor::Rotor`, `blade::Blade`, `env::Environment`
+- `tvec::AbstractVector`, `i::Int`: the step advances `tvec[i-1] → tvec[i]`; `step_system!` also reads
+  `tvec[i-2]` for `i>2` (the Newmark rate recursion), so pass the same time grid you initialized with.
+
+**Keyword Arguments**
+- `pitch::Real = 0.0`, `solver::Solver = RK4()`, `g::Real = 9.81`
+- `prepp::Function = nothing`, `p = nothing`: sensitivity-parameter prep/vector (see [`run_sim!`](@ref)).
+
+**Returns**
+`(state_new, xgx, paug, constants, azimuth, converged)`. `xds_new` is written in place.
+"""
+function step_solution!(state_prev, xgx, paug, constants, aero, xds_new, xds_old, azimuth_prev,
+                        mesh, rotor::Rotor, blade::Blade, env::Environment, tvec, i;
+                        pitch=0.0, solver::Solver=RK4(), g=9.81, prepp=nothing, p=nothing)
+
+    @unpack assembly, system, prescribed_conditions, distributed_loads, pfunc, structural_damping = mesh
+
+    na = length(blade.r)
+
+    t = tvec[i]
+    tprev = tvec[i-1]
+    dt = t - tprev
+    if dt < 0
+        error("Time step is negative")
+    end
+
+    # 1. Azimuth (Euler step for the azimuthal position).
+    azimuth = env.RS(t)*dt + azimuth_prev
+    if azimuth < azimuth_prev
+        @warn("Blade moved backwards")
+    end
+
+    # 2. Aero step (BEM + DS) from the previous DS state → new DS state + sectional loads.
+    take_aero_step!(aero.phi, aero.alpha, aero.W, xds_new, aero.Cx, aero.Cy, aero.Cm,
+                    aero.Fx, aero.Fy, aero.Mx, xds_old, azimuth, t, dt, pitch,
+                    mesh, rotor, blade, env; solver)
+
+    # 3. Push aero loads into the GXBeam distributed loads.
+    update_forces!(distributed_loads, aero.Fx, aero.Fy, aero.Mx, blade, assembly)
+
+    Omega = SVector(0.0, 0.0, -env.RS(t))
+
+    # Gravity swings with the (linearly interpolated) azimuth over the step; build it from the
+    # primal azimuth values so the closure stays cheap. Note: Taylor applies gravity via C'*mass*C*gvec.
+    a0 = _azimuth_value(azimuth)
+    a1 = _azimuth_value(azimuth_prev)
+    gravity = (tee) -> SVector(-g*cos((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)),
+                               -g*sin((a0*(t-tee) + a1*(tee-tprev))/(t-tprev)), 0.0)
+
+    # 4. Update the sensitivity parameter vector with the new aero loads, if requested.
+    if isnothing(prepp)
+        p = nothing
+    else
+        prepp(p, aero.Fx, aero.Fy, aero.Mx)
+    end
+
+    # Structural step (Newmark-β) for this time step.
+    _, state_new, constants, paug, xgx, converged = GXBeam.step_system!(
+        system, paug, xgx, constants, state_prev, assembly, tvec, i;
+        prescribed_conditions, distributed_loads, structural_damping,
+        gravity, angular_velocity=Omega, pfunc=pfunc, p=p)
+
+    # 5. Feed the new structural deflections/velocities back to the aero inputs (skip on failure,
+    # matching run_sim!'s break-before-update behavior).
+    if converged
+        update_mesh!(blade, mesh, assembly, state_new, env, t, na)
+    end
+
+    return state_new, xgx, paug, constants, azimuth, converged
+end
+
+
+"""
+    initialize_from_state(state0, xds0, azimuth0, mesh, blade, env, tvec_window, t0;
+                          prescribed_conditions=mesh.prescribed_conditions,
+                          distributed_loads=mesh.distributed_loads,
+                          gravity=nothing, angular_velocity=nothing,
+                          structural_damping=mesh.structural_damping, g=9.81,
+                          pfunc=mesh.pfunc, p=nothing)
+        -> (state0, xgx, paug, constants, xds0, azimuth0)
+
+Make a caller-supplied `mesh`/`system` consistent with an **injected** structural state so that
+[`step_solution!`](@ref) / [`run_from_state!`](@ref) can march from it — **without** any rest-IC
+solve. Reuses `GXBeam.initialize_system!(...; initial_state=state0)`, which skips
+`initial_condition_analysis!` entirely and only builds the Newmark carriers (`constants`, `paug`,
+`xgx`) from the injected state.
+
+The returned tuple is exactly the argument prefix [`run_from_state!`](@ref) expects (splat it).
+
+**Caller constraints**
+- `mesh` must be built by [`initialize_sim`](@ref) (allocation-only). For an AD sweep, allocate it for
+  the marched eltype (e.g. pass a `Dual`-promoted `blade` to `initialize_sim`) so `update_mesh!` can
+  write dual-typed deflections.
+- `state0::GXBeam.AssemblyState` must carry the Newmark rates (`udot/θdot/Vdot/Ωdot`), i.e. it must be a
+  state produced by a prior `run_sim!`/`run_from_state!` (`gxhistory[s]`), **not** a hand-built
+  displacement-only state — the rates seed the first window step.
+- **Frozen-start AD:** pass a `Float64` `state0`/`xds0` but a `Dual` `p`; GXBeam promotes `xgx/paug`
+  through `pfunc`/`p`, so the injected state enters with **zero partials** (derivative seeded only by `p`).
+
+**Arguments**
+- `state0`, `xds0`, `azimuth0`: the snapshot triple (structural state, DS state, azimuth) at step `s`.
+- `mesh`, `blade`, `env`: as in [`run_sim!`](@ref).
+- `tvec_window`: the window time grid `[t_s, t_{s+1}, …, t_{s+N}]`; `first(tvec_window)` should equal `t0`.
+- `t0`: the snapshot time (window start).
+
+**Keyword Arguments**
+- `gravity`, `angular_velocity`: defaults consistent with `azimuth0`/`env.RS(t0)`. These are only stored
+  as `constants` defaults (each `step_solution!` overrides them per step), so they are largely inert.
+- others as in [`run_sim!`](@ref).
+"""
+function initialize_from_state(state0, xds0, azimuth0, mesh, blade::Blade, env::Environment, tvec_window, t0;
+                               prescribed_conditions=mesh.prescribed_conditions,
+                               distributed_loads=mesh.distributed_loads,
+                               gravity=nothing, angular_velocity=nothing,
+                               structural_damping::Bool=mesh.structural_damping, g=9.81,
+                               pfunc=mesh.pfunc, p=nothing)
+
+    @unpack assembly, system = mesh
+    na = length(blade.r)
+
+    a0 = _azimuth_value(azimuth0)
+    if isnothing(angular_velocity)
+        angular_velocity = SVector(0.0, 0.0, -env.RS(t0))
+    end
+    if isnothing(gravity)
+        gravity = SVector(-g*cos(a0), -g*sin(a0), 0.0)
+    end
+
+    # initial_state provided → initialize_system! skips the rest-IC analysis and just builds the
+    # Newmark carriers from the injected state (promoting through p for AD).
+    _, _, constants, paug, xgx, _ = GXBeam.initialize_system!(
+        system, assembly, tvec_window; initial_state=state0, reset_state=false,
+        prescribed_conditions, distributed_loads, gravity, angular_velocity,
+        structural_damping, pfunc, p)
+
+    # Populate the coupling buffers from the snapshot so the first take_aero_step! sees deflections
+    # consistent with state0 (mirrors run_sim!'s post-IC update_mesh!).
+    update_mesh!(blade, mesh, assembly, state0, env, t0, na)
+
+    return state0, xgx, paug, constants, xds0, azimuth0
+end
+
+
+"""
+    run_from_state!(state0, xgx, paug, constants, xds0, azimuth0, mesh, rotor, blade, env, tvec_window;
+                    pitch=0.0, solver=RK4(), g=9.81, prepp=nothing, p=nothing, out=nothing)
+        -> (state_final, xgx, paug, constants, xds, azimuth, out)
+
+March [`step_solution!`](@ref) over a window, starting from the carriers returned by
+[`initialize_from_state`](@ref) (splat that tuple into the leading arguments). Single-step aero/DS
+buffers are allocated once here (at `eltype(xgx)`, so they follow `Dual` under AD) and reused; the
+caller owns any history storage via the `out` hook.
+
+**Arguments**
+- `state0, xgx, paug, constants, xds0, azimuth0`: the tuple from [`initialize_from_state`](@ref).
+- `mesh`, `rotor`, `blade`, `env`, `tvec_window`: as in [`step_solution!`](@ref). Marches local index
+  `i = 2:length(tvec_window)`.
+
+**Keyword Arguments**
+- `pitch`, `solver`, `g`, `prepp`, `p`: forwarded to [`step_solution!`](@ref).
+- `out`: optional per-step sink. If a `Function`, called as `out(state, i)` after each converged step;
+  if an `AbstractVector`, assigns `out[i] = state`. Use it to capture the deflection history (e.g. for a
+  `ForwardDiff` Jacobian of `∂u/∂p`).
+
+**Returns**
+`(state_final, xgx, paug, constants, xds, azimuth, out)`.
+"""
+function run_from_state!(state0, xgx, paug, constants, xds0, azimuth0,
+                         mesh, rotor::Rotor, blade::Blade, env::Environment, tvec_window;
+                         pitch=0.0, solver::Solver=RK4(), g=9.81, prepp=nothing, p=nothing, out=nothing)
+
+    nt = length(tvec_window)
+    na = length(blade.r)
+
+    TF = eltype(xgx)
+
+    # Single-step scratch, reused across the window. Promote the DS state to the marched eltype so it
+    # enters with zero partials under AD (frozen start).
+    aero = StaticAeroStates{TF}(undef, na)
+    xds_old = TF.(xds0)
+    xds_new = similar(xds_old)
+
+    state = state0
+    azimuth = azimuth0
+
+    for i in 2:nt
+        state, xgx, paug, constants, azimuth, converged = step_solution!(
+            state, xgx, paug, constants, aero, xds_new, xds_old, azimuth,
+            mesh, rotor, blade, env, tvec_window, i;
+            pitch, solver, g, prepp, p)
+
+        if !converged
+            @warn("GXBeam failed to converge on window step $i.")
+            break
+        end
+
+        if isa(out, Function)
+            out(state, i)
+        elseif isa(out, AbstractVector)
+            out[i] = state
+        end
+
+        # Ping-pong the DS buffers: this step's output becomes next step's input.
+        xds_old, xds_new = xds_new, xds_old
+    end
+
+    return state, xgx, paug, constants, xds_old, azimuth, out
 end
 
