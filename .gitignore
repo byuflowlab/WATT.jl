@@ -10,3 +10,4 @@ docs/build/
 .vscode
 *Manifest.toml
 *claude_response.md
+*.h5
