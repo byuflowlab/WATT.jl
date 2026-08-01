@@ -163,6 +163,13 @@ function solve_BEMT(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
     # pull out first argument
     residual(phi, x, p) = CCBlade.residual_and_outputs(phi, x, p)[1]
 
+    # firstbracket only needs the SIGN of the residual to locate a bracket, so evaluate
+    # it on a value-stripped (primal) copy of xv. Under AD xv is dual-typed; probing it
+    # directly computes ForwardDiff partials on every bracket step and throws them away.
+    # ForwardDiff.value is identity on Float64, so this is correct in the primal path too.
+    # The dual xv is still used for IAD.implicit and the final residual_and_outputs below.
+    xv_val = ForwardDiff.value.(xv)
+
     success = false
     for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
         phimin, phimax = order[j]
@@ -180,7 +187,7 @@ function solve_BEMT(rotor::Rotor, blade::Blade, env::Environment, phi0, idx, Vx,
         end
 
         # find bracket
-        success, phiL, phiU = CCBlade.firstbracket(phi -> residual(phi, xv, pv), phimin, phimax, npts, backwardsearch)
+        success, phiL, phiU = CCBlade.firstbracket(phi -> residual(phi, xv_val, pv), phimin, phimax, npts, backwardsearch)
 
         
 
@@ -335,6 +342,13 @@ function solve_BEMT(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
     update_BEMT_variables!(xv, blade, chord, env, r, twist, Vx, Vy, pitch) #TODO: I actually might be able to do this with a tuple, because I don't think a tuple allocates anything. 
     pv = (airfoil, rotor.B, rotor.turbine, rotor.re, rotor.mach, rotor.rotation, rotor.tip)
 
+    # firstbracket only needs the SIGN of the residual to locate a bracket, so evaluate
+    # it on a value-stripped (primal) copy of xv. Under AD xv is dual-typed; probing it
+    # directly computes ForwardDiff partials on every bracket step and throws them away.
+    # ForwardDiff.value is identity on Float64, so this is correct in the primal path too.
+    # The dual xv is still used for IAD.implicit and the final residual_and_outputs below.
+    xv_val = ForwardDiff.value.(xv)
+
     success = false
     for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
         phimin, phimax = order[j]
@@ -352,7 +366,7 @@ function solve_BEMT(rotor::Rotor, blade::Blade, env::Environment, idx, Vx, Vy, p
         end
 
         # find bracket
-        success, phiL, phiU = CCBlade.firstbracket(phi -> residual(phi, xv, pv), phimin, phimax, npts, backwardsearch)
+        success, phiL, phiU = CCBlade.firstbracket(phi -> residual(phi, xv_val, pv), phimin, phimax, npts, backwardsearch)
 
         # once bracket is found, solve root finding problem and compute loads
         if success
