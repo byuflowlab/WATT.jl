@@ -36,7 +36,7 @@ const DEVFLOAT = Float32    # Float32 or Float64
 const DIAGNOSE = true       # true = also dump residual snapshots at known-bad (j,s)
 
 using WATT, OpenFASTTools, DynamicStallModels
-using StaticArrays, StructArrays
+using StaticArrays
 using Printf
 
 const _of = OpenFASTTools
@@ -110,7 +110,7 @@ rvec = adblade["BlSpn"] .+ rhub               # aero station absolute radii
 rtip = rvec[end]
 n    = length(rvec)
 
-airfoils = StructArray{_DS.Airfoil}(undef, n)
+airfoils = Vector{_DS.Airfoil}(undef, n)
 xcp = Vector{Float64}(undef, n)
 for i = 1:n
     airfoils[i], xcp[i] = _of.make_dsairfoil(afs[i])

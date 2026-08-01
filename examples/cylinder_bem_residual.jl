@@ -17,7 +17,7 @@ Adam Cardoza
 =#
 
 using WATT, OpenFASTTools, DynamicStallModels, CCBlade, FLOWMath
-using StructArrays, Plots
+using Plots
 
 const of = OpenFASTTools
 const DS = DynamicStallModels

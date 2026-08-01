@@ -54,7 +54,7 @@ end
 
 
 """
-    Blade{TF, TF2}
+    Blade{TF, TF2, TAF}
 
 Per-blade geometry, twist, and airfoil definitions. All aerodynamic-node
 quantities are aligned with the blade reference frame (precone, sweep,
@@ -74,9 +74,10 @@ and curve applied; tilt and yaw are *not*).
 - `twist::AbstractVector{<:TF2}`: twist distribution (rad).
 - `precone::TF`: blade precone angle (rad).
 - `xcp::AbstractVector{<:TF}`: per-section center-of-pressure location.
-- `airfoils::AbstractVector{<:DS.Airfoil}`: airfoil instance at each aero node.
+- `airfoils::TAF`: airfoil instance at each aero node, stored as a concrete
+  `Vector{<:DS.Airfoil}` (the convenience constructor materializes whatever it is passed).
 """
-struct Blade{TF, TF2}
+struct Blade{TF, TF2, TAF<:AbstractVector{<:DS.Airfoil}}
     rhub::TF
     rtip::TF
     rx::AbstractVector{<:TF} #Lead-lag direction (freestream) curve value
@@ -89,8 +90,8 @@ struct Blade{TF, TF2}
     thetay::AbstractVector{<:TF} #Curve angle
     twist::AbstractVector{<:TF2}
     precone::TF
-    xcp::AbstractVector{<:TF} 
-    airfoils::AbstractVector{<:DS.Airfoil}
+    xcp::AbstractVector{<:TF}
+    airfoils::TAF
 end
 
 """
@@ -118,6 +119,26 @@ broadcasts scalar `sweep` / `curve` to per-node vectors.
 """
 function Blade(span, chord, twist, xcp, airfoils::AbstractVector{<:DS.Airfoil}; rhub=span[1], rtip=span[end], precone=0.0, sweep=0.0, curve=0.0, rx=zero(span), ry=zero(span))
     n = length(airfoils)
+
+    # Materialize the airfoils into a plain, contiguous Vector. Callers often pass a
+    # StructArray{DS.Airfoil}, which stores each field as a separate column and
+    # reconstructs a fresh DS.Airfoil on every `airfoils[i]` — copying once here turns
+    # per-index reconstruction (34k+ per AD march) into O(1) pointer loads. DS.Airfoil
+    # is immutable and time-invariant, so the stored data is bitwise-identical.
+    #
+    # The eltype stays abstract `DS.Airfoil` because sections are heterogeneous (e.g.
+    # cylinder roots use `DS.NoModel`, a different concrete Airfoil type).
+    #
+    # NOTE: this requires DynamicStallModels' `getproperty(::AbstractVector{<:Airfoil})`
+    # override to be narrowed to only field-broadcast real Airfoil fields (see
+    # DSMODELS_GETPROPERTY_HANDOFF.md). Until that lands, filling a plain Vector{Airfoil}
+    # throws UndefRefError under Julia ≥1.11, because Array's `setindex!` accesses `.ref`
+    # via `getproperty`, which the broad override hijacks.
+    airfoils_src = airfoils
+    airfoils = Vector{DS.Airfoil}(undef, n)
+    for i in 1:n
+        airfoils[i] = airfoils_src[i]
+    end
 
     if length(span)!=length(twist)!=length(chord)!=length(xcp)!=n
         error("Blade(): The number of airfoils and nodes (span) but be the same.")

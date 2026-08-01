@@ -60,11 +60,13 @@ errfun(x, xt) = 100*(x - xt)/xt
         hubht    = 80.0
         n        = length(rvec)
 
-        ### Build the DynamicStallModels airfoil objects. We store them as a
-        ### StructArray (not a Vector) because DynamicStallModels overrides
-        ### getproperty(::AbstractVector{<:Airfoil}, sym) to do field-wise
-        ### broadcasts; that override assumes a StructArray layout and trips
-        ### on UndefRef slots in a plain `Vector{Airfoil}(undef, n)`.
+        ### Build the DynamicStallModels airfoil objects. A StructArray is a
+        ### convenient way to allocate-then-fill element-wise (its columns
+        ### tolerate undef slots, unlike a plain `Vector{Airfoil}(undef, n)`
+        ### under the DS `getproperty(::AbstractVector{<:Airfoil})` broadcast).
+        ### The Blade constructor `collect`s this into a plain Vector for
+        ### storage; WATT's hot paths only ever index `airfoils[i]`, so the
+        ### stored container is a plain contiguous Vector regardless.
         airfoils = StructArray{DS.Airfoil}(undef, n)
         xcp = Vector{Float64}(undef, n)
         for i = 1:n

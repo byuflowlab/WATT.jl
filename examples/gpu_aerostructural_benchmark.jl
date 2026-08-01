@@ -43,7 +43,7 @@ const N_SIMS_SWEEP = (1, 8, 32, 128) #, 512, 1024)
 const CPU_BACKEND_MAX_NS = 8   # cap for the D column (GPU code on CPU backend)
 
 using WATT, OpenFASTTools, DynamicStallModels, GXBeam
-using StaticArrays, StructArrays, JLD2, LinearAlgebra, FLOWMath, Printf
+using StaticArrays, JLD2, LinearAlgebra, FLOWMath, Printf
 include(joinpath(@__DIR__, "koopman_surrogate.jl"))
 const of = OpenFASTTools
 const DS = DynamicStallModels
@@ -84,7 +84,7 @@ aftypes = [of.read_airfoilinput(joinpath(ofpath,"airfoils",name)) for name in af
 af_idx  = of.integerfit(raf, afidx, rvec)
 af_idx_real = [af_idx[i] <= 2 ? 6 : af_idx[i] for i in 1:nr]
 afs = aftypes[af_idx_real]
-dsairfoils = StructArray{DS.Airfoil}(undef, nr); xcp = Vector{Float64}(undef, nr)
+dsairfoils = Vector{DS.Airfoil}(undef, nr); xcp = Vector{Float64}(undef, nr)
 for i = 1:nr
     dsairfoils[i], xcp[i] = of.make_dsairfoil(afs[i])
     dsairfoils[i] = DS.update_airfoil(dsairfoils[i]; polar=polars[i])

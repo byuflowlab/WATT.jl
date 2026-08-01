@@ -21,7 +21,7 @@ Adam Cardoza
 =#
 
 using WATT, OpenFASTTools, DynamicStallModels, GXBeam
-using StaticArrays, StructArrays, JLD2
+using StaticArrays, JLD2
 using ForwardDiff, LinearAlgebra
 
 const of = OpenFASTTools
@@ -40,7 +40,7 @@ aftypes = [of.read_airfoilinput(joinpath(ofpath, "airfoils", name)) for name in 
 af_idx  = of.integerfit(raf, afidx, rvec)
 afs     = aftypes[af_idx]
 
-dsairfoils = StructArray{DS.Airfoil}(undef, nr)
+dsairfoils = Vector{DS.Airfoil}(undef, nr)
 xcp        = Vector{Float64}(undef, nr)
 for i = 1:nr
     dsairfoils[i], xcp[i] = of.make_dsairfoil(afs[i])

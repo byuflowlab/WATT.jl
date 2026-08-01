@@ -23,7 +23,7 @@ Adam Cardoza
 =#
 
 using WATT, OpenFASTTools, DynamicStallModels
-using StaticArrays, StructArrays
+using StaticArrays
 using Printf
 
 const _of = OpenFASTTools
@@ -51,7 +51,7 @@ rvec = adblade["BlSpn"] .+ rhub
 rtip = rvec[end]
 n    = length(rvec)
 
-airfoils = StructArray{_DS.Airfoil}(undef, n)
+airfoils = Vector{_DS.Airfoil}(undef, n)
 xcp = Vector{Float64}(undef, n)
 for i = 1:n
     airfoils[i], xcp[i] = _of.make_dsairfoil(afs[i])

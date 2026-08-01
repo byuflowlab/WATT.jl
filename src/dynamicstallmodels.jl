@@ -97,9 +97,9 @@ end
 
 Advance the dynamic-stall states from `states_old` to `states_new` over a
 single time step `dt`, applying each section's DS model in turn. The
-underlying step is dispatched by calling the `airfoils` `StructArray` as a
-function — DynamicStallModels.jl defines the appropriate per-model update
-on that call.
+underlying step is dispatched by calling the `airfoils` vector as a
+function — DynamicStallModels.jl defines `(::AbstractVector{<:Airfoil})(...)`
+to apply the appropriate per-model update on that call.
 
 `solver` and `t` are accepted for signature uniformity with the rest of
 WATT's time-stepping API; the current implementation hands off entirely to

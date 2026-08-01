@@ -24,7 +24,7 @@ const BACKEND  = :cuda      # :cpu | :cuda | :amdgpu | :metal
 const DEVFLOAT = Float64    # Float32 or Float64
 
 using WATT, OpenFASTTools, DynamicStallModels
-using StaticArrays, StructArrays
+using StaticArrays
 using BenchmarkTools
 using Printf
 
@@ -87,7 +87,7 @@ rvec = adblade["BlSpn"] .+ rhub
 rtip = rvec[end]
 n_sections = length(rvec)
 
-airfoils = StructArray{_DS.Airfoil}(undef, n_sections)
+airfoils = Vector{_DS.Airfoil}(undef, n_sections)
 xcp = Vector{Float64}(undef, n_sections)
 for i = 1:n_sections
     airfoils[i], xcp[i] = _of.make_dsairfoil(afs[i])

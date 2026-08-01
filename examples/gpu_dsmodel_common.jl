@@ -19,8 +19,6 @@ Adam Cardoza
 =#
 
 using WATT, OpenFASTTools, DynamicStallModels
-using StructArrays
-
 const _of = OpenFASTTools
 const _DS = DynamicStallModels
 
@@ -52,7 +50,7 @@ function build_nrel5mw_blade()
     rtip = rvec[end]
     n    = length(rvec)
 
-    airfoils = StructArray{_DS.Airfoil}(undef, n)
+    airfoils = Vector{_DS.Airfoil}(undef, n)
     xcp = Vector{Float64}(undef, n)
     for i = 1:n
         airfoils[i], xcp[i] = _of.make_dsairfoil(afs[i])
