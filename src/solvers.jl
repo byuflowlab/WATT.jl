@@ -24,19 +24,26 @@ struct RK4 <: Solver
 end
 
 """
-    solver(fun, x, p, t, dt)
+    (::RK4)(fun, x, p, t, dt) -> x_new
 
-A method on the RK4 struct. This method takes a single timestep dt from the function evaluated at x, p, t using the Runge-Kutta fourth order method. 
+Take a single explicit step of size `dt` using the classical fourth-order
+Runge-Kutta method.
 
-### Inputs
-- fun::Function - a function to return the state rates dx for a given set of states x. The arguments of this function should be fun(x, p, t)
-- x::Union{TF, Array{TF,1}} - either a state or a vector of states, depending on fun. 
-- p::Any - a vector to pass parameters into the ode state rates function. 
-- t::TF - the current time value. 
-- dt::TF - the desired time step. 
+**Arguments**
+- `fun::Function`: Returns the state rates `dx` for a given state. Called as `fun(x, p, t)`.
+- `x::Union{TF, AbstractVector{TF}}`: The current state, or vector of states.
+- `p::Any`: Parameters forwarded to `fun`.
+- `t::TF`: The current time.
+- `dt::TF`: The step size.
 
-### Outputs
-- x_new::Union{TF, Array{TF,1}} - the updated state(s). 
+**Returns**
+- `x_new::Union{TF, AbstractVector{TF}}`: The state advanced to `t + dt`.
+
+**Notes**
+Written with broadcast arithmetic and no in-place mutation of `x`, so
+ForwardDiff and ReverseDiff propagate through it cleanly. This AD transparency
+is the reason the package carries its own integrators instead of calling
+DifferentialEquations.
 """
 function (s::RK4)(fun, x, p, t, dt)
     k1 = fun(x, p, t)
@@ -47,9 +54,47 @@ function (s::RK4)(fun, x, p, t, dt)
     return @. x + (k1 + k2*2 + k3*2 + k4)*dt/6
 end
 
+"""
+    BDF1()
+
+A struct to leverage multiple dispatch on what solver the user would like to use.
+There are no fields.
+
+Selects the first-order backward differentiation formula (implicit / backward
+Euler). Use it in place of [`RK4`](@ref) when the state rates are stiff enough
+that the explicit step goes unstable at the desired `dt`.
+"""
 struct BDF1 <: Solver
 end
 
+"""
+    (::BDF1)(fun, x, p, t, dt) -> x_new
+
+Take a single implicit step of size `dt` using the first-order backward
+differentiation formula, solving `x_new = x + dt*fun(x_new, p, t+dt)` for
+`x_new` with `NLsolve`.
+
+**Arguments**
+- `fun::Function`: Returns the state rates `dx` for a given state. Called as `fun(x, p, t)`.
+- `x::Union{TF, AbstractVector{TF}}`: The current state, or vector of states.
+- `p::Any`: Parameters forwarded to `fun`.
+- `t::TF`: The current time.
+- `dt::TF`: The step size.
+
+**Returns**
+- `x_new::Union{TF, AbstractVector{TF}}`: The state advanced to `t + dt`.
+
+**Notes**
+Roughly 2x the cost of an [`RK4`](@ref) step, in exchange for the stability of
+an implicit method. The nonlinear solve is seeded with the current state `x`;
+seeding it with an explicit RK4 predictor instead would likely cut the iteration
+count and has not been tried.
+
+Because the root-find is not wrapped in `ImplicitAD.implicit`, differentiating
+through this solver propagates duals through every `NLsolve` iteration rather
+than applying the implicit function theorem at the solution. That works, but it
+is more expensive than it needs to be.
+"""
 function (s::BDF1)(fun, x, p, t, dt) #Takes about 2x the time of the RK4
     tn = t + dt
     

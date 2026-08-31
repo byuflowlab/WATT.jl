@@ -24,8 +24,24 @@ export step_solution!, initialize_from_state, run_from_state!
 export initialize_sim_surrogate, run_sim_surrogate!, run_sim_surrogate
 export initialize_static, fixedpoint!
 
+# GPU backend
+# Device-resident batched types and kernels. These mirror the CPU path above but
+# are declared here, not in their own files, so the public surface stays in one
+# place. Implementation details (DS_NSTATES, N_BRENT_ITERS_DEFAULT, the enums,
+# the internal kernel helpers) stay unexported — reach them as `WATT.name`.
+export BladeGPU, RotorGPU, GPUBEMTOutputs, solve_BEMT_gpu!
+export DSAirfoilGPU, DSHistory, march_ds_gpu!, ds_init_step_gpu!, ds_step_gpu!
+export AeroGeometryGPU, InterpGPU, GPUPointStates
+export aero_velocities_gpu!, ds_inputs_gpu!, ds_loads_dimensionalize_gpu!
+export build_surrogate_loads_gpu!, update_feedback_gpu!
+export GPUSurrogateMesh, GPUSurrogateHistory
+export initialize_sim_surrogate_gpu, run_sim_surrogate_gpu!
+
 # Post-processing
 export rotorloads
+
+# Plotting (RecipesBase recipes — no hard Plots dependency)
+export BladePoints, AssemblyPlot
 
 DS = DynamicStallModels
 IAD = ImplicitAD

@@ -31,8 +31,22 @@ Ports of:
 Adam Cardoza
 =#
 
-export DSAirfoilGPU, DSHistory, march_ds_gpu!, DS_NSTATES, ds_init_step_gpu!, ds_step_gpu!
+# Exports are centralized in WATT.jl — see the `# GPU backend` block there.
 
+"""
+    DS_NSTATES
+
+Number of Beddoes-Leishman dynamic-stall states carried per blade section on the
+GPU, currently `32`.
+
+The GPU state array is a dense `(DS_NSTATES, nsections, nblades, ntime)` block
+rather than the per-model-variant layout the CPU path uses, so this constant is
+what sizes the leading dimension.
+
+**Notes**
+Internal — not exported. Reference it as `WATT.DS_NSTATES`, which is how
+`examples/gpu_dsmodel_*.jl` already spells it.
+"""
 const DS_NSTATES = 32
 const DS_FCLIMIT = (1.0 + 0.2)^2   # matches DynamicStallModels.fclimit
 

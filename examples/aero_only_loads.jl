@@ -1,11 +1,7 @@
 #=
 Aero-only example: NREL 5MW rotor under turbulent inflow.
 
-Builds the `Blade`, `Rotor`, and `SimpleEnvironment` from scratch by reading
-the OpenFAST AeroDyn / ElastoDyn / BeamDyn input files and the TurbSim
-time-series file in `data/openfast/`. Runs an aero-only simulation
-(`initialize_aero` + `simulate!`) and plots blade-spanwise loads at the
-first and last time step.
+Builds the `Blade`, `Rotor`, and `SimpleEnvironment` from scratch by reading the OpenFAST AeroDyn / ElastoDyn / BeamDyn input files and the TurbSim time-series file in `data/openfast/`. Runs an aero-only simulation (`initialize_aero` + `simulate!`) and plots blade-spanwise loads at the first and last time step.
 
 Adam Cardoza
 =#

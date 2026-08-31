@@ -21,9 +21,22 @@ Adam Cardoza
 using KernelAbstractions
 using Adapt
 
-export BladeGPU, RotorGPU, GPUBEMTOutputs, solve_BEMT_gpu!, N_BRENT_ITERS_DEFAULT
+# Exports are centralized in WATT.jl — see the `# GPU backend` block there.
 
-# Default matches the value we plan to validate in examples/gpu_bemt_iters.jl.
+"""
+    N_BRENT_ITERS_DEFAULT
+
+Fixed iteration count for the GPU inflow-angle root-find, currently `20`.
+
+The GPU BEMT kernel cannot branch per-thread on a convergence test without
+destroying warp coherence, so instead of iterating to a tolerance it runs a
+fixed number of bisection/Brent iterations for every section. This constant sets
+that count.
+
+**Notes**
+Internal — not exported. Reference it as `WATT.N_BRENT_ITERS_DEFAULT`. The value
+matches what is validated in `examples/gpu_bemt_benchmark.jl`.
+"""
 const N_BRENT_ITERS_DEFAULT = 20
 
 @enum TipMode::Int32 TIP_NONE = 0 TIP_PRANDTL = 1 TIP_PRANDTL_HUB = 2

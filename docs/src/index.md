@@ -8,26 +8,25 @@ pkg> add https://github.com/byuflowlab/WATT.jl.git
 ```
 
 ## Documentation
-- To start, check out the quick start tutorial. 
-- Then take a look at the examples.
-- If more information is required, checkout the API in the reference. 
+- To start, see [Getting Started](gettingstarted.md).
+- [For Developers](developers.md) covers the code layout, reference frames, coupling, and AD architecture.
+- [API Reference](apireference.md) documents every exported symbol; the [GPU Backend](gpu.md) has its own page.
 
 
 ## Capabilities
 - Nonlinear unsteady aerostructural analysis
-- AD compatibility
 - Nonlinear steady aerostructural analysis
+- Aerodynamics-only transient analysis
+- AD compatibility — ForwardDiff and ReverseDiff, end to end
+- Windowed sensitivities from a frozen starting state, for surrogate training
+- Optional learned structural surrogate in place of the beam solve
+- Batched GPU aerodynamics for evaluating many simulations at once (forward pass only)
 
 
 ## Overview
-The model is based on [OpenFAST](https://github.com/OpenFAST/openfast) from the National Renewable Energy Laboratory. This implementation is not intended to replace OpenFAST, but rather serves as a research platform for rapidly prototyping and evaluating differentiation techniques.
+The model is based on [OpenFAST](https://github.com/OpenFAST/openfast) from the National Laboratory of the Rockies (previously the National Renewable Energy Laboratory). This implementation is not intended to replace OpenFAST, but rather serves as a research platform for rapidly prototyping and evaluating differentiation techniques.
 
 Key differences:
 - WATT.jl is compatible with mature algorithmic differentiation packages including ForwardDiff, ReverseDiff, and ImplicitAD. 
 - CCBlade uses a slightly different implementation of Brent's method which makes small differences which accumulate overtime. The implementation that CCBlade uses converges to tighter tolerances. 
 - GXBeam uses constant property linear elements with extended Milenković parameters. This formulation produces an exceptionally robust solver that avoids excessive quadrature, enabling tight convergence of structural states at each time step.
-
-
-
-## Developers
-I suggest you first work through the quick start tutorial and examples, then checkout the Developers section for a outline of the code and basic theory description. 

@@ -25,9 +25,7 @@ Adam Cardoza
 using KernelAbstractions
 using Adapt
 
-export AeroGeometryGPU, InterpGPU, GPUPointStates
-export aero_velocities_gpu!, ds_inputs_gpu!, ds_loads_dimensionalize_gpu!,
-       build_surrogate_loads_gpu!, update_feedback_gpu!
+# Exports are centralized in WATT.jl — see the `# GPU backend` block there.
 
 # ---------------------------------------------------------------------------
 # GPUPointStates — batched decoded structural point states, all device-resident.
@@ -79,6 +77,24 @@ Adapt.adapt_structure(to, p::GPUPointStates) = GPUPointStates(
 #   pitch = asin(-C[1,3])
 #   yaw   = atan(C[1,2], C[1,1])
 # ---------------------------------------------------------------------------
+"""
+    wmp_to_angle_dev(c1, c2, c3) -> roll, pitch, yaw
+
+Device-safe conversion from Wiener-Milenkovic parameters to 3-2-1 Euler angles.
+
+**Arguments**
+- `c1, c2, c3`: The three Wiener-Milenkovic parameters at a point.
+
+**Returns**
+- `roll, pitch, yaw`: Euler angles, in radians.
+
+**Notes**
+Internal, GPU. A scalar-arithmetic port of `WMPtoangle` composed with
+`GXBeam.wiener_milenkovic` and `GXBeam.rotation_parameter_scaling`. Written as
+straight-line scalar math with no allocation, branching on data, or matrix
+construction so it is callable from inside a kernel. Includes the
+`rotation_parameter_scaling` correction that extends the valid range past 360°.
+"""
 @inline function wmp_to_angle_dev(c1, c2, c3)
     TF = typeof(c1)
     # rotation_parameter_scaling: extend range past 360°.
@@ -467,8 +483,7 @@ end
 # Orchestration: GPU-resident coupled aeroelastic march.
 # ===========================================================================
 
-export GPUSurrogateMesh, GPUSurrogateHistory
-export initialize_sim_surrogate_gpu, run_sim_surrogate_gpu!
+# Exports are centralized in WATT.jl — see the `# GPU backend` block there.
 
 """
     GPUSurrogateMesh

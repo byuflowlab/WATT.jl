@@ -5,6 +5,27 @@ Recreating what they do in AeroDyn, which is solves the BEM, feeds the inflow an
 Adam Cardoza 8/6/22
 =# 
 
+"""
+    dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade, env, W)
+
+Convert nondimensional sectional force and moment coefficients into distributed
+loads per unit span, writing into `Fx`, `Fy`, and `Mx` in place.
+
+Applies `q_local = 0.5*rho*W[j]^2` at each station, then scales by chord (forces)
+or chord squared (moment).
+
+**Arguments**
+- `Fx, Fy, Mx::AbstractVector`: Output buffers, length `length(blade.r)`, overwritten.
+- `Cx, Cy, Cm::AbstractVector`: Sectional force and moment coefficients.
+- `blade::Blade`: Supplies chord `blade.c`.
+- `env::Environment`: Supplies air density `env.rho`.
+- `W::AbstractVector`: Local relative velocity magnitude at each station.
+
+**Notes**
+Internal. The moment coefficient is positive about the negative aerodynamic Z
+axis, so the caller negates `Mx` when mapping to the structural X axis — this
+function does not.
+"""
 function dimensionalize!(Fx, Fy, Mx, Cx, Cy, Cm, blade::Blade, env::Environment, W)
     
     for j in eachindex(blade.r)
@@ -301,6 +322,35 @@ function simulate!(aerostates, mesh, rotor::Rotor, blade::Blade, env::Environmen
 end
 
 
+"""
+    rotorloads(loads, rhub, rtip, rvec, B) -> thrust, torque
+    rotorloads(rhub, rtip, rvec, loads...) -> thrust, torque
+
+Integrate distributed blade loads into rotor thrust and torque time histories.
+
+The first method takes one blade's loads and multiplies by the blade count `B`,
+assuming every blade sees the same loading — correct for a uniform, unyawed,
+untilted inflow. The second method takes one `loads` argument per blade and sums
+them, which is what you want once the blades differ (shear, yaw, tilt, or
+per-blade pitch).
+
+**Arguments**
+- `loads`: A struct with `Fx` and `Fy` fields, each `nt × n` (time × radial station),
+  giving distributed normal and tangential force per unit length. An `AeroStates` works.
+- `rhub::Real`: Hub radius.
+- `rtip::Real`: Tip radius.
+- `rvec::AbstractVector`: Radial stations of the load distribution, between `rhub` and `rtip`.
+- `B::Integer`: Number of blades (first method only).
+
+**Returns**
+- `thrust::Vector`: Rotor thrust at each time step.
+- `torque::Vector`: Rotor torque at each time step.
+
+**Notes**
+Loads are taken to be zero at the hub and tip, so `rvec` need not include the
+endpoints — they are prepended and appended before trapezoidal integration via
+`FLOWMath.trapz`.
+"""
 function rotorloads(loads, rhub, rtip, rvec, B)
 
     nt, _ = size(loads.N)
@@ -326,8 +376,9 @@ function rotorloads(rhub, rtip, rvec, loads...)
 
     nt, _ = size(loads[1].Fx)
 
-    thrust = Array{eltype(loads[1].Fx)}(undef, nt)
-    torque = Array{eltype(loads[1].Fx)}(undef, nt)
+    # zeros, not undef: the blade loop below accumulates with `+=`
+    thrust = zeros(eltype(loads[1].Fx), nt)
+    torque = zeros(eltype(loads[1].Fx), nt)
 
     rfull = [rhub; rvec; rtip]
     

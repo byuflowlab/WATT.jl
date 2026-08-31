@@ -10,4 +10,4 @@ StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 WATT = "3f0b5dcd-76e8-4d37-b00e-98055191506f"
 
 [compat]
-Documenter = "0.27"
+Documenter = "1"

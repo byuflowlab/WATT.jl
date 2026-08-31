@@ -27,6 +27,28 @@ end
 
 #TODO: It might be a good idea to make a version that is completely in place. (Pass in data storage and riso ode.)
 
+"""
+    find_inittype(vars...) -> Type
+
+Pick the element type that pre-allocated simulation buffers should carry.
+
+Scans `vars` in order and returns the type of the first `ForwardDiff.Dual` or
+`ReverseDiff.TrackedReal` it finds; if none is present, returns `eltype(vars)`.
+
+**Arguments**
+- `vars...`: Representative scalars from the problem definition — typically
+  `blade.c[1]` and `blade.twist[1]`.
+
+**Returns**
+- `Type`: The element type to allocate with.
+
+**Notes**
+Internal. This is what makes the `initialize_*` functions AD-transparent: pass a
+dual-valued chord or twist and every downstream buffer is allocated wide enough
+to carry duals, so no retyping is needed mid-simulation. Used by
+[`initialize_sim`](@ref), [`initialize_aero`](@ref), and
+[`initialize_static`](@ref).
+"""
 function find_inittype(vars...)
     # println("Initialization types")
     for item in vars

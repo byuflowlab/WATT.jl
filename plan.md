@@ -1,5 +1,16 @@
 # WATT.jl Long-Term Rework Plan
 
+> **Status at a glance** — last audited **2026-08-19** against the code, not against commit messages.
+>
+> | | Phase | State |
+> |---|---|---|
+> | ✅ | 1 Cleanup · 2 Tests · 3 API · 4 Docs · 11 Windowed AD | Complete |
+> | 🟡 | 5 Static (5.3 open) · 8 Polish (2,4,5,6 open) · 9 Surrogate (untested) · 10 GPU (no AD, no tests) | Partial |
+> | ⬜ | 6 Tight coupling · 7 Monolithic | Not started — **see the open question at the dependency graph** |
+>
+> Suite is green: **2156/2156**, zero `@test_broken`. Phases 9–11 were added
+> retroactively to describe work that happened off-roadmap from 2026-05-22 onward.
+
 ## Deliverables of This Planning Session
 
 These are created once this plan is approved — before any Phase 1 work begins:
@@ -89,19 +100,24 @@ No new tests — just verify existing test suite still passes after each deletio
 **Session estimate:** 1–2 sessions
 **Depends on:** Phase 1
 
-### Bugs surfaced (deferred to later phases)
-- `src/aero_only.jl::initialize` calls the outdated 3-positional / kwarg form
-  of `initialize_ds_model` and builds a mesh NamedTuple missing `p_ds`.
-  Crashes with `MethodError`. Recorded as `@test_broken` in
-  [test/test_aero_only.jl](test/test_aero_only.jl); fix during **Phase 3**
-  (SimMesh refactor will rebuild the mesh contract anyway).
+### Bugs surfaced (audited 2026-08-19 — see status below)
+- ~~`src/aero_only.jl::initialize` calls the outdated 3-positional / kwarg form
+  of `initialize_ds_model` and builds a mesh NamedTuple missing `p_ds`.~~
+  **RESOLVED in Phase 3** — the `initialize_aero` rename landed together with the
+  DS-init signature fix and the missing `p_ds`. The `@test_broken` markers in
+  [test/test_aero_only.jl](test/test_aero_only.jl) are now active `@test`.
 - AD through `run_sim!` and `fixedpoint!` errors at GXBeam's
   `step_system!` / `steady_state_analysis!`: those write dual values into a
-  Float64 `DynamicSystem`/`StaticSystem`. BEM-level ForwardDiff and
-  ReverseDiff *do* pass to ~1e-10 vs central differences (via ImplicitAD).
-  End-to-end AD is **Phase 6+** work (ImplicitAD wrapping of GXBeam at the
-  coupled-state level). Recorded as `@test_broken` in
-  [test/test_ad.jl](test/test_ad.jl).
+  Float64 `DynamicSystem`/`StaticSystem`.
+  **PARTIALLY RESOLVED.** `run_sim!` now differentiates end-to-end —
+  [test/test_ad.jl:248](test/test_ad.jl#L248) runs a live
+  `ForwardDiff.gradient` over a compliance+mass parameter vector, and
+  [test/test_ad.jl:343](test/test_ad.jl#L343) covers the frozen-start window via
+  `run_from_state!`. **`fixedpoint!` remains unverified** — `test_ad.jl` has no
+  static/steady testset at all, so whether the `steady_state_analysis!` dual
+  problem still bites is unknown. Carry this into Phase 5.3.
+
+**The suite currently has zero `@test_broken` and passes 2156/2156 (4m22s).**
 
 ### Goal
 Build comprehensive test suite: unit, integration (all three solver modes), and AD compatibility.
@@ -134,9 +150,22 @@ All new tests pass; ForwardDiff and ReverseDiff verified on at least one end-to-
 ---
 
 ## Phase 3: API Reorganization
-**Status:** Not started
+**Status:** Completed (2026-05-21, commits `39fa6cc` + `3573cc3`; docstring sweep `bea5413`)
 **Session estimate:** 1–2 sessions
 **Depends on:** Phases 1 + 2
+
+### Audit notes (2026-08-19)
+All of 3.1–3.7 verified present in the code. Two deviations worth recording:
+- **`thrusttorque` was never written.** The 3.4 export list below names it, but only
+  `rotorloads` exists ([src/aero_only.jl:304](src/aero_only.jl#L304)). Either write it
+  or drop it from the intended surface — currently it is neither.
+- **3.4 has regressed.** The Phase 10 GPU work reintroduced scattered `export`
+  statements in six places ([src/bemt_gpu.jl:24](src/bemt_gpu.jl#L24),
+  [src/dsmodel_gpu.jl:34](src/dsmodel_gpu.jl#L34), and four in
+  [src/aerostructural_surrogate_gpu.jl](src/aerostructural_surrogate_gpu.jl)), taking the
+  public surface from ~28 names to 58 — including the implementation-detail constants
+  `DS_NSTATES` and `N_BRENT_ITERS_DEFAULT`. Restoring the single centralized export
+  block is folded into Phase 4 prerequisites.
 
 ### Goal
 GXBeam-style clean API: proper exports, naming collision fixes, typed structs for `mesh` and `aerostates`, docstrings on all public functions.
@@ -240,9 +269,68 @@ Caveats, AD compatibility, performance notes.
 ---
 
 ## Phase 4: Documentation
-**Status:** Not started
+**Status:** Completed (2026-08-19)
 **Session estimate:** 1 session
 **Depends on:** Phase 3
+
+### What the audit found (2026-08-19)
+The docs were not merely incomplete — **the build was red and the tutorial did not run.**
+- `apireference.md` was a 9-line stub whose only `@docs` entry was `simulate`, deleted
+  in Phase 1. This failed the build.
+- `steady.md` was **0 bytes**.
+- `developers.md` had two section headers with empty bodies.
+- `gettingstarted.md` had six defects making its code non-runnable, including
+  `StructArray{DS.Airfoil}` (obsoleted by `5a5f0b4`) and `Rotors.SimpleEnvironment`
+  (pre-rename package name).
+- `docs/Project.toml` pinned `Documenter = "0.27"`.
+
+### What was done
+- **Docstrings:** wrote the 4 missing ones (`BDF1` + its call method, `rotorloads`,
+  `DS_NSTATES`, `N_BRENT_ITERS_DEFAULT`) plus 3 internals referenced by public
+  docstrings (`dimensionalize!`, `find_inittype`, `wmp_to_angle_dev`). Converted
+  `solvers.jl` from `###` headers to the bold-header house style. **All 55 exported
+  symbols are now documented**, enforced by `checkdocs = :exports`.
+- **Exports:** removed the six scattered `export` statements the GPU work added and
+  consolidated them into `src/WATT.jl`, un-exporting `DS_NSTATES` and
+  `N_BRENT_ITERS_DEFAULT`. Restores the Phase 3.4 invariant; surface is 55 names.
+- **Bug fixed en route:** `rotorloads(rhub, rtip, rvec, loads...)` accumulated with
+  `+=` into `undef` memory. Now `zeros`.
+- **Pages:** rewrote `apireference.md` (grouped `@docs` + an Internals section),
+  `steady.md`, `gettingstarted.md`, `developers.md`, `index.md`; added `gpu.md`
+  (split out so no page exceeds Documenter's size threshold). Added three
+  walkthroughs — `aeroonly.md`, `gradients.md`, `assembly.md` (building a
+  `GXBeam.Assembly` without OpenFAST inputs).
+- **Figures:** 7 plots generated from real runs into `docs/src/assets/` and
+  embedded in the tutorials. Regenerate with the script recorded in the session
+  scratchpad if the physics changes.
+- **Also exported** `BladePoints` and `AssemblyPlot` — documented plot recipes
+  that had no way to be reached without a `WATT.` prefix. Surface is now 57.
+- **Documenter** bumped to 1.x via `Pkg.compat`.
+
+### Deployment (fixed 2026-08-19)
+The docs had **never deployed** — all 8 historical Documentation workflow runs
+failed at *Install dependencies* in ~20s, and no `gh-pages` branch existed.
+Cause: `DynamicStallModels` (a hard dep) is not in the General registry and
+`*Manifest.toml` is gitignored, so a clean runner could not resolve it.
+- `.github/workflows/documentation.yaml` now `Pkg.add`s it by URL before
+  `instantiate`; actions bumped to `checkout@v4` / `setup-julia@v2` (the old ones
+  hit the Node 20 removal in Sept 2026) and Julia to 1.11, plus `cache@v2`.
+- `deploydocs` gained `push_preview = true`, which `cleanup.yaml` already assumed.
+- `gh-pages` created and Pages enabled: **http://flow.byu.edu/WATT.jl/** (the
+  domain comes from the org, matching GXBeam.jl — no CNAME file needed).
+- **Still required:** the workflow only triggers on `master`, so this must be
+  merged there before anything deploys.
+
+### Verification
+- `julia --project=docs/ docs/make.jl` — **clean, zero warnings.**
+- Every code block in `steady.md` and `gettingstarted.md` was **executed** against the
+  `test/fixtures/nrel5mw.jl` setup, not just read. The convergence table and tip
+  deflection figures in `steady.md` are measured output.
+- `Pkg.test()` — **2156/2156 pass** after the export and `rotorloads` changes.
+
+### Deferred
+Literate.jl examples (mentioned in the original goals) were not added. The runnable
+tutorials plus the scripts in `examples/` cover the same ground for now.
 
 ### Goal
 All docs pages complete; `docs/make.jl` builds without warnings; all three simulation modes have tutorial coverage.
@@ -259,9 +347,20 @@ All docs pages complete; `docs/make.jl` builds without warnings; all three simul
 ---
 
 ## Phase 5: Static Solver Integration
-**Status:** Not started
-**Session estimate:** 1–2 sessions
+**Status:** Partial — 5.1 and 5.2 complete; **5.3 not started**
+**Session estimate:** 1–2 sessions (≈0.5 remaining)
 **Depends on:** Phase 1 bug fixes (can begin in parallel with Phase 3)
+
+### Audit notes (2026-08-19)
+- **5.1 done.** `fixedpoint!` converges to ~1e-14 by iteration 10 on NREL 5MW rated.
+- **5.2 done.** [test/test_static.jl](test/test_static.jl) covers the shape/eltype
+  contract, the iteration-1 match against direct CCBlade at the undeflected position
+  (rtol 1e-12), and iteration-10 convergence.
+- **5.3 not started.** `static_ic` appears nowhere in `src/` — the converged static
+  solution still cannot warm-start the transient solver.
+- **Carried in from Phase 2:** AD through `fixedpoint!` has no test coverage. Verify it
+  as part of 5.3, since a static warm-start that breaks the gradient chain is worse than
+  no warm-start.
 
 ### Goal
 `fixedpoint!` fully functional, tested, and integrated. Provides warm-start for transient solver.
@@ -389,9 +488,22 @@ end
 ---
 
 ## Phase 8: Package Polish
-**Status:** Not started
-**Session estimate:** 1 session
+**Status:** Partial — items 1 and 3 landed early, out of order
+**Session estimate:** 1 session (≈0.6 remaining)
 **Depends on:** Phases 3–7
+
+### Audit notes (2026-08-19)
+- **Item 1 (plot recipes) — done, and done differently than planned.** Rather than the
+  `Requires.jl` + `__init__` route below, the recipes went in as plain `RecipesBase`
+  recipes in [src/gxbeam.jl:324](src/gxbeam.jl#L324) and `:375`, landing during Phase 1.
+  `RecipesBase` is a hard dep but a featherweight one, and `Plots` is not a dep at all —
+  this is the better outcome; the `Requires.jl` text below is superseded.
+- **Item 3 (benchmarks) — done.** Benchmark ladder in `8e10189`; the BEMT profiling
+  result and the negative warm-start finding are written up in
+  [BEMT_PERF_HANDOFF.md](BEMT_PERF_HANDOFF.md) and
+  [WARMSTART_BRENT_FINDINGS.md](WARMSTART_BRENT_FINDINGS.md).
+- **Still open:** item 2 (`PrecompileTools`), item 4 (allocation audit), item 5 (compat
+  bounds), item 6 (version bump — still `0.3.0`, no `CHANGELOG.md`).
 
 ### Tasks
 1. **Plots extension via `RecipesBase` + `Requires.jl`** — Restore the commented-out `plotpoints`/`plotassembly` functions using conditional loading:
@@ -410,32 +522,135 @@ end
 
 ---
 
+## Phases 9–11: Work that happened off-roadmap
+
+*Added 2026-08-19. Phases 1–8 were written 2026-05-18. From 2026-05-22 onward the work
+went somewhere the roadmap never anticipated — 13 of the 18 commits since, and five new
+source files. These phases are recorded retroactively so the roadmap describes the
+package that actually exists.*
+
+---
+
+## Phase 9: Structural Surrogate (Koopman)
+**Status:** Working, under-tested
+**Landed:** 2026-05-25 → 2026-07-30 (`8bec1cc`, `384b902`, `c62f1d7`, `ddac5c4`)
+
+Replaces the GXBeam structural solve with a learned Koopman-style latent model:
+encode the initial structural state, march a linear latent step, decode back to
+deflections. Cuts the per-step structural cost to a matrix multiply, which is what makes
+the long marches in the downstream optimization harness affordable.
+
+- **Code:** [src/aerostructural_surrogate.jl](src/aerostructural_surrogate.jl);
+  `SurrogateMesh`, `SurrogatePointState`, `SurrogateAssemblyState`
+  ([src/types.jl:300-318](src/types.jl#L300-L318)); the
+  `AbstractStructuralSurrogate` interface — `encode_initial`, `step_latent`,
+  `decode`, `decode!`.
+- **Entry points:** `initialize_sim_surrogate`, `run_sim_surrogate!`, `run_sim_surrogate`.
+- **Gap:** there is **no `test/test_surrogate.jl`**. The surrogate path is exercised only
+  through `examples/`, so nothing in CI catches a regression in it. Highest-value
+  outstanding work in this phase.
+- **Also:** p-conditioned variant demoed in
+  [examples/aerostructural_nrel5mw5seg_surrogate_pcond.jl](examples/aerostructural_nrel5mw5seg_surrogate_pcond.jl).
+
+---
+
+## Phase 10: GPU Backends
+**Status:** Forward pass validated on hardware; no AD
+**Landed:** 2026-07-10 → 2026-07-17 (`cc0b495` → `100949c`)
+
+KernelAbstractions ports of the aero stack, for batched evaluation across many
+simulations at once.
+
+- **Code:** [src/bemt_gpu.jl](src/bemt_gpu.jl) (conditional q1+q3 kernel, fixed-iteration
+  Brent), [src/dsmodel_gpu.jl](src/dsmodel_gpu.jl) (ADG port),
+  [src/aerostructural_surrogate_gpu.jl](src/aerostructural_surrogate_gpu.jl) (coupled
+  forward pass with the Phase 9 surrogate as the structural model).
+- **Validated:** GPU-BEMT on an H200 cluster node; DS model against the CPU backend;
+  three-way coupled comparison in
+  [examples/gpu_aerostructural_benchmark.jl](examples/gpu_aerostructural_benchmark.jl).
+- **Backend-generic** via a generic `similar_type`, so no per-script glue is needed.
+- **Gaps:** forward pass only — no AD through any GPU path. Exports need narrowing
+  (see the Phase 3 audit note). No GPU tests in the suite; validation lives in
+  `examples/` and SLURM output files.
+
+---
+
+## Phase 11: Windowed AD / Single-Step Primitive
+**Status:** Complete, with AD coverage
+**Landed:** 2026-07-29 (`75984b6`)
+
+Exposes one coupled time step as a callable primitive, so a gradient can be taken over a
+short window from a frozen start rather than over an entire march — the enabling piece
+for cheap windowed sensitivities in optimization.
+
+- **Code:** `step_solution!`, `initialize_from_state`
+  ([src/aerostructural.jl:508](src/aerostructural.jl#L508)), `run_from_state!`.
+- **Tests:** [test/test_step_solution.jl](test/test_step_solution.jl) gates
+  equivalence against the full march; [test/test_ad.jl:343](test/test_ad.jl#L343)
+  covers `ForwardDiff` through the frozen-start window.
+- **Note:** this quietly did much of what Phase 6 was meant to enable. See the open
+  question below.
+
+---
+
 ## Phase Dependency Graph
 
 ```
-Phase 1 (Cleanup)
-    └─> Phase 2 (Tests)
-            ├─> Phase 3 (API) ─────────────────> Phase 4 (Docs)
+Phase 1 (Cleanup) ✓
+    └─> Phase 2 (Tests) ✓
+            ├─> Phase 3 (API) ✓ ───────────────> Phase 4 (Docs) ✓
             │
-            └─> Phase 5 (Static)  [can start in parallel with Phase 3 after Phase 1]
-                    └─> Phase 6 (FP-in-time)
-                            └─> Phase 7 (Monolithic)
-                                        └─> Phase 8 (Polish)  [partial overlap with Phase 7]
+            └─> Phase 5 (Static)  [5.1 ✓ 5.2 ✓ | 5.3 open]
+                    └─> Phase 6 (FP-in-time)     ← not started
+                            └─> Phase 7 (Monolithic)  ← not started
+                                        └─> Phase 8 (Polish)  [1 ✓ 3 ✓ | 2,4,5,6 open]
+
+Off-roadmap track (2026-05-22 →):
+    Phase 9 (Koopman surrogate) ──> Phase 10 (GPU backends)
+    Phase 11 (Windowed AD)  [independent]
 ```
+
+### ⚠ Open question — is the Phases 6→7 route still wanted?
+
+Phases 6 (tight coupling) and 7 (monolithic) were designed as the route to cheap,
+accurate gradients for optimization. Since then the off-roadmap track went after the
+same goal by a different road: Phase 9 makes the structural solve cheap enough that
+sub-iteration may not be the bottleneck it was assumed to be, Phase 11 delivers windowed
+sensitivities without a monolithic residual, and Phase 10 attacks throughput instead of
+per-step cost.
+
+Phase 7 was flagged **high risk / 2–3 sessions** when written. Before spending that,
+decide explicitly:
+
+1. **Still needed** — the surrogate is an approximation; monolithic coupling is the
+   high-fidelity reference the surrogate must be validated against. Keep 6→7.
+2. **Superseded** — the surrogate + windowed-AD route is the real path forward. Demote
+   6→7 to "someday", and redirect the effort into Phase 9's missing test coverage and
+   AD through the GPU path.
+3. **Partially** — do Phase 6 (tight coupling, the cheaper half) as the validation
+   reference, and drop Phase 7.
+
+*Not resolved as of 2026-08-19. This blocks nothing currently in flight, but it should
+be answered before the next multi-session commitment.*
 
 ---
 
 ## Critical Files Reference
 
-| File | Role | Primary Concern |
+*Refreshed 2026-08-19 — the Phase 1 bugs listed here originally are all fixed, and
+`bem.jl` was renamed `bemt.jl` in `bea5413`.*
+
+| File | Role | Current concern |
 |------|------|----------------|
-| `src/aerostructural.jl` | Main transient API | Active bug (gxhistory_new), home for Phases 6+7 |
-| `src/static.jl` | Static fixed-point API | Active bug (blade.airfoils[1].c), Phase 5 target |
-| `src/bem.jl` | BEMT solver | Active @show debug, duplicate function, ImplicitAD boundary |
-| `src/gxbeam.jl` | Structural wrapper | ~180 lines dead code, Plots dependency link |
-| `src/mesh.jl` | Coordinate transforms + coupling | Untested transforms (Phase 2), NamedTuple→struct (Phase 3) |
-| `src/dynamicstallmodels.jl` | DS state management | Untested (Phase 2), DS reset for sub-iteration (Phase 6) |
-| `src/environments.jl` | Wind field + velocity transforms | Broken function at line 205 |
+| `src/aerostructural.jl` | Main transient API + windowed-AD primitive | Home for Phases 6+7 if pursued; hosts Phase 11 |
+| `src/static.jl` | Static fixed-point API | Phase 5.3 target; AD through `fixedpoint!` unverified |
+| `src/bemt.jl` | BEMT solver | ImplicitAD boundary; primal Brent is the remaining hot spot (see `WARMSTART_BRENT_FINDINGS.md`) |
+| `src/gxbeam.jl` | Structural wrapper | Also holds the `RecipesBase` plot recipes (Phase 8.1) |
+| `src/mesh.jl` | Coordinate transforms + coupling | Typed meshes done; BC→HR→G→L chain needs documenting (Phase 4) |
+| `src/dynamicstallmodels.jl` | DS state management | DS reset for sub-iteration, if Phase 6 goes ahead |
+| `src/environments.jl` | Wind field + callable-struct env | Clean since Phase 3.6 |
+| `src/aerostructural_surrogate.jl` | Koopman structural surrogate | **No test coverage** (Phase 9) |
+| `src/bemt_gpu.jl`, `src/dsmodel_gpu.jl`, `src/aerostructural_surrogate_gpu.jl` | GPU backends | Scattered exports; no AD; no tests (Phase 10) |
 
 ---
 
